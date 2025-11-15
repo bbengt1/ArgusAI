@@ -1,0 +1,343 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>f1</epicId>
+    <storyId>f1-2</storyId>
+    <title>Camera Configuration UI</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-15</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/f1-2-camera-configuration-ui.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>configure my cameras through an intuitive web interface</iWant>
+    <soThat>I can easily add, edit, and manage my cameras without technical knowledge</soThat>
+    <tasks>
+      - Task 1: Initialize Next.js Frontend (8 subtasks) - Foundation for all UI work
+      - Task 2: TypeScript Types & API Client (5 subtasks) - Type-safe API integration
+      - Task 3: Custom React Hooks (3 subtasks) - Reusable state management
+      - Task 4: Camera List Page (5 subtasks) - Grid view with status indicators
+      - Task 5: Add Camera Form (3 subtasks) - Form with validation and test connection
+      - Task 6: Edit Camera Page (4 subtasks) - Edit form with delete confirmation
+      - Task 7: Layout & Navigation (4 subtasks) - App structure and responsive design
+      - Task 8: Error Handling & User Feedback (4 subtasks) - Toast notifications and error states
+      - Task 9: Testing & Validation (4 subtasks) - Unit, integration, and E2E tests
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    AC-1: Non-technical user can add camera in under 5 minutes (user testing)
+    AC-2: Form validates RTSP URL format before submission (must start with rtsp:// or rtsps://)
+    AC-3: Username and password fields optional (some cameras don't require auth)
+    AC-4: Frame rate slider shows current value (1-30 FPS)
+    AC-5: "Test Connection" button provides feedback within 5 seconds
+    AC-6: Success feedback shows thumbnail preview of captured frame
+    AC-7: Error feedback shows actionable message (e.g., "Cannot reach camera. Check IP address and network.")
+    AC-8: Camera list shows connection status (green dot = connected, red = disconnected)
+    AC-9: Edit form pre-fills existing camera configuration
+    AC-10: Delete camera requires confirmation dialog: "Are you sure? This will delete all events from this camera."
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <!-- Architecture Documentation -->
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Frontend Stack</section>
+        <snippet>Next.js 15.x with App Router, TypeScript 5.x, Tailwind CSS 3.x + shadcn/ui components. React Hook Form + Zod validation for forms. State management via React Context.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Complete Project Structure</section>
+        <snippet>Frontend structure includes: app/ (Next.js pages), components/ (React components with ui/, cameras/, layout/ subdirs), lib/ (utilities and API client), hooks/ (custom React hooks), types/ (TypeScript definitions).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Naming Conventions - Frontend</section>
+        <snippet>Component files: PascalCase.tsx (EventCard.tsx). Utility files: kebab-case.ts (api-client.ts). Functions: camelCase. Types/Interfaces: PascalCase, interfaces prefixed with I (ICamera). Hooks: use prefix (useCameras).</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>API Contracts - Cameras</section>
+        <snippet>Base URL: http://localhost:8000/api/v1. Endpoints: GET/POST/PUT/DELETE /cameras, POST /cameras/{id}/test. CORS configured to allow frontend origin.</snippet>
+      </doc>
+
+      <!-- Tech Spec for Epic F1 -->
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>Frontend Components</section>
+        <snippet>app/cameras/page.tsx (camera list/grid), app/cameras/new/page.tsx (add camera form), app/cameras/[id]/page.tsx (edit camera). Components: CameraForm.tsx, CameraPreview.tsx, CameraStatus.tsx. Hook: useCameras.ts.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>Pydantic Schemas</section>
+        <snippet>CameraCreate: name, type ('rtsp'|'usb'), rtsp_url, username, password, device_index, frame_rate (1-30, default 5). CameraResponse: same plus id, created_at, updated_at. Password field write-only.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>APIs and Interfaces - REST Endpoints</section>
+        <snippet>GET /cameras (query param: is_enabled filter). POST /cameras (body: CameraCreate, returns 201). PUT /cameras/{id} (partial update). DELETE /cameras/{id} (returns deleted:true). POST /cameras/{id}/test (returns success, message, thumbnail).</snippet>
+      </doc>
+
+      <!-- PRD User Stories -->
+      <doc>
+        <path>docs/prd.md</path>
+        <title>Product Requirements Document</title>
+        <section>Persona 1: Security-Conscious Homeowner</section>
+        <snippet>Sarah (42), not highly technical but comfortable with apps. Wants: package delivery notifications, suspicious activity detection, event history review. <10 minute average setup time is MVP success criterion.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <!-- Backend API Implementation (F1.1 completed) -->
+      <artifact>
+        <path>backend/app/api/v1/cameras.py</path>
+        <kind>api</kind>
+        <symbol>cameras_router</symbol>
+        <lines>1-407</lines>
+        <reason>Complete camera CRUD API with 6 endpoints (POST, GET list, GET by id, PUT, DELETE, POST test). Frontend will call these endpoints.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/schemas/camera.py</path>
+        <kind>schema</kind>
+        <symbol>CameraCreate, CameraUpdate, CameraResponse, CameraTestResponse</symbol>
+        <lines>1-144</lines>
+        <reason>Pydantic validation schemas that define API request/response structure. TypeScript types should mirror these schemas.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <lines>1-120</lines>
+        <reason>SQLAlchemy ORM model defining database schema. Frontend should understand field constraints (name 1-100 chars, frame_rate 1-30, etc.).</reason>
+      </artifact>
+      <artifact>
+        <path>backend/tests/test_api/test_cameras.py</path>
+        <kind>test</kind>
+        <symbol>TestCameraAPI</symbol>
+        <lines>1-380</lines>
+        <reason>18 API tests showing all endpoint behaviors including error cases (404, 409, 422). Useful reference for expected API responses.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <frontend>
+        <package>next</package>
+        <version>15.x</version>
+        <reason>React framework with App Router</reason>
+      </frontend>
+      <frontend>
+        <package>react</package>
+        <version>^18.2.0</version>
+        <reason>UI library</reason>
+      </frontend>
+      <frontend>
+        <package>typescript</package>
+        <version>^5.3.0</version>
+        <reason>Type safety</reason>
+      </frontend>
+      <frontend>
+        <package>tailwindcss</package>
+        <version>^3.3.0</version>
+        <reason>CSS framework</reason>
+      </frontend>
+      <frontend>
+        <package>lucide-react</package>
+        <version>latest</version>
+        <reason>Icon library for status indicators</reason>
+      </frontend>
+      <frontend>
+        <package>react-hook-form</package>
+        <version>^7.48.0</version>
+        <reason>Form state management</reason>
+      </frontend>
+      <frontend>
+        <package>zod</package>
+        <version>^3.22.0</version>
+        <reason>Schema validation matching backend Pydantic</reason>
+      </frontend>
+      <frontend>
+        <package>date-fns</package>
+        <version>^3.0.0</version>
+        <reason>Date formatting for timestamps</reason>
+      </frontend>
+      <frontend>
+        <package>shadcn/ui</package>
+        <version>latest</version>
+        <reason>Component library (button, card, dialog, form, input, label, select, slider, toast, badge)</reason>
+      </frontend>
+      <backend>
+        <package>fastapi</package>
+        <version>0.115.0</version>
+        <reason>Backend API framework (already implemented)</reason>
+      </backend>
+      <backend>
+        <package>opencv-python</package>
+        <version>>=4.12.0</version>
+        <reason>Camera capture (already implemented)</reason>
+      </backend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    - MUST use Next.js 15 App Router (not Pages Router) as specified in architecture
+    - MUST use TypeScript with strict mode enabled
+    - MUST use shadcn/ui components (copy-paste approach, not npm package)
+    - MUST use Tailwind CSS for styling (no custom CSS classes unless necessary)
+    - Component file naming: PascalCase.tsx (CameraForm.tsx, CameraPreview.tsx)
+    - Utility file naming: kebab-case.ts (api-client.ts, utils.ts)
+    - Function naming: camelCase (fetchCameras, handleSubmit)
+    - Type/Interface naming: PascalCase with I prefix (ICamera, ICameraCreate)
+    - Hook naming: use prefix (useCameras, useToast)
+    - MUST handle CORS when calling backend API (backend configured for http://localhost:3000)
+    - Base API URL: http://localhost:8000/api/v1 (from .env.local)
+    - MUST validate RTSP URL format: must start with rtsp:// or rtsps://
+    - MUST handle conditional fields: show RTSP fields only when type='rtsp', show device_index only when type='usb'
+    - MUST match backend validation: name 1-100 chars, frame_rate 1-30, device_index >= 0
+    - Error messages MUST be actionable (as per AC-7)
+    - MUST implement responsive design (1 col mobile, 2 cols tablet, 3 cols desktop)
+    - Connection status derived from is_enabled field (real-time WebSocket deferred to F6.6)
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>POST /api/v1/cameras</name>
+      <kind>REST endpoint</kind>
+      <signature>POST /api/v1/cameras
+Body: { name, type, rtsp_url?, username?, password?, device_index?, frame_rate?, is_enabled? }
+Response 201: { id, name, type, rtsp_url, username, device_index, frame_rate, is_enabled, motion_sensitivity, motion_cooldown, created_at, updated_at }
+Response 400: { detail: "Validation error message" }
+Response 409: { detail: "Camera with this name already exists" }</signature>
+      <path>backend/app/api/v1/cameras.py:84</path>
+    </interface>
+
+    <interface>
+      <name>GET /api/v1/cameras</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/cameras?is_enabled=true
+Response 200: Array of CameraResponse objects</signature>
+      <path>backend/app/api/v1/cameras.py:174</path>
+    </interface>
+
+    <interface>
+      <name>GET /api/v1/cameras/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/cameras/{id}
+Response 200: CameraResponse object
+Response 404: { detail: "Camera not found" }</signature>
+      <path>backend/app/api/v1/cameras.py:232</path>
+    </interface>
+
+    <interface>
+      <name>PUT /api/v1/cameras/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>PUT /api/v1/cameras/{id}
+Body: Partial { name?, rtsp_url?, username?, password?, frame_rate?, is_enabled?, ... }
+Response 200: Updated CameraResponse
+Response 404: { detail: "Camera not found" }</signature>
+      <path>backend/app/api/v1/cameras.py:258</path>
+    </interface>
+
+    <interface>
+      <name>DELETE /api/v1/cameras/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>DELETE /api/v1/cameras/{id}
+Response 200: { deleted: true }
+Response 404: { detail: "Camera not found" }</signature>
+      <path>backend/app/api/v1/cameras.py:284</path>
+    </interface>
+
+    <interface>
+      <name>POST /api/v1/cameras/{id}/test</name>
+      <kind>REST endpoint</kind>
+      <signature>POST /api/v1/cameras/{id}/test
+Response 200 (success): { success: true, message: "Connection successful", thumbnail: "data:image/jpeg;base64,..." }
+Response 200 (failure): { success: false, message: "Connection failed: RTSP authentication failed (401)" }
+Response 404: { detail: "Camera not found" }</signature>
+      <path>backend/app/api/v1/cameras.py:315</path>
+    </interface>
+
+    <interface>
+      <name>ICamera (TypeScript)</name>
+      <kind>TypeScript interface</kind>
+      <signature>interface ICamera {
+  id: string;
+  name: string;
+  type: 'rtsp' | 'usb';
+  rtsp_url?: string;
+  username?: string;
+  device_index?: number;
+  frame_rate: number;
+  is_enabled: boolean;
+  motion_sensitivity: 'low' | 'medium' | 'high';
+  motion_cooldown: number;
+  created_at: string; // ISO 8601
+  updated_at: string; // ISO 8601
+}</signature>
+      <path>frontend/types/camera.ts (to be created)</path>
+    </interface>
+
+    <interface>
+      <name>ICameraCreate (TypeScript)</name>
+      <kind>TypeScript interface</kind>
+      <signature>interface ICameraCreate {
+  name: string;
+  type: 'rtsp' | 'usb';
+  rtsp_url?: string;
+  username?: string;
+  password?: string;
+  device_index?: number;
+  frame_rate?: number;
+  is_enabled?: boolean;
+  motion_sensitivity?: 'low' | 'medium' | 'high';
+  motion_cooldown?: number;
+}</signature>
+      <path>frontend/types/camera.ts (to be created)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Frontend testing with Jest + React Testing Library for component tests. E2E testing with Playwright or Cypress for full user flows. Unit tests for API client and custom hooks. Component tests should render components, simulate user interactions, and verify output. Mock API calls using fetch mock or MSW (Mock Service Worker).
+    </standards>
+
+    <locations>
+      - frontend/__tests__/ (unit and integration tests)
+      - frontend/components/**/*.test.tsx (component tests co-located)
+      - frontend/e2e/ (Playwright/Cypress E2E tests)
+    </locations>
+
+    <ideas>
+      AC-2: Test RTSP URL validation - should reject http://, should accept rtsp:// and rtsps://
+      AC-3: Test optional username/password fields - form should submit without credentials
+      AC-4: Test frame rate slider - displays current value, updates on slide, validates 1-30 range
+      AC-5: Test "Test Connection" button - shows loading state, displays success with thumbnail, displays error message
+      AC-8: Test connection status display - green dot for connected, red for disconnected, gray for disabled
+      AC-9: Test edit form pre-fill - fetches camera data, populates all form fields correctly
+      AC-10: Test delete confirmation - shows dialog, cancels on "Cancel", deletes on "Delete"
+
+      Component tests:
+      - CameraForm: validation logic, conditional field display, form submission
+      - CameraPreview: renders camera info, status indicator, edit/delete buttons
+      - CameraStatus: correct color/text for each status
+      - ConfirmDialog: shows/hides, calls onConfirm/onCancel
+
+      Integration tests:
+      - Camera list page: fetches and displays cameras, shows empty state
+      - Add camera flow: fill form, test connection, submit, redirects
+      - Edit camera flow: loads data, updates, saves
+      - Delete camera flow: click delete, confirm, API called, redirects
+
+      E2E tests:
+      - Full user journey: Add RTSP camera → Test connection → Save → Edit → Delete
+    </ideas>
+  </tests>
+</story-context>

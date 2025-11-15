@@ -1,0 +1,843 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context>
+  <metadata>
+    <epicId>f2</epicId>
+    <storyId>1</storyId>
+    <storyKey>f2-1-motion-detection-algorithm</storyKey>
+    <title>Motion Detection Algorithm</title>
+    <generated>2025-11-15</generated>
+    <status>ready-for-dev</status>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>motion detection to automatically identify movement in my camera feeds</iWant>
+    <soThat>the system only analyzes frames with activity, reducing computational costs and improving response time</soThat>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-1">System detects person entering frame >90% of the time (test with 10 video clips)</criterion>
+    <criterion id="AC-2">False positive rate &lt;20% (test with 10 non-person motion clips)</criterion>
+    <criterion id="AC-3">Motion detection processing latency &lt;100ms per frame (p95 at 5/15/30 FPS)</criterion>
+    <criterion id="AC-4">Configurable sensitivity levels (low, medium, high) work as expected</criterion>
+    <criterion id="AC-5">Cooldown period prevents repeated triggers (30-60 seconds default)</criterion>
+    <criterion id="AC-11">Motion events stored in database with metadata (camera_id, timestamp, confidence, bounding_box, thumbnail)</criterion>
+    <criterion id="AC-12">Motion configuration persists across system restarts</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc type="prd" path="docs/prd.md">
+        <section name="F2: Motion Detection">
+          <requirement id="F2.1">
+            <title>Motion Detection Algorithm</title>
+            <details>
+              - Frame differencing or background subtraction (OpenCV)
+              - Configurable sensitivity threshold (low/medium/high)
+              - Ignore small movements (leaves, shadows) below size threshold
+              - Cooldown period between triggers (30-60 seconds default)
+            </details>
+            <acceptanceCriteria>
+              - Detect person entering frame &gt;90% of the time
+              - False positive rate &lt;20% (non-person motion)
+              - Process motion detection with &lt;100ms latency
+            </acceptanceCriteria>
+          </requirement>
+        </section>
+
+        <section name="NFR1: Performance">
+          <performanceMetrics>
+            - Motion detection latency: &lt;100ms (NFR1.1)
+            - End-to-end event processing: &lt;5 seconds (motion → description)
+            - Motion detection budget: &lt;500ms (10% of total)
+          </performanceMetrics>
+        </section>
+
+        <section name="NFR2: Reliability">
+          <reliabilityMetrics>
+            - 95%+ uptime over 2-week test period
+            - Automatic recovery from crashes
+            - Graceful degradation if AI API unavailable
+          </reliabilityMetrics>
+        </section>
+
+        <section name="Technical Architecture">
+          <techStack>
+            - Backend: Python 3.11+, FastAPI, SQLAlchemy, OpenCV
+            - Database: SQLite for MVP
+            - Camera: OpenCV VideoCapture for RTSP and USB
+          </techStack>
+        </section>
+      </doc>
+
+      <doc type="architecture" path="docs/architecture.md">
+        <section name="Technology Stack">
+          <backend>
+            - Python 3.13+
+            - FastAPI 0.115+ (ASGI server with async support)
+            - SQLAlchemy 2.0+ (async ORM)
+            - OpenCV 4.12+ (motion detection, camera capture)
+            - Alembic (database migrations)
+          </backend>
+        </section>
+
+        <section name="Camera Service Integration">
+          <pattern>
+            - CameraService manages camera capture threads (one thread per camera)
+            - Background thread runs _capture_loop() continuously
+            - Motion detection integrates into _capture_loop (non-blocking, &lt;100ms)
+            - Thread-safe status tracking using Lock + dictionary pattern
+          </pattern>
+        </section>
+
+        <section name="Database Architecture">
+          <schema>
+            - SQLite file-based database (backend/data/app.db)
+            - UUID primary keys (str(uuid.uuid4()))
+            - DateTime with timezone for timestamps
+            - JSON columns for structured data (detection_zones, bounding_box)
+            - Foreign keys with indexed columns for performance
+          </schema>
+        </section>
+
+        <section name="Naming Conventions">
+          <python>
+            - Files: snake_case.py
+            - Classes: PascalCase
+            - Functions/Methods: snake_case
+            - Constants: UPPER_SNAKE_CASE
+            - Private methods: _leading_underscore
+            - Database tables: snake_case plural
+          </python>
+        </section>
+      </doc>
+
+      <doc type="tech-spec" path="docs/sprint-artifacts/tech-spec-epic-f2.md">
+        <section name="Overview">
+          Epic F2 implements motion detection using OpenCV to trigger AI-powered event analysis.
+          Event-driven approach reduces API costs by processing only frames with detected motion.
+          Supports configurable sensitivity, detection zones (F2.2), and scheduling (F2.3).
+        </section>
+
+        <section name="Services and Modules">
+          <service name="MotionDetector" path="app/services/motion_detector.py">
+            - Algorithm implementation (MOG2, KNN, frame differencing)
+            - Inputs: current frame, sensitivity config
+            - Outputs: motion detected (bool), confidence, bounding box
+          </service>
+
+          <service name="MotionDetectionService" path="app/services/motion_detection_service.py">
+            - Singleton pattern (similar to CameraService)
+            - Manages MotionDetector instances per camera
+            - Tracks cooldown state (last event timestamp + Lock)
+            - Method: process_frame(camera_id, frame) -&gt; Optional[MotionEvent]
+          </service>
+        </section>
+
+        <section name="Data Models">
+          <model name="Camera" extends="true">
+            <newFields>
+              - motion_enabled: bool (default True)
+              - motion_sensitivity: str (low/medium/high, default medium)
+              - motion_cooldown_seconds: int (default 30)
+              - motion_algorithm: str (mog2/knn/frame_diff, default mog2)
+            </newFields>
+          </model>
+
+          <model name="MotionEvent" new="true">
+            <fields>
+              - id: str (UUID primary key)
+              - camera_id: str (foreign key to cameras.id, indexed)
+              - timestamp: datetime (indexed)
+              - confidence: float (0.0-1.0)
+              - motion_intensity: float (nullable)
+              - algorithm_used: str
+              - bounding_box: str (JSON: {x, y, width, height})
+              - frame_thumbnail: str (base64 JPEG, ~50KB per DECISION-2)
+              - ai_event_id: str (foreign key, nullable, for F3 integration)
+              - created_at: datetime
+            </fields>
+          </model>
+        </section>
+
+        <section name="API Endpoints">
+          <endpoint method="PUT" path="/api/v1/cameras/{camera_id}/motion/config">
+            <requestBody>MotionConfigUpdate (motion_enabled, sensitivity, cooldown, algorithm)</requestBody>
+            <response>200 OK + CameraResponse</response>
+            <errors>404 (camera not found), 422 (validation error)</errors>
+          </endpoint>
+
+          <endpoint method="GET" path="/api/v1/cameras/{camera_id}/motion/config">
+            <response>200 OK + MotionConfigUpdate</response>
+            <errors>404 (camera not found)</errors>
+          </endpoint>
+
+          <endpoint method="POST" path="/api/v1/cameras/{camera_id}/motion/test">
+            <requestBody>{sensitivity?, algorithm?} (optional overrides)</requestBody>
+            <response>200 OK + {motion_detected, confidence, bounding_box, preview_image}</response>
+            <note>Ephemeral - does NOT save to database (DECISION-4)</note>
+            <rateLimit>10 requests/minute per camera</rateLimit>
+          </endpoint>
+
+          <endpoint method="GET" path="/api/v1/motion-events">
+            <queryParams>camera_id, start_date, end_date, min_confidence, limit (default 50, max 200), offset</queryParams>
+            <response>200 OK + List[MotionEventResponse]</response>
+            <ordering>timestamp DESC (most recent first)</ordering>
+          </endpoint>
+
+          <endpoint method="GET" path="/api/v1/motion-events/{event_id}">
+            <response>200 OK + MotionEventResponse (includes full frame thumbnail)</response>
+            <errors>404 (event not found)</errors>
+          </endpoint>
+
+          <endpoint method="DELETE" path="/api/v1/motion-events/{event_id}">
+            <response>200 OK + {deleted: true}</response>
+            <errors>404 (event not found)</errors>
+          </endpoint>
+
+          <endpoint method="GET" path="/api/v1/motion-events/stats">
+            <queryParams>camera_id (optional), days (default 7)</queryParams>
+            <response>200 OK + {total_events, events_by_camera, events_by_hour, average_confidence}</response>
+          </endpoint>
+        </section>
+
+        <section name="Motion Detection Flow">
+          <workflow>
+            1. CameraService captures frame (every 1/FPS seconds)
+            2. Check if motion_enabled for camera
+            3. Check cooldown period (30s elapsed since last event?)
+            4. MotionDetector runs algorithm (MOG2/KNN/FrameDiff)
+            5. Apply sensitivity threshold (low: 5%, medium: 2%, high: 0.5% of pixels)
+            6. Extract largest contour → bounding box
+            7. MotionEventStore creates database record with full frame thumbnail
+            8. Emit motion event to queue (for F3 AI processing)
+          </workflow>
+        </section>
+
+        <section name="Performance Requirements">
+          <constraint type="latency">Motion detection: &lt;100ms per frame (CRITICAL)</constraint>
+          <constraint type="throughput">Support 1-4 cameras @ 30 FPS with &lt;5% CPU increase per camera</constraint>
+          <constraint type="memory">&lt;100MB additional for background models (MOG2/KNN frame history)</constraint>
+          <sensitivityThresholds>
+            - Low: 5% of frame pixels changed (fewer false positives)
+            - Medium: 2% of frame pixels changed (balanced, default)
+            - High: 0.5% of frame pixels changed (sensitive, higher false positives)
+          </sensitivityThresholds>
+          <algorithmLatency>
+            - MOG2: ~30-50ms (fastest, recommended default)
+            - KNN: ~40-60ms (better accuracy, slight slowdown)
+            - Frame Differencing: ~20-30ms (fastest but less accurate)
+          </algorithmLatency>
+        </section>
+
+        <section name="Decisions Made">
+          <decision id="DECISION-1" status="deferred-to-F2.2">
+            Detection Zones - Polygons (not rectangles)
+            - Deferred to F2.2 story
+            - DetectionZone schema created in schemas/motion.py for future use
+          </decision>
+
+          <decision id="DECISION-2" status="implemented">
+            Motion Event Thumbnails - Full Frame
+            - Store full frame thumbnail (base64 JPEG, ~50KB per event)
+            - Provides visual context for reviewing events
+            - Implement in MotionDetectionService.process_frame()
+          </decision>
+
+          <decision id="DECISION-3" status="deferred-to-F2.3">
+            Schedule Complexity - Single Time Range
+            - Deferred to F2.3 story
+            - DetectionSchedule schema created in schemas/motion.py for future use
+          </decision>
+
+          <decision id="DECISION-4" status="implemented">
+            Motion Test Endpoint - Ephemeral
+            - Test results NOT saved to database (consistent with F1 camera test pattern)
+            - Returns preview image with bounding box overlay only
+          </decision>
+
+          <decision id="DECISION-5" status="deferred-to-F6">
+            Real-time Notifications - Polling
+            - No WebSocket implementation in F2
+            - Frontend will poll GET /motion-events
+            - Deferred WebSocket to F6 (Dashboard & Notifications)
+          </decision>
+        </section>
+
+        <section name="Risks">
+          <risk id="RISK-1" severity="HIGH">
+            Algorithm Selection Uncertainty
+            - Mitigation: Task 6 - systematic algorithm comparison with real footage
+            - Test all 3 algorithms (MOG2, KNN, FrameDiff)
+            - Document decision rationale
+          </risk>
+
+          <risk id="RISK-2" severity="HIGH">
+            False Positive Rate Too High
+            - Mitigation: Sensitivity tuning during testing
+            - Configurable sensitivity levels
+            - Note: Detection zones (F2.2) will further reduce false positives
+          </risk>
+
+          <risk id="RISK-3" severity="MEDIUM">
+            Performance Impact
+            - Mitigation: Performance benchmarks in Task 5.6
+            - Target: &lt;100ms latency at 640x480 resolution
+            - Use MOG2 for speed if needed
+          </risk>
+        </section>
+      </doc>
+    </docs>
+
+    <code>
+      <existingService path="backend/app/services/camera_service.py" lines="1-471">
+        <class name="CameraService">
+          <purpose>Manages camera capture threads and connection lifecycle</purpose>
+          <features>
+            - Background thread per camera (_capture_threads dict)
+            - Thread-safe status tracking (_status_lock + _camera_status dict)
+            - Automatic reconnection with exponential backoff (30s base, max 5 min)
+            - RTSP and USB camera support
+            - Configurable frame rate (1-30 FPS)
+          </features>
+
+          <methodToExtend name="_capture_loop" lines="174-328">
+            <currentFlow>
+              1. Connect to camera (RTSP or USB)
+              2. Set connection timeout (10 seconds)
+              3. Main capture loop:
+                 - Read frame (ret, frame = cap.read())
+                 - If frame read fails → trigger reconnection
+                 - Calculate sleep interval for target FPS
+                 - Sleep to maintain FPS
+              4. Reconnection logic with exponential backoff
+            </currentFlow>
+
+            <integrationPoint>
+              Lines 282-286 contain TODO comment for motion detection integration:
+              # TODO: Pass frame to motion detection service (F2)
+              # motion_detected = motion_detection_service.detect_motion(frame)
+              # if motion_detected:
+              #     # Trigger AI event processing
+              #     pass
+
+              Replace TODO with:
+              1. Check if camera.motion_enabled == True
+              2. Call motion_service.process_frame(camera.id, frame)
+              3. Process result (log motion event if detected)
+            </integrationPoint>
+
+            <performanceConstraint>
+              Motion detection must complete in &lt;100ms to avoid blocking frame capture.
+              Current sleep_interval calculation at line 250: sleep_interval = 1.0 / camera.frame_rate
+              If motion processing exceeds sleep_interval, log warning (already handled at lines 295-298).
+            </performanceConstraint>
+          </methodToExtend>
+
+          <methodToReuse name="_build_rtsp_url" lines="330-372">
+            <purpose>Build RTSP URL with credentials, decrypt password from Camera model</purpose>
+          </methodToReuse>
+
+          <methodToReuse name="_update_status" lines="374-388">
+            <purpose>Thread-safe update of camera status dict with Lock</purpose>
+            <pattern>Use same pattern for motion detector state management</pattern>
+          </methodToReuse>
+
+          <patternToFollow>
+            - Singleton pattern (one instance manages all cameras)
+            - Thread per camera (stored in _capture_threads dict)
+            - Thread-safe state (Lock + dictionary)
+            - Background thread with daemon=True
+            - Stop events for graceful shutdown (_stop_flags dict)
+          </patternToFollow>
+        </class>
+      </existingService>
+
+      <existingModel path="backend/app/models/camera.py" lines="1-110">
+        <class name="Camera" base="Base">
+          <tableName>cameras</tableName>
+          <existingFields>
+            - id: str (UUID primary key)
+            - name: str (max 100)
+            - type: str ('rtsp' or 'usb')
+            - rtsp_url: str (nullable, max 500)
+            - username: str (nullable, max 100)
+            - password: str (encrypted with Fernet, nullable, max 500)
+            - device_index: int (nullable, for USB cameras)
+            - frame_rate: int (default 5, range 1-30)
+            - is_enabled: bool (default True)
+            - motion_sensitivity: str (default 'medium', values: low/medium/high)
+            - motion_cooldown: int (default 60, range 0-300)
+            - created_at: datetime (UTC)
+            - updated_at: datetime (UTC, auto-update)
+          </existingFields>
+
+          <fieldsToAdd>
+            - motion_enabled: bool (default True) - whether motion detection is active
+            - motion_algorithm: str (default 'mog2') - which algorithm to use (mog2/knn/frame_diff)
+
+            Note: motion_sensitivity and motion_cooldown already exist in model (lines 44-45)
+          </fieldsToAdd>
+
+          <constraints>
+            - CheckConstraint: type IN ('rtsp', 'usb')
+            - CheckConstraint: frame_rate >= 1 AND frame_rate <= 30
+            - CheckConstraint: motion_sensitivity IN ('low', 'medium', 'high')
+            - CheckConstraint: motion_cooldown >= 0 AND motion_cooldown <= 300
+          </constraints>
+
+          <validators>
+            - encrypt_password_validator (lines 56-85): Automatically encrypts password on assignment
+          </validators>
+
+          <methods>
+            - get_decrypted_password (lines 87-106): Returns plain text password for RTSP URL
+          </methods>
+
+          <encryptionPattern>
+            Password field uses Fernet encryption with 'encrypted:' prefix.
+            Validator at line 56 checks for prefix to avoid double encryption.
+            Uses app.utils.encryption module (encrypt_password, decrypt_password functions).
+          </encryptionPattern>
+        </class>
+      </existingModel>
+
+      <existingSchema path="backend/app/schemas/camera.py" lines="1-144">
+        <schemas>
+          <schema name="CameraBase">
+            Common fields for camera schemas. Includes motion_sensitivity and motion_cooldown (lines 14-23).
+          </schema>
+
+          <schema name="CameraCreate">
+            Validation for camera creation. Uses @model_validator to enforce type-specific requirements:
+            - RTSP cameras require rtsp_url (must start with rtsp:// or rtsps://)
+            - USB cameras require device_index
+          </schema>
+
+          <schema name="CameraUpdate">
+            All fields optional for partial updates. Includes motion_sensitivity and motion_cooldown (lines 84-85).
+          </schema>
+
+          <schema name="CameraResponse">
+            API response schema. Excludes password field (write-only). Includes motion_sensitivity and motion_cooldown.
+            Uses model_config with from_attributes=True for SQLAlchemy ORM compatibility.
+          </schema>
+
+          <schema name="CameraTestResponse">
+            Connection test response with success, message, and optional base64 thumbnail.
+          </schema>
+        </schemas>
+
+        <patternToFollow>
+          - Use Literal types for enums (e.g., Literal['rtsp', 'usb'])
+          - Field validators with min/max constraints
+          - model_validator for cross-field validation
+          - from_attributes=True for ORM mode
+          - json_schema_extra with examples
+        </patternToFollow>
+      </existingSchema>
+    </code>
+
+    <dependencies>
+      <python version="3.13+">
+        <existing>
+          - opencv-python 4.12.0+ (REUSE for motion detection algorithms)
+          - fastapi[standard] 0.115.0 (REST API framework)
+          - sqlalchemy 2.0.36+ (async ORM)
+          - alembic 1.14.0+ (database migrations)
+          - pydantic 2.10.0+ (data validation)
+        </existing>
+
+        <new>
+          None required - all motion detection functionality available in existing OpenCV installation
+        </new>
+
+        <opencv>
+          Motion detection algorithms (all built-in):
+          - cv2.createBackgroundSubtractorMOG2() - Gaussian Mixture Model (recommended default)
+          - cv2.createBackgroundSubtractorKNN() - K-Nearest Neighbors
+          - cv2.absdiff() - Frame differencing (manual implementation)
+          - cv2.findContours() - Extract contours from foreground mask
+          - cv2.boundingRect() - Calculate bounding box from contour
+        </opencv>
+      </python>
+
+      <database>
+        <migration>
+          Alembic migration required to:
+          1. Add columns to cameras table: motion_enabled, motion_algorithm
+          2. Create new motion_events table with all fields
+          3. Add foreign key constraint: motion_events.camera_id → cameras.id
+          4. Add indexes: motion_events.camera_id, motion_events.timestamp
+        </migration>
+
+        <tables>
+          <table name="cameras" action="extend">
+            Add 2 columns: motion_enabled (Boolean), motion_algorithm (String)
+            Note: motion_sensitivity and motion_cooldown already exist
+          </table>
+
+          <table name="motion_events" action="create">
+            New table with fields from MotionEvent model (see Data Models section above)
+          </table>
+        </tables>
+      </database>
+
+      <integration>
+        <epic id="F1" status="completed">
+          - F1.1: RTSP Camera Support → CameraService infrastructure, thread management
+          - F1.2: Camera Configuration UI → API patterns, frontend foundation
+          - F1.3: USB Camera Support → detect_usb_cameras() method, cross-platform support
+        </epic>
+
+        <futureEpics>
+          - F2.2: Motion Detection Zones → Will consume MotionDetectionService
+          - F2.3: Detection Schedule → Will use motion configuration fields
+          - F3: AI Description Generation → Will consume motion_events via ai_event_id link
+          - F5: Alert Rule Engine → Will evaluate motion events against rules
+        </futureEpics>
+      </integration>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <performance>
+      <critical>Motion detection latency &lt;100ms per frame (p95)</critical>
+      <target>50-80ms on 2-core system at 5 FPS</target>
+      <budget>Motion detection &lt;500ms (10% of total 5s end-to-end budget)</budget>
+      <throughput>Support 1-4 cameras simultaneously @ 30 FPS with &lt;5% CPU increase per camera</throughput>
+      <memory>&lt;100MB additional for background models</memory>
+    </performance>
+
+    <threading>
+      <constraint>MotionDetector instances NOT shared between threads (one per camera)</constraint>
+      <constraint>Background models (MOG2/KNN) NOT shared (per-camera instances)</constraint>
+      <constraint>MotionDetectionService uses Lock + dict for cooldown tracking (thread-safe)</constraint>
+      <constraint>Motion detection runs in same thread as camera capture (must be non-blocking)</constraint>
+    </threading>
+
+    <database>
+      <constraint>Motion events ~1KB each, estimate 100 events/day/camera = 36MB/year/camera</constraint>
+      <constraint>Full frame thumbnails ~50KB per event (base64 JPEG at 640x480, quality 85%)</constraint>
+      <constraint>UUID primary keys using str(uuid.uuid4())</constraint>
+      <constraint>DateTime with timezone.utc for timestamps</constraint>
+      <constraint>Indexed foreign keys for query performance</constraint>
+    </database>
+
+    <architecture>
+      <constraint>Backend-first implementation (no frontend work in this story)</constraint>
+      <constraint>API can be tested via curl/Postman (frontend deferred to F2.2)</constraint>
+      <constraint>No WebSocket implementation (polling acceptable, deferred to F6 per DECISION-5)</constraint>
+      <constraint>Singleton pattern for MotionDetectionService (similar to CameraService)</constraint>
+    </architecture>
+
+    <testing>
+      <constraint>100% test pass rate standard (established in F1: 65/65 tests passing)</constraint>
+      <constraint>80%+ code coverage target for motion detection services</constraint>
+      <constraint>Performance benchmarks required (document baseline per F1 Retro Action Item #4)</constraint>
+      <constraint>Algorithm accuracy tests require real footage (AC-1, AC-2)</constraint>
+    </testing>
+  </constraints>
+
+  <interfaces>
+    <service name="MotionDetectionService">
+      <method>
+        <signature>process_frame(camera_id: str, frame: np.ndarray) -&gt; Optional[MotionEvent]</signature>
+        <description>
+          Main interface for processing a single frame from camera.
+          Called by CameraService._capture_loop() after successful frame read.
+        </description>
+        <inputs>
+          - camera_id: UUID of camera
+          - frame: NumPy array from cv2.VideoCapture.read()
+        </inputs>
+        <outputs>
+          - MotionEvent if motion detected AND cooldown elapsed
+          - None if no motion OR cooldown active
+        </outputs>
+        <sideEffects>
+          - Creates MotionEvent database record
+          - Updates cooldown timestamp for camera
+          - Generates full frame thumbnail (base64 JPEG)
+        </sideEffects>
+        <performance>Must complete in &lt;100ms (CRITICAL)</performance>
+      </method>
+    </service>
+
+    <service name="MotionDetector">
+      <method>
+        <signature>detect_motion(frame: np.ndarray, sensitivity: str) -&gt; tuple[bool, float, list]</signature>
+        <description>
+          Algorithm implementation for single frame motion detection.
+          Uses OpenCV background subtraction (MOG2/KNN) or frame differencing.
+        </description>
+        <inputs>
+          - frame: Current frame (NumPy array)
+          - sensitivity: 'low', 'medium', or 'high'
+        </inputs>
+        <outputs>
+          - motion_detected: bool (True if motion exceeds threshold)
+          - confidence: float (0.0-1.0)
+          - contours: list of OpenCV contours (for bounding box extraction)
+        </outputs>
+        <performance>
+          - MOG2: 30-50ms target
+          - KNN: 40-60ms target
+          - Frame Diff: 20-30ms target
+        </performance>
+      </method>
+    </service>
+
+    <api>
+      <router path="/api/v1/cameras/{camera_id}/motion/config">
+        Mount in cameras.py router or create new motion_config.py router.
+        Implements PUT and GET for motion configuration updates.
+      </router>
+
+      <router path="/api/v1/motion-events">
+        New router in app/api/v1/motion_events.py.
+        Implements GET (list), GET (single), DELETE, GET (stats).
+        Mount in app/main.py with prefix="/api/v1" and tags=["motion-events"].
+      </router>
+    </api>
+  </interfaces>
+
+  <tests>
+    <standards>
+      <framework>pytest (established in F1)</framework>
+      <coverage>80%+ for motion detection services</coverage>
+      <passRate>100% (all tests must pass)</passRate>
+      <isolation>File-based temporary database (not in-memory)</isolation>
+      <mocking>Use MagicMock for OpenCV objects (cap.read.return_value = (True, fake_frame))</mocking>
+    </standards>
+
+    <locations>
+      <unitTests path="backend/tests/test_services/">
+        - test_motion_detector.py (10+ tests for algorithms)
+        - test_motion_detection_service.py (8+ tests for service layer)
+      </unitTests>
+
+      <integrationTests path="backend/tests/test_api/">
+        - test_motion_config.py (10+ tests for configuration API)
+        - test_motion_events.py (12+ tests for events API)
+      </integrationTests>
+
+      <performanceTests path="backend/tests/test_performance/">
+        - test_motion_latency.py (benchmarks for all algorithms)
+      </performanceTests>
+    </locations>
+
+    <testIdeas>
+      <forAC id="AC-1">
+        Test with 10 video clips of person entering frame (true positives).
+        Require 9+ clips to trigger motion detection (>90% success rate).
+        Use real footage from Action Item #1 (F1 Retro: acquire diverse test footage).
+      </forAC>
+
+      <forAC id="AC-2">
+        Test with 10 video clips of non-person motion (trees, rain, shadows, lights).
+        Require ≤2 clips to trigger false positives (&lt;20% false positive rate).
+        Tune sensitivity thresholds to minimize false positives.
+      </forAC>
+
+      <forAC id="AC-3">
+        Benchmark motion detection latency at 5/15/30 FPS using pytest-benchmark.
+        Measure p50, p95, p99 latencies for MOG2, KNN, and frame differencing.
+        Verify p95 &lt;100ms at 640x480 resolution on reference hardware.
+      </forAC>
+
+      <forAC id="AC-4">
+        Unit test sensitivity thresholds:
+        - Low: 5% of pixels → detects only large motion
+        - Medium: 2% of pixels → balanced (default)
+        - High: 0.5% of pixels → detects all motion
+        Test with synthetic images (varying percentage of white pixels on black background).
+      </forAC>
+
+      <forAC id="AC-5">
+        Unit test cooldown enforcement:
+        - Trigger motion at T=0 → event created
+        - Trigger motion at T=15s → event NOT created (cooldown active)
+        - Trigger motion at T=60s → event created (cooldown elapsed)
+        Test with 30s and 60s cooldown periods.
+      </forAC>
+
+      <forAC id="AC-11">
+        Integration test event storage:
+        - Trigger motion detection
+        - Verify database record with all fields: camera_id, timestamp, confidence, bounding_box, thumbnail
+        - Verify UUID generated for event ID
+        - Verify thumbnail is base64 JPEG (~50KB)
+      </forAC>
+
+      <forAC id="AC-12">
+        Integration test configuration persistence:
+        - Set motion_sensitivity='high', motion_cooldown=60, motion_algorithm='knn'
+        - Restart backend server (stop/start FastAPI app)
+        - Verify configuration loaded from database with same values
+      </forAC>
+
+      <algorithmComparison>
+        Task 6: Systematic algorithm comparison with real footage.
+        Test MOG2, KNN, and frame differencing with 25 clips (10 true positive, 10 false positive, 5 varying intensity).
+        Measure true positive rate, false positive rate, and processing latency for each.
+        Document decision rationale for default algorithm.
+      </algorithmComparison>
+
+      <performanceBaseline>
+        Task 5.6: Document performance baseline (F1 Retro Action Item #4).
+        Measure CPU/memory with 1 camera @ 5 FPS + motion detection enabled.
+        Test on macOS (M1/Intel) and Linux (Ubuntu 22.04, 2-core VM).
+        Use as reference for optimization.
+      </performanceBaseline>
+    </testIdeas>
+  </tests>
+
+  <learnings>
+    <fromStory id="f1-3-webcam-usb-camera-support" status="done">
+      <service name="CameraService" path="backend/app/services/camera_service.py">
+        - Thread management patterns (Lock + dictionary for status tracking)
+        - Background thread capture loop (_capture_loop method)
+        - Camera start/stop infrastructure
+        - Reconnection logic with exponential backoff
+        - Thread-safe status updates
+        - Pattern: Motion detection integrates into existing _capture_loop (extend, don't replace)
+      </service>
+
+      <testing>
+        - 65/65 tests passing (100% pass rate standard)
+        - Test file structure: backend/tests/test_services/, backend/tests/test_api/
+        - Mocking VideoCapture for predictable tests: cap.read.return_value = (True, fake_frame)
+        - File-based temporary database for test isolation (not in-memory)
+      </testing>
+
+      <technicalDebt>
+        - Test connection only works in edit mode (applies to motion test endpoint too)
+        - Manual testing with physical cameras still deferred
+        - Action Item #1 from F1 Retro: Acquire diverse test footage (CRITICAL for this story)
+      </technicalDebt>
+
+      <database>
+        - Alembic migrations for schema changes
+        - SQLAlchemy 2.0.44+ ORM with async support
+        - UUID primary keys using lambda: str(uuid.uuid4())
+        - DateTime with timezone.utc
+        - Indexed foreign keys for queries
+      </database>
+    </fromStory>
+
+    <fromRetrospective id="epic-f1-retrospective">
+      <actionItems>
+        <item id="1" priority="high">
+          Acquire diverse test footage early (indoor, outdoor, day, night).
+          CRITICAL for AC-1 and AC-2 validation (true positive and false positive rates).
+          Use public datasets (PETS, ChangeDetection.net) or record own footage.
+        </item>
+
+        <item id="4" priority="medium">
+          Document performance baseline (CPU/memory with motion detection enabled).
+          Measure on macOS (M1/Intel) and Linux (Ubuntu 22.04, 2-core VM).
+          Use as reference for optimization and capacity planning.
+        </item>
+      </actionItems>
+
+      <patternsToReuse>
+        - Service layer architecture (CameraService pattern)
+        - Thread-safe state management (Lock + dictionary)
+        - Type safety (Pydantic schemas, SQLAlchemy models)
+        - Background thread patterns with daemon=True
+        - Exponential backoff for retries
+      </patternsToReuse>
+
+      <testsEstablished>
+        - 100% pass rate standard (no failing tests acceptable)
+        - 80%+ code coverage target
+        - Comprehensive API endpoint testing
+        - Mocking for external dependencies (VideoCapture)
+      </testsEstablished>
+    </fromRetrospective>
+  </learnings>
+
+  <implementationGuidance>
+    <order>
+      <phase name="Database Schema">
+        1. Create Alembic migration (add camera columns, create motion_events table)
+        2. Apply migration: alembic upgrade head
+        3. Update Camera model with new fields
+        4. Create MotionEvent model
+        5. Create Pydantic schemas (MotionConfigUpdate, MotionEventResponse, etc.)
+      </phase>
+
+      <phase name="Core Motion Detection">
+        6. Create MotionDetector class with algorithm implementations (MOG2, KNN, frame diff)
+        7. Create MotionDetectionService singleton with cooldown tracking
+        8. Integrate with CameraService._capture_loop (replace TODO at lines 282-286)
+        9. Implement full frame thumbnail generation (base64 JPEG)
+      </phase>
+
+      <phase name="API Endpoints">
+        10. Create motion configuration endpoints (PUT/GET /motion/config)
+        11. Create motion test endpoint (POST /motion/test)
+        12. Create motion events router (GET/DELETE /motion-events, GET /stats)
+        13. Mount router in app/main.py
+      </phase>
+
+      <phase name="Testing">
+        14. Unit tests for MotionDetector (10+ tests)
+        15. Unit tests for MotionDetectionService (8+ tests)
+        16. Integration tests for API endpoints (22+ tests)
+        17. Performance benchmarks (AC-3)
+        18. Algorithm comparison with real footage (Task 6, AC-1 and AC-2)
+      </phase>
+
+      <phase name="Documentation">
+        19. Update README.md with motion detection section
+        20. Update architecture.md
+        21. Document API endpoints
+      </phase>
+    </order>
+
+    <criticalPaths>
+      <path name="Performance">
+        Motion detection latency &lt;100ms is CRITICAL. If exceeds budget:
+        - Use MOG2 (fastest algorithm)
+        - Reduce frame rate (5 FPS instead of 30 FPS)
+        - Reduce resolution (640x480 instead of 1280x720)
+        - Profile with cProfile to identify bottlenecks
+      </path>
+
+      <path name="Algorithm Selection">
+        Task 6 must complete early to inform implementation.
+        If no real footage available, proceed with MOG2 as default (fastest + good balance).
+        Make algorithm configurable to allow switching later.
+      </path>
+
+      <path name="False Positive Rate">
+        AC-2 requires &lt;20% false positive rate. If exceeds:
+        - Tune sensitivity thresholds (reduce high sensitivity to 1% instead of 0.5%)
+        - Increase minimum contour area (filter small movements)
+        - Add morphological operations (dilate/erode to reduce noise)
+        - Note: Detection zones in F2.2 will further reduce false positives
+      </path>
+    </criticalPaths>
+
+    <tips>
+      <tip>Reuse CameraService patterns for MotionDetectionService (singleton, Lock + dict, thread-safe)</tip>
+      <tip>Test early with real camera footage (don't rely only on synthetic tests)</tip>
+      <tip>Document algorithm decision rationale in completion notes</tip>
+      <tip>Use pytest-benchmark for latency measurements (not manual timing)</tip>
+      <tip>Keep motion detection in same thread as camera capture (avoid threading overhead)</tip>
+      <tip>Generate thumbnail asynchronously if latency exceeds budget (FastAPI BackgroundTasks)</tip>
+    </tips>
+  </implementationGuidance>
+
+  <references>
+    <document path="docs/prd.md">Product Requirements Document - F2 Motion Detection requirements</document>
+    <document path="docs/architecture.md">System Architecture - Technology stack and patterns</document>
+    <document path="docs/sprint-artifacts/tech-spec-epic-f2.md">Epic F2 Technical Specification - Complete design</document>
+    <document path="docs/sprint-artifacts/epic-f1-retrospective.md">Epic F1 Retrospective - Learnings and action items</document>
+    <code path="backend/app/services/camera_service.py">CameraService - Thread management and capture loop</code>
+    <code path="backend/app/models/camera.py">Camera model - Database schema</code>
+    <code path="backend/app/schemas/camera.py">Camera schemas - Pydantic validation</code>
+  </references>
+</story-context>

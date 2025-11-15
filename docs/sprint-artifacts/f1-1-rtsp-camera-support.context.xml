@@ -1,0 +1,384 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>f1</epicId>
+    <storyId>1</storyId>
+    <title>RTSP Camera Support</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-15</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/f1-1-rtsp-camera-support.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>connect my IP camera to the system using RTSP protocol</iWant>
+    <soThat>the system can capture and analyze video from my camera for motion detection and AI-powered event descriptions</soThat>
+    <tasks>
+### Backend Implementation
+
+- [ ] **Task 1: Database Schema &amp; Model** (AC: 1, 6)
+  - [ ] Create `cameras` table migration with Alembic
+    - `id` (UUID primary key)
+    - `name`, `type`, `rtsp_url`, `username`, `password` (encrypted)
+    - `device_index`, `frame_rate`, `is_enabled`
+    - `motion_sensitivity`, `motion_cooldown` (for F2 compatibility)
+    - `created_at`, `updated_at` timestamps
+  - [ ] Implement `Camera` SQLAlchemy model with encryption validator
+  - [ ] Add Fernet encryption utilities (`encrypt_password`, `decrypt_password`)
+  - [ ] Write unit tests for model validation and encryption
+
+- [ ] **Task 2: Camera Service Core** (AC: 1, 4, 5, 6)
+  - [ ] Create `CameraService` class with thread management
+  - [ ] Implement `start_camera()` method
+    - Initialize `cv2.VideoCapture` with RTSP URL
+    - Build RTSP URL with credentials: `rtsp://user:pass@ip:port/path`
+    - Set 10-second connection timeout
+    - Start background thread for `_capture_loop()`
+  - [ ] Implement `_capture_loop()` private method
+    - Read frames at configured FPS (sleep interval calculation)
+    - Handle frame read failures
+    - Pass frames to placeholder motion detector (stub for F2)
+  - [ ] Implement `stop_camera()` method with thread cleanup
+  - [ ] Add thread-safe status tracking dictionary
+  - [ ] Write unit tests with mocked VideoCapture
+
+- [ ] **Task 3: Reconnection Logic** (AC: 8, 9, 10, 11, 12, 14)
+  - [ ] Detect stream dropout in `_capture_loop()`
+    - Check `ret` value from `cap.read()`
+    - Log warning with camera name and timestamp
+  - [ ] Implement reconnection with 30-second retry interval
+    - Release old VideoCapture
+    - Create new VideoCapture with same config
+    - Attempt test frame read
+  - [ ] Emit WebSocket events for connection state changes
+    - `CAMERA_STATUS_CHANGED` with camera_id, status, timestamp
+  - [ ] Add infinite retry with exponential backoff (capped at 5 min)
+  - [ ] Write integration tests for reconnection scenarios
+
+- [ ] **Task 4: REST API Endpoints** (AC: 1, 7)
+  - [ ] Implement Pydantic schemas in `app/schemas/camera.py`
+    - `CameraCreate`, `CameraUpdate`, `CameraResponse`
+    - Validate RTSP URL format (must start with `rtsp://` or `rtsps://`)
+    - Validate frame_rate bounds (1-30)
+  - [ ] Implement API routes in `app/api/v1/cameras.py`
+    - `POST /cameras` - Create camera, start capture thread
+    - `GET /cameras` - List all cameras with status
+    - `GET /cameras/{id}` - Get single camera
+    - `PUT /cameras/{id}` - Update camera config
+    - `DELETE /cameras/{id}` - Stop thread, delete camera
+    - `POST /cameras/{id}/test` - Test connection without saving
+  - [ ] Add error handling with clear messages
+    - 400 for validation errors
+    - 401 for auth failures (from OpenCV)
+    - 404 for camera not found
+    - 409 for duplicate camera name
+    - 500 for unexpected errors
+  - [ ] Write API integration tests with TestClient
+
+- [ ] **Task 5: Testing &amp; Validation** (AC: 2, 3, 4, 5, 13)
+  - [ ] Manual testing with 3 different camera brands (e.g., Hikvision, Dahua, Amcrest)
+  - [ ] Test basic auth and digest auth scenarios
+  - [ ] Test TCP and UDP protocols
+  - [ ] Verify H.264, H.265, MJPEG codec support
+  - [ ] Test FPS variations: 1, 5, 15, 30 FPS
+  - [ ] 24-hour soak test with camera running continuously
+  - [ ] Document tested/compatible cameras in README
+
+### Frontend Implementation (Deferred to Story F1.2)
+
+_Camera configuration UI will be implemented in Story F1.2: Camera Configuration UI_
+</tasks>
+  </story>
+
+  <acceptanceCriteria>
+**From Tech Spec AC-1: RTSP Camera Support**
+
+1. System successfully connects to RTSP camera with valid URL and credentials
+2. Supports both basic auth and digest auth for RTSP authentication
+3. Handles RTSP over TCP and UDP protocols
+4. Successfully captures frames at configured rate (tested at 1, 5, 15, 30 FPS)
+5. Supports H.264, H.265, and MJPEG video codecs (tested with 3 different camera brands)
+6. Connection timeout of 10 seconds prevents hanging indefinitely
+7. Invalid credentials return clear error message: "Authentication failed. Check username and password."
+
+**From Tech Spec AC-2: Automatic Reconnection**
+
+8. Detects stream dropout within 5 seconds (via failed frame read)
+9. Automatically attempts reconnection after 30-second delay
+10. Logs warning on disconnect: "Camera {name} disconnected"
+11. Logs info on successful reconnect: "Camera {name} reconnected"
+12. Emits WebSocket event on status change (CAMERA_STATUS_CHANGED)
+13. Maintains stable connection for 24+ hours continuous operation (soak test)
+14. Reconnects within 30-35 seconds of stream restoration
+</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <artifact>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>Detailed Design → Services and Modules</section>
+        <snippet>CameraService manages camera capture threads, handles connection lifecycle. Core methods: start_camera(), stop_camera(), _capture_loop() for background frame capture. Thread-safe status tracking using dictionaries with locks.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>Data Models and Contracts → Database Schema</section>
+        <snippet>Camera table includes: id (UUID), name, type (rtsp/usb), rtsp_url, username, password (encrypted), frame_rate (1-30), motion_sensitivity, motion_cooldown, is_enabled, timestamps. Foreign key relationships with events table.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>Workflows and Sequencing → Camera Capture Thread Lifecycle</section>
+        <snippet>On app startup, load enabled cameras from DB, spawn background thread per camera running _capture_loop(). Loop continuously reads frames via cv2.VideoCapture, handles reconnection on failure (30s delay), passes frames to MotionDetectionService.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>Workflows and Sequencing → Reconnection Logic</section>
+        <snippet>On frame capture error: log warning, emit WebSocket CAMERA_STATUS_CHANGED event, sleep 30s, release old VideoCapture, create new with same config, try test frame. If successful, resume capture. If failed, repeat with exponential backoff (capped at 5 min).</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/prd/03-functional-requirements.md</path>
+        <title>PRD: Functional Requirements</title>
+        <section>F1.1: RTSP Camera Support</section>
+        <snippet>Support RTSP over TCP/UDP, basic/digest auth, reconnect automatically (30s interval), configurable frame rate (1-30 FPS), handle H.264/H.265/MJPEG codecs, timeout after 10s, clear error messages for auth failures.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture/03-technology-stack.md</path>
+        <title>Technology Stack</title>
+        <section>Backend Stack</section>
+        <snippet>FastAPI 0.115+ (ASGI framework), Python 3.11+ (async/await), SQLAlchemy 2.0+ (async ORM), opencv-python 4.8+ (camera capture via VideoCapture), cryptography (Fernet encryption for passwords), Alembic (database migrations).</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture/04-project-structure.md</path>
+        <title>Project Structure</title>
+        <section>Backend Structure</section>
+        <snippet>Key files: backend/app/services/camera_service.py (capture logic), app/api/v1/cameras.py (REST endpoints), app/models/camera.py (SQLAlchemy model), app/schemas/camera.py (Pydantic validation), app/utils/encryption.py (Fernet encrypt/decrypt).</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture/06-data-architecture.md</path>
+        <title>Data Architecture</title>
+        <section>Database Schema → cameras table</section>
+        <snippet>CREATE TABLE cameras with fields: id TEXT PRIMARY KEY (UUID), name TEXT NOT NULL, type TEXT ('rtsp'/'usb'), rtsp_url TEXT, username/password TEXT (encrypted), device_index INTEGER, frame_rate INTEGER DEFAULT 5, is_enabled BOOLEAN, motion_sensitivity, motion_cooldown, timestamps.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture/08-implementation-patterns.md</path>
+        <title>Implementation Patterns</title>
+        <section>Naming Conventions → Backend (Python)</section>
+        <snippet>Files: snake_case.py, Classes: PascalCase, Functions: snake_case, Constants: UPPER_SNAKE_CASE, Private methods: _leading_underscore. Database tables: snake_case plural, columns: snake_case, foreign keys: {table_singular}_id.</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture/08-implementation-patterns.md</path>
+        <title>Implementation Patterns</title>
+        <section>Error Handling → Backend Error Pattern</section>
+        <snippet>Use FastAPI HTTPException with appropriate status codes (404 not found, 400 validation, 500 internal). Log all errors with structured context. Provide clear user-facing messages (e.g., "Check username/password" not "Auth failed 401").</snippet>
+      </artifact>
+      <artifact>
+        <path>docs/architecture/08-implementation-patterns.md</path>
+        <title>Implementation Patterns</title>
+        <section>Logging Standards</section>
+        <snippet>Log levels: DEBUG (frame details), INFO (camera started/stopped), WARNING (slow capture, reconnection), ERROR (failures but handled), CRITICAL (system cannot continue). Use structured logging with extra={} context. Never log passwords/API keys.</snippet>
+      </artifact>
+    </docs>
+    <code>
+      <!-- No existing code - greenfield project. These are files to CREATE -->
+      <artifact>
+        <path>backend/alembic/versions/001_create_cameras.py</path>
+        <kind>migration</kind>
+        <symbol>upgrade</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: Alembic migration to create cameras table with all fields per schema in data architecture</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: SQLAlchemy ORM model for cameras table with encryption validator on password field</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/schemas/camera.py</path>
+        <kind>schema</kind>
+        <symbol>CameraCreate, CameraUpdate, CameraResponse</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: Pydantic schemas for API request/response validation, URL format validation, frame_rate bounds checking</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/camera_service.py</path>
+        <kind>service</kind>
+        <symbol>CameraService</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: Core camera capture service with thread management, start_camera(), stop_camera(), _capture_loop(), reconnection logic</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/api/v1/cameras.py</path>
+        <kind>controller</kind>
+        <symbol>create_camera, list_cameras, get_camera, update_camera, delete_camera, test_connection</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: FastAPI route handlers for camera CRUD operations and connection testing</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/utils/encryption.py</path>
+        <kind>utility</kind>
+        <symbol>encrypt_password, decrypt_password</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: Fernet encryption/decryption utilities for camera passwords at rest</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/core/database.py</path>
+        <kind>core</kind>
+        <symbol>engine, SessionLocal, Base</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: SQLAlchemy database connection, async session management, Base class for models</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/core/config.py</path>
+        <kind>core</kind>
+        <symbol>Settings</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: Pydantic Settings for environment variable configuration (DATABASE_URL, ENCRYPTION_KEY, etc.)</reason>
+      </artifact>
+      <artifact>
+        <path>backend/main.py</path>
+        <kind>entrypoint</kind>
+        <symbol>app</symbol>
+        <lines>N/A (new file)</lines>
+        <reason>NEW FILE: FastAPI application initialization, register camera routes, startup/shutdown events for camera threads</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0">Web framework with async support, automatic OpenAPI docs</package>
+        <package name="opencv-python" version="4.8.1.78">Camera capture via VideoCapture, RTSP protocol support, image processing</package>
+        <package name="sqlalchemy" version="2.0.23">Async ORM for database operations, type-safe queries</package>
+        <package name="alembic" version="1.12.1">Database schema migrations, version control for schema changes</package>
+        <package name="pydantic" version="2.5.0">Data validation, settings management, API schema definitions</package>
+        <package name="cryptography" version="41.0.7">Fernet symmetric encryption for camera passwords and API keys</package>
+        <package name="uvicorn" version="0.24.0">ASGI server for running FastAPI application</package>
+        <package name="python-multipart" version="0.0.6">Form data parsing for file uploads (future use)</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+- **Service Pattern:** CameraService manages all camera capture logic with clean separation from API layer. Background thread per camera for non-blocking operation.
+- **Encryption Pattern:** Camera passwords encrypted with Fernet (AES-256) at rest. Encryption key stored in environment variable ENCRYPTION_KEY. Model validator automatically encrypts on write.
+- **Thread Safety:** Use threading.Lock for shared state access between capture threads and API handlers. Status tracking dictionary protected by lock.
+- **Error Handling:** OpenCV errors mapped to clear user-facing messages. Structured logging with context (camera_id, action, error). WebSocket events for real-time status updates.
+- **Performance:** Frame capture latency &lt;100ms per frame. Camera connection establishment &lt;3 seconds. Memory usage per camera thread &lt;50MB baseline.
+- **Security:** RTSP URLs with credentials never logged (sanitize before logging). Passwords encrypted at rest, never returned in API responses (write-only field).
+- **Reconnection:** Infinite retry with exponential backoff capped at 5 minutes. Detect dropout within 5 seconds via failed frame read. Log all connection state changes.
+- **Database:** SQLite for MVP. Use UUID for primary keys. Timestamps in UTC without timezone. Foreign key constraints enforced.
+- **API Design:** RESTful endpoints following naming conventions. Proper HTTP status codes (201 created, 400 validation, 404 not found, 409 conflict, 500 internal error).
+- **Testing:** Unit tests with mocked VideoCapture. Integration tests with simulated RTSP streams. Manual tests with 3+ real camera brands. 24-hour soak test required.
+</constraints>
+
+  <interfaces>
+    <interface>
+      <name>CameraService.start_camera</name>
+      <kind>method</kind>
+      <signature>async def start_camera(self, camera: Camera) -&gt; bool</signature>
+      <path>backend/app/services/camera_service.py</path>
+    </interface>
+    <interface>
+      <name>CameraService.stop_camera</name>
+      <kind>method</kind>
+      <signature>async def stop_camera(self, camera_id: str) -&gt; None</signature>
+      <path>backend/app/services/camera_service.py</path>
+    </interface>
+    <interface>
+      <name>CameraService._capture_loop</name>
+      <kind>method</kind>
+      <signature>def _capture_loop(self, camera: Camera) -&gt; None</signature>
+      <path>backend/app/services/camera_service.py</path>
+    </interface>
+    <interface>
+      <name>POST /api/v1/cameras</name>
+      <kind>REST endpoint</kind>
+      <signature>Request: CameraCreate schema, Response: 201 with CameraResponse</signature>
+      <path>backend/app/api/v1/cameras.py</path>
+    </interface>
+    <interface>
+      <name>GET /api/v1/cameras</name>
+      <kind>REST endpoint</kind>
+      <signature>Query params: is_enabled (optional), Response: 200 with list of CameraResponse</signature>
+      <path>backend/app/api/v1/cameras.py</path>
+    </interface>
+    <interface>
+      <name>GET /api/v1/cameras/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>Path param: id (UUID), Response: 200 with CameraResponse or 404</signature>
+      <path>backend/app/api/v1/cameras.py</path>
+    </interface>
+    <interface>
+      <name>PUT /api/v1/cameras/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>Path param: id (UUID), Request: CameraUpdate schema, Response: 200 with updated CameraResponse or 404</signature>
+      <path>backend/app/api/v1/cameras.py</path>
+    </interface>
+    <interface>
+      <name>DELETE /api/v1/cameras/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>Path param: id (UUID), Response: 200 with deletion confirmation or 404</signature>
+      <path>backend/app/api/v1/cameras.py</path>
+    </interface>
+    <interface>
+      <name>POST /api/v1/cameras/{id}/test</name>
+      <kind>REST endpoint</kind>
+      <signature>Path param: id (UUID), Response: 200 with success:bool, message:str, thumbnail:base64 (optional)</signature>
+      <path>backend/app/api/v1/cameras.py</path>
+    </interface>
+    <interface>
+      <name>Camera SQLAlchemy Model</name>
+      <kind>class</kind>
+      <signature>class Camera(Base): id, name, type, rtsp_url, username, password, device_index, frame_rate, is_enabled, motion_sensitivity, motion_cooldown, created_at, updated_at</signature>
+      <path>backend/app/models/camera.py</path>
+    </interface>
+    <interface>
+      <name>encrypt_password</name>
+      <kind>function</kind>
+      <signature>def encrypt_password(password: str) -&gt; str</signature>
+      <path>backend/app/utils/encryption.py</path>
+    </interface>
+    <interface>
+      <name>decrypt_password</name>
+      <kind>function</kind>
+      <signature>def decrypt_password(encrypted_password: str) -&gt; str</signature>
+      <path>backend/app/utils/encryption.py</path>
+    </interface>
+    <interface>
+      <name>MotionDetectionService (placeholder for F2)</name>
+      <kind>method</kind>
+      <signature>def detect_motion(self, frame: np.ndarray) -&gt; bool</signature>
+      <path>backend/app/services/motion_detection.py (stub for now)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Unit tests using pytest for backend Python code. Test all service methods with mocked dependencies (cv2.VideoCapture). API integration tests using FastAPI TestClient with in-memory SQLite database. Test all CRUD operations, error cases, validation logic. Manual testing required with real RTSP cameras (3+ brands) to verify codec/auth support. 24-hour soak test to ensure no memory leaks or connection stability issues. Integration tests for reconnection logic with simulated network failures.
+</standards>
+    <locations>
+backend/tests/ (pytest test suite)
+backend/tests/test_api/test_cameras.py (API endpoint tests)
+backend/tests/test_services/test_camera_service.py (service unit tests)
+backend/tests/conftest.py (pytest fixtures)
+</locations>
+    <ideas>
+- **test_camera_model_encryption**: Verify password encrypted on save, decryption method returns original value
+- **test_camera_service_start_rtsp**: Mock VideoCapture, verify thread spawned, capture loop running
+- **test_camera_service_stop**: Verify thread cleanup, VideoCapture released, no resource leaks
+- **test_reconnection_logic**: Simulate frame read failure, verify 30s delay, reconnection attempt, success/failure handling
+- **test_create_camera_api**: POST valid camera data, verify 201 response, database record created, capture thread started
+- **test_create_camera_duplicate_name**: POST camera with existing name, verify 409 conflict response
+- **test_create_camera_invalid_url**: POST camera with malformed RTSP URL, verify 400 validation error with clear message
+- **test_test_connection_success**: POST to /cameras/{id}/test with valid config, verify thumbnail returned, no database save
+- **test_test_connection_auth_failure**: POST to /cameras/{id}/test with wrong password, verify clear error message "Authentication failed"
+- **test_delete_camera**: DELETE camera, verify thread stopped, database record removed, 200 response
+- **test_frame_capture_at_fps**: Measure frame capture timing, verify FPS maintained (1, 5, 15, 30 FPS tests)
+- **test_camera_codec_support**: Manual test with H.264, H.265, MJPEG streams, verify frames captured correctly
+- **test_24_hour_soak**: Run camera capture continuously for 24+ hours, monitor memory usage, connection stability
+</ideas>
+  </tests>
+</story-context>

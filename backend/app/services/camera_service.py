@@ -1,0 +1,470 @@
+"""
+Camera capture service with thread management and reconnection logic
+
+Handles RTSP and USB camera capture in background threads with automatic
+reconnection on stream dropout.
+"""
+import cv2
+import threading
+import time
+import logging
+from typing import Dict, Optional
+from datetime import datetime
+import numpy as np
+
+from app.models.camera import Camera
+
+logger = logging.getLogger(__name__)
+
+
+class CameraService:
+    """
+    Manages camera capture threads and handles connection lifecycle
+
+    Features:
+    - Background thread per camera for non-blocking frame capture
+    - Automatic reconnection with exponential backoff (30s base, capped at 5 min)
+    - Thread-safe status tracking
+    - RTSP and USB camera support
+    - Configurable frame rate (1-30 FPS)
+
+    Attributes:
+        _capture_threads: Dict mapping camera_id to Thread objects
+        _active_captures: Dict mapping camera_id to cv2.VideoCapture objects
+        _stop_flags: Dict mapping camera_id to stop event flags
+        _status_lock: Threading lock for status dictionary access
+        _camera_status: Dict tracking connection status per camera
+    """
+
+    def __init__(self):
+        """Initialize camera service with empty thread tracking"""
+        self._capture_threads: Dict[str, threading.Thread] = {}
+        self._active_captures: Dict[str, cv2.VideoCapture] = {}
+        self._stop_flags: Dict[str, threading.Event] = {}
+        self._status_lock = threading.Lock()
+        self._camera_status: Dict[str, dict] = {}
+
+        logger.info("CameraService initialized")
+
+    def start_camera(self, camera: Camera) -> bool:
+        """
+        Start capturing from camera in background thread
+
+        Args:
+            camera: Camera model instance with connection details
+
+        Returns:
+            True if camera thread started successfully, False otherwise
+
+        Side effects:
+            - Spawns background thread running _capture_loop()
+            - Stores thread reference in _capture_threads
+            - Updates _camera_status to 'starting'
+        """
+        camera_id = camera.id
+
+        # Check if already running
+        if camera_id in self._capture_threads and self._capture_threads[camera_id].is_alive():
+            logger.warning(f"Camera {camera_id} already running")
+            return False
+
+        try:
+            # Create stop event for this camera
+            stop_event = threading.Event()
+            self._stop_flags[camera_id] = stop_event
+
+            # Update status
+            with self._status_lock:
+                self._camera_status[camera_id] = {
+                    "status": "starting",
+                    "last_frame_time": None,
+                    "error": None
+                }
+
+            # Create and start background thread
+            thread = threading.Thread(
+                target=self._capture_loop,
+                args=(camera,),
+                name=f"camera_{camera.name}_{camera_id[:8]}",
+                daemon=True
+            )
+            thread.start()
+
+            # Store thread reference
+            self._capture_threads[camera_id] = thread
+
+            logger.info(
+                f"Started camera {camera_id}",
+                extra={
+                    "camera_id": camera_id,
+                    "camera_name": camera.name,
+                    "camera_type": camera.type,
+                    "frame_rate": camera.frame_rate
+                }
+            )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to start camera {camera_id}: {e}", exc_info=True)
+
+            # Clean up on failure
+            with self._status_lock:
+                self._camera_status[camera_id] = {
+                    "status": "error",
+                    "last_frame_time": None,
+                    "error": str(e)
+                }
+
+            return False
+
+    def stop_camera(self, camera_id: str, timeout: float = 5.0) -> None:
+        """
+        Stop camera capture thread gracefully
+
+        Args:
+            camera_id: UUID of camera to stop
+            timeout: Maximum seconds to wait for thread to join (default 5s)
+
+        Side effects:
+            - Sets stop flag for camera thread
+            - Waits for thread to join (up to timeout)
+            - Releases VideoCapture resources
+            - Removes from tracking dictionaries
+        """
+        if camera_id not in self._capture_threads:
+            logger.warning(f"Camera {camera_id} not running")
+            return
+
+        try:
+            # Signal thread to stop
+            if camera_id in self._stop_flags:
+                self._stop_flags[camera_id].set()
+
+            # Wait for thread to finish
+            thread = self._capture_threads[camera_id]
+            thread.join(timeout=timeout)
+
+            if thread.is_alive():
+                logger.warning(
+                    f"Camera {camera_id} thread did not stop within {timeout}s timeout"
+                )
+
+            # Clean up resources
+            if camera_id in self._active_captures:
+                cap = self._active_captures[camera_id]
+                cap.release()
+                del self._active_captures[camera_id]
+
+            # Remove from tracking
+            del self._capture_threads[camera_id]
+            if camera_id in self._stop_flags:
+                del self._stop_flags[camera_id]
+
+            # Update status
+            with self._status_lock:
+                if camera_id in self._camera_status:
+                    del self._camera_status[camera_id]
+
+            logger.info(f"Stopped camera {camera_id}")
+
+        except Exception as e:
+            logger.error(f"Error stopping camera {camera_id}: {e}", exc_info=True)
+
+    def _capture_loop(self, camera: Camera) -> None:
+        """
+        Background thread loop for continuous frame capture
+
+        This is the core capture logic that runs in a dedicated thread per camera.
+        Handles:
+        - Initial connection to camera
+        - Frame capture at configured FPS
+        - Frame read failure detection
+        - Automatic reconnection with backoff
+        - Motion detection stub (placeholder for F2)
+
+        Args:
+            camera: Camera model with connection details
+
+        Thread-safe: Yes (writes to shared status dict use lock)
+        Termination: Exits when stop_flag is set
+        """
+        camera_id = camera.id
+        stop_flag = self._stop_flags.get(camera_id)
+
+        # Build connection string based on camera type
+        if camera.type == "rtsp":
+            connection_str = self._build_rtsp_url(camera)
+        elif camera.type == "usb":
+            connection_str = camera.device_index
+        else:
+            logger.error(f"Unknown camera type: {camera.type}")
+            self._update_status(camera_id, "error", error=f"Unknown camera type: {camera.type}")
+            return
+
+        # Reconnection parameters
+        base_retry_delay = 30  # seconds
+        max_retry_delay = 300  # 5 minutes
+        retry_count = 0
+
+        logger.info(f"Starting capture loop for camera {camera_id}")
+
+        while not stop_flag.is_set():
+            cap = None
+
+            try:
+                # Attempt to connect to camera
+                logger.debug(f"Connecting to camera {camera_id} (attempt {retry_count + 1})")
+
+                cap = cv2.VideoCapture(connection_str)
+
+                # Set connection timeout (10 seconds)
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
+
+                # Check if connection successful
+                if not cap.isOpened():
+                    raise ConnectionError(f"Failed to open camera {camera_id}")
+
+                # Store active capture
+                self._active_captures[camera_id] = cap
+
+                # Reset retry count on successful connection
+                retry_count = 0
+
+                # Update status to connected
+                self._update_status(camera_id, "connected")
+
+                # Log connection with type-specific message
+                if camera.type == "usb":
+                    log_msg = (
+                        f"USB camera {camera.name} (device {camera.device_index}) reconnected"
+                        if retry_count > 0
+                        else f"USB camera {camera.name} (device {camera.device_index}) connected"
+                    )
+                else:
+                    log_msg = f"Camera {camera_id} reconnected" if retry_count > 0 else f"Camera {camera_id} connected"
+
+                logger.info(log_msg)
+
+                # Calculate sleep interval for target FPS
+                sleep_interval = 1.0 / camera.frame_rate if camera.frame_rate > 0 else 0.2
+
+                # Main capture loop
+                while not stop_flag.is_set():
+                    frame_start_time = time.time()
+
+                    # Read frame
+                    ret, frame = cap.read()
+
+                    if not ret:
+                        # Frame read failed - trigger reconnection
+                        if camera.type == "usb":
+                            logger.warning(
+                                f"USB camera {camera.name} (device {camera.device_index}) disconnected"
+                            )
+                        else:
+                            logger.warning(f"Camera {camera.name} disconnected (frame read failed)")
+
+                        self._update_status(camera_id, "disconnected", error="Frame read failed")
+
+                        # TODO: Emit WebSocket event CAMERA_STATUS_CHANGED
+                        # self._emit_websocket_event("CAMERA_STATUS_CHANGED", {
+                        #     "camera_id": camera_id,
+                        #     "status": "disconnected",
+                        #     "timestamp": datetime.utcnow().isoformat() + "Z"
+                        # })
+
+                        break  # Exit inner loop to trigger reconnection
+
+                    # Frame captured successfully
+                    self._update_status(camera_id, "connected")
+
+                    # TODO: Pass frame to motion detection service (F2)
+                    # motion_detected = motion_detection_service.detect_motion(frame)
+                    # if motion_detected:
+                    #     # Trigger AI event processing
+                    #     pass
+
+                    # Maintain target FPS
+                    frame_processing_time = time.time() - frame_start_time
+                    sleep_time = max(0, sleep_interval - frame_processing_time)
+
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+                    else:
+                        logger.debug(
+                            f"Camera {camera_id} frame processing slower than target FPS "
+                            f"({frame_processing_time:.3f}s > {sleep_interval:.3f}s)"
+                        )
+
+                # If we exit the inner loop, frame read failed - attempt reconnection
+
+            except Exception as e:
+                logger.error(f"Camera {camera_id} error: {e}", exc_info=True)
+                self._update_status(camera_id, "error", error=str(e))
+
+            finally:
+                # Release capture on error or disconnect
+                if cap is not None:
+                    cap.release()
+                    if camera_id in self._active_captures:
+                        del self._active_captures[camera_id]
+
+            # Reconnection logic with exponential backoff
+            if not stop_flag.is_set():
+                retry_count += 1
+
+                # Calculate backoff delay (exponential with cap)
+                delay = min(base_retry_delay * (2 ** (retry_count - 1)), max_retry_delay)
+
+                logger.info(
+                    f"Camera {camera_id} will retry connection in {delay}s "
+                    f"(attempt {retry_count})"
+                )
+
+                # Wait with ability to cancel during sleep
+                stop_flag.wait(timeout=delay)
+
+        logger.info(f"Capture loop exited for camera {camera_id}")
+
+    def _build_rtsp_url(self, camera: Camera) -> str:
+        """
+        Build RTSP URL with credentials
+
+        Args:
+            camera: Camera model with RTSP details
+
+        Returns:
+            RTSP URL string with embedded credentials (if provided)
+
+        Example:
+            rtsp://username:password@192.168.1.50:554/stream1
+        """
+        rtsp_url = camera.rtsp_url
+
+        # If credentials provided, inject into URL
+        if camera.username:
+            # Get decrypted password
+            password = camera.get_decrypted_password() if camera.password else ""
+
+            # Parse URL to inject credentials
+            if "://" in rtsp_url:
+                protocol, rest = rtsp_url.split("://", 1)
+
+                # Build credentials string
+                creds = camera.username
+                if password:
+                    creds += f":{password}"
+
+                # Rebuild URL with credentials
+                rtsp_url = f"{protocol}://{creds}@{rest}"
+
+        # Sanitize URL for logging (remove credentials)
+        safe_url = rtsp_url
+        if "@" in safe_url:
+            protocol, rest = safe_url.split("://", 1)
+            if "@" in rest:
+                _, host_part = rest.split("@", 1)
+                safe_url = f"{protocol}://***:***@{host_part}"
+
+        logger.debug(f"Built RTSP URL: {safe_url}")
+
+        return rtsp_url
+
+    def _update_status(self, camera_id: str, status: str, error: Optional[str] = None) -> None:
+        """
+        Thread-safe update of camera status
+
+        Args:
+            camera_id: UUID of camera
+            status: Status string ('starting', 'connected', 'disconnected', 'error')
+            error: Optional error message
+        """
+        with self._status_lock:
+            self._camera_status[camera_id] = {
+                "status": status,
+                "last_frame_time": datetime.utcnow() if status == "connected" else None,
+                "error": error
+            }
+
+    def get_camera_status(self, camera_id: str) -> Optional[dict]:
+        """
+        Get current status of camera
+
+        Args:
+            camera_id: UUID of camera
+
+        Returns:
+            Status dict or None if camera not found
+        """
+        with self._status_lock:
+            return self._camera_status.get(camera_id)
+
+    def get_all_camera_status(self) -> Dict[str, dict]:
+        """
+        Get status of all cameras
+
+        Returns:
+            Dict mapping camera_id to status dict
+        """
+        with self._status_lock:
+            return self._camera_status.copy()
+
+    def stop_all_cameras(self, timeout: float = 5.0) -> None:
+        """
+        Stop all running camera threads
+
+        Args:
+            timeout: Maximum seconds to wait per camera thread
+        """
+        camera_ids = list(self._capture_threads.keys())
+
+        for camera_id in camera_ids:
+            self.stop_camera(camera_id, timeout=timeout)
+
+        logger.info(f"Stopped all cameras ({len(camera_ids)} total)")
+
+    def detect_usb_cameras(self) -> list[int]:
+        """
+        Enumerate available USB camera device indices
+
+        Tries to open VideoCapture for device indices 0-9 and returns
+        list of indices that successfully open.
+
+        Returns:
+            List of available device indices (e.g., [0, 1, 2])
+
+        Note:
+            This is a blocking operation that may take 1-2 seconds.
+            On Linux, may require user in 'video' group.
+        """
+        available_devices = []
+
+        logger.debug("Scanning for USB cameras (indices 0-9)")
+
+        for device_index in range(10):
+            cap = None
+            try:
+                cap = cv2.VideoCapture(device_index)
+
+                # Set short timeout to avoid hanging
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 1000)
+
+                # Check if device is actually accessible
+                if cap.isOpened():
+                    # Try to read a test frame to verify it's a real camera
+                    ret, _ = cap.read()
+                    if ret:
+                        available_devices.append(device_index)
+                        logger.debug(f"Found USB camera at device index {device_index}")
+
+            except Exception as e:
+                logger.debug(f"Device index {device_index} not available: {e}")
+
+            finally:
+                if cap is not None:
+                    cap.release()
+
+        logger.info(f"USB camera detection complete: found {len(available_devices)} devices")
+
+        return available_devices

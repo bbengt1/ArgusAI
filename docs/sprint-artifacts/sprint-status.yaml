@@ -1,0 +1,107 @@
+# generated: 2025-11-15
+# project: live-object-ai-classifier
+# project_key: live-object-ai-classifier
+# tracking_system: file-system
+# story_location: docs/sprint-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic exists in epic file but not contexted
+#   - contexted: Epic tech context created (required before drafting stories)
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - drafted: Story file created in stories folder
+#   - ready-for-dev: Draft approved and story context created
+#   - in-progress: Developer actively working on implementation
+#   - review: Under SM review (via code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - completed: Retrospective has been done
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epics should be 'contexted' before stories can be 'drafted'
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically drafts next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
+
+generated: 2025-11-15
+project: live-object-ai-classifier
+project_key: live-object-ai-classifier
+tracking_system: file-system
+story_location: docs/sprint-artifacts
+
+development_status:
+  # F1: Camera Feed Integration
+  epic-f1: contexted
+  f1-1-rtsp-camera-support: done
+  f1-2-camera-configuration-ui: done
+  f1-3-webcam-usb-camera-support: done
+  epic-f1-retrospective: completed
+
+  # F2: Motion Detection
+  epic-f2: contexted
+  f2-1-motion-detection-algorithm: in-progress
+  f2-2-motion-detection-zones: backlog
+  f2-3-detection-schedule: backlog
+  epic-f2-retrospective: optional
+
+  # F3: AI-Powered Description Generation
+  epic-f3: backlog
+  f3-1-natural-language-processing: backlog
+  f3-2-image-capture-processing: backlog
+  f3-3-ai-model-selection-fallback: backlog
+  f3-4-description-enhancement-prompt: backlog
+  epic-f3-retrospective: optional
+
+  # F4: Event Storage & Management
+  epic-f4: backlog
+  f4-1-event-data-structure: backlog
+  f4-2-event-retrieval-api: backlog
+  f4-3-data-retention-policy: backlog
+  f4-4-event-search: backlog
+  epic-f4-retrospective: optional
+
+  # F5: Alert Rule Engine
+  epic-f5: backlog
+  f5-1-basic-alert-rules: backlog
+  f5-2-alert-rule-configuration-ui: backlog
+  f5-3-advanced-rule-logic: backlog
+  f5-4-alert-cooldown: backlog
+  epic-f5-retrospective: optional
+
+  # F6: Dashboard & User Interface
+  epic-f6: backlog
+  f6-1-event-timeline-view: backlog
+  f6-2-live-camera-view: backlog
+  f6-3-system-settings-page: backlog
+  f6-4-manual-analysis-trigger: backlog
+  f6-5-dashboard-statistics: backlog
+  f6-6-notification-center: backlog
+  epic-f6-retrospective: optional
+
+  # F7: Authentication & Security
+  epic-f7: backlog
+  f7-1-user-authentication: backlog
+  f7-2-api-key-management: backlog
+  f7-3-https-tls-support: backlog
+  f7-4-rate-limiting: backlog
+  epic-f7-retrospective: optional
+
+  # F8: System Administration
+  epic-f8: backlog
+  f8-1-health-check-endpoint: backlog
+  f8-2-logging-debugging: backlog
+  f8-3-backup-restore: backlog
+  epic-f8-retrospective: optional
+
+  # F9: Webhook Integration
+  epic-f9: backlog
+  f9-1-webhook-configuration: backlog
+  f9-2-webhook-testing: backlog
+  f9-3-webhook-logs: backlog
+  epic-f9-retrospective: optional

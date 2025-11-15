@@ -1,0 +1,330 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>F1</epicId>
+    <storyId>1.3</storyId>
+    <title>USB/Webcam Camera Support</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-15</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/f1-3-webcam-usb-camera-support.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>use my USB webcam or built-in laptop camera for monitoring</iWant>
+    <soThat>I can set up security monitoring without purchasing an IP camera</soThat>
+    <tasks>
+      Task 1: Extend CameraService for USB Camera Support
+      - Update camera_service.py for USB camera initialization
+      - Add USB camera detection method (_detect_usb_cameras)
+      - Update start_camera() with USB branching logic
+      - Add USB disconnect detection
+      - Add unit tests (test_start_camera_usb, test_usb_disconnect_reconnect, test_detect_usb_cameras)
+
+      Task 2: USB Hot-Plug Reconnection Logic
+      - Update _handle_disconnect() for USB cameras
+      - Log USB disconnect/reconnect events
+      - Implement 30-second retry interval
+      - Add reconnection tests
+
+      Task 3: Update Test Connection Endpoint for USB
+      - Add USB branching to POST /cameras/{id}/test
+      - Implement USB-specific error messages
+      - Add integration tests for USB test connection
+
+      Task 4: Integration Testing
+      - Manual testing with real USB webcam (device indices 0, 1, 2)
+      - Cross-platform testing (Linux V4L2, macOS AVFoundation)
+      - Performance validation (frame capture latency <100ms)
+      - Multi-device testing
+      - Backend automated tests (80%+ coverage)
+
+      Task 5: Documentation Updates
+      - Update README.md with USB camera setup guide
+      - Update architecture.md with USB support details
+      - Add API documentation examples for USB cameras
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    AC-1: System auto-detects USB cameras connected to the system
+    AC-2: Successfully captures frames from USB camera at configured FPS (tested at 1, 5, 15, 30 FPS)
+    AC-3: Works on Linux (V4L2) and macOS (AVFoundation) systems
+    AC-4: Handles camera disconnect gracefully (no crash, logs error)
+    AC-5: Reconnects automatically when USB camera plugged back in (hot-plug support)
+    AC-6: Device index selection (0 for first camera, 1 for second, etc.)
+    AC-7: Test connection works for USB cameras (captures preview frame)
+    AC-8: Frame capture latency less than 100ms per frame (at configured FPS)
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>AC-3: USB Camera Support</section>
+        <snippet>
+          USB/webcam support for local cameras. Auto-detects USB cameras connected to system. Successfully captures frames at configurable rates (1-30 FPS). Works on Linux (V4L2) and macOS (AVFoundation). Handles camera disconnect gracefully. Reconnects automatically when USB camera plugged back in.
+        </snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>Workflows and Sequencing - Camera Capture Thread Lifecycle</section>
+        <snippet>
+          For each enabled camera: Initialize cv2.VideoCapture (RTSP URL or USB device_index). Loop while is_enabled: Read frame (ret, frame = cap.read()). If ret == False: Log error, attempt reconnect (30s delay). Pass frame to MotionDetectionService. Sleep to maintain target FPS. On exit: Release VideoCapture.
+        </snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-f1.md</path>
+        <title>Epic Technical Specification: Camera Feed Integration</title>
+        <section>System Architecture Alignment - Backend Components</section>
+        <snippet>
+          app/services/camera_service.py - Core capture logic, thread management, RTSP/USB handling. OpenCV (opencv-python 4.8+) - Camera capture via cv2.VideoCapture. Platform backends: Linux V4L2, macOS AVFoundation, Windows DirectShow.
+        </snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/f1-2-camera-configuration-ui.md</path>
+        <title>Story F1.2: Camera Configuration UI</title>
+        <section>Learnings - Frontend USB Support</section>
+        <snippet>
+          Frontend already has complete USB camera support! CameraForm.tsx shows device_index input when type="usb". Zod validation validates device_index for USB cameras. Camera list, edit, and delete work for any camera type. No frontend changes needed for F1.3.
+        </snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Camera Feed Integration</section>
+        <snippet>
+          Backend camera service manages capture threads with automatic reconnection. Thread per camera prevents blocking. Frame capture supports RTSP and USB cameras. USB cameras use cv2.VideoCapture(device_index).
+        </snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>backend/app/services/camera_service.py</path>
+        <kind>service</kind>
+        <symbol>CameraService</symbol>
+        <lines>1-300</lines>
+        <reason>Primary file to modify - Add USB camera support to existing RTSP implementation. Extend _capture_loop() to handle USB device_index. Add _detect_usb_cameras() method.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/camera_service.py</path>
+        <kind>service</kind>
+        <symbol>start_camera</symbol>
+        <lines>49-110</lines>
+        <reason>Add branching logic: if camera.type == "usb" use device_index, else use RTSP URL. Reuse existing thread management.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/camera_service.py</path>
+        <kind>service</kind>
+        <symbol>_capture_loop</symbol>
+        <lines>111-250</lines>
+        <reason>Main capture loop - Add USB initialization logic. Use cv2.VideoCapture(camera.device_index) for USB cameras instead of RTSP URL.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/api/v1/cameras.py</path>
+        <kind>controller</kind>
+        <symbol>test_camera_connection</symbol>
+        <lines>1-200</lines>
+        <reason>Update POST /cameras/{id}/test endpoint to support USB cameras. Add branching for camera.type == "usb" to test with device_index.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <lines>1-100</lines>
+        <reason>Database model already includes device_index field. No changes needed, but reference for USB camera configuration structure.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/schemas/camera.py</path>
+        <kind>schema</kind>
+        <symbol>CameraCreate</symbol>
+        <lines>1-100</lines>
+        <reason>Pydantic schema already validates device_index for USB cameras via @model_validator. Reference for validation rules.</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/cameras/CameraForm.tsx</path>
+        <kind>component</kind>
+        <symbol>CameraForm</symbol>
+        <lines>242-268</lines>
+        <reason>Frontend already complete - shows device_index input when type="usb". No changes needed. Reference for UI integration.</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/lib/validations/camera.ts</path>
+        <kind>validation</kind>
+        <symbol>cameraFormSchema</symbol>
+        <lines>51-58</lines>
+        <reason>Zod validation requires device_index for USB cameras. Frontend validation already complete.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="opencv-python" version=">=4.12.0" usage="cv2.VideoCapture for USB camera capture. Automatically selects platform backend (V4L2 on Linux, AVFoundation on macOS)." />
+        <package name="fastapi" version="0.115.0" usage="REST API framework for camera endpoints" />
+        <package name="sqlalchemy" version=">=2.0.36" usage="Database ORM for camera persistence" />
+        <package name="pydantic" version=">=2.10.0" usage="Data validation for camera schemas" />
+        <package name="pytest" version="7.4.3" usage="Testing framework for USB camera tests" />
+        <package name="pytest-asyncio" version="0.21.1" usage="Async testing support" />
+        <package name="httpx" version="0.25.2" usage="Test client for API endpoint testing" />
+      </python>
+      <system>
+        <dependency name="Python 3.11+" note="Required for modern async/await syntax" />
+        <dependency name="OpenCV native libraries" note="Auto-installed with opencv-python package" />
+        <dependency name="V4L2 (Linux)" note="Video4Linux2 - Linux kernel video capture API" />
+        <dependency name="AVFoundation (macOS)" note="Apple's media capture framework" />
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">
+      Camera service uses background thread per camera for non-blocking frame capture. USB cameras reuse existing thread management infrastructure from F1.1 RTSP implementation.
+    </constraint>
+    <constraint type="platform">
+      Must support Linux (V4L2) and macOS (AVFoundation). OpenCV automatically selects platform backend. Windows DirectShow support not required for MVP.
+    </constraint>
+    <constraint type="platform">
+      Linux may require user in 'video' group for camera access: sudo usermod -a -G video $USER. Provide clear error message if permission denied.
+    </constraint>
+    <constraint type="implementation">
+      USB camera initialization: cv2.VideoCapture(device_index) where device_index is integer (0, 1, 2...). Device 0 typically first/primary camera.
+    </constraint>
+    <constraint type="implementation">
+      Device enumeration: No standard API to list USB cameras. Try opening device indices 0-9, check if VideoCapture.isOpened() returns True.
+    </constraint>
+    <constraint type="implementation">
+      Reconnection logic identical to RTSP: 30-second retry interval, infinite retry with same backoff strategy. Release and recreate VideoCapture on reconnect.
+    </constraint>
+    <constraint type="implementation">
+      Frame capture loop structure identical to RTSP. Only initialization differs (device_index vs RTSP URL). Reuse existing frame rate control and error handling.
+    </constraint>
+    <constraint type="performance">
+      Frame capture latency must be less than 100ms per frame at configured FPS. Add DEBUG logging to measure actual latency.
+    </constraint>
+    <constraint type="testing">
+      Maintain 80%+ code coverage. Add minimum 5 new tests for USB scenarios: start_camera_usb, disconnect/reconnect, detection, test_connection endpoint, permission errors.
+    </constraint>
+    <constraint type="testing">
+      Manual testing required with real USB webcam on both Linux and macOS. Test device indices 0, 1, 2. Test hot-plug (unplug/replug).
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>cv2.VideoCapture (USB initialization)</name>
+      <kind>OpenCV API</kind>
+      <signature>
+        cap = cv2.VideoCapture(device_index: int)
+        # device_index: Integer 0-9 for USB cameras
+        # Returns: VideoCapture object
+        # Platform backend auto-selected (V4L2/AVFoundation)
+      </signature>
+      <path>OpenCV library (opencv-python package)</path>
+    </interface>
+    <interface>
+      <name>cv2.VideoCapture.isOpened()</name>
+      <kind>OpenCV API</kind>
+      <signature>
+        success = cap.isOpened()
+        # Returns: bool - True if camera successfully opened
+        # Use for device detection and validation
+      </signature>
+      <path>OpenCV library</path>
+    </interface>
+    <interface>
+      <name>cv2.VideoCapture.read()</name>
+      <kind>OpenCV API</kind>
+      <signature>
+        ret, frame = cap.read()
+        # ret: bool - True if frame captured successfully
+        # frame: numpy.ndarray - Captured frame (BGR format)
+        # If ret == False: Camera disconnected or error
+      </signature>
+      <path>OpenCV library</path>
+    </interface>
+    <interface>
+      <name>CameraService._detect_usb_cameras (NEW METHOD)</name>
+      <kind>Service method</kind>
+      <signature>
+        def _detect_usb_cameras(self) -> List[int]:
+            """
+            Enumerate available USB camera device indices
+
+            Returns:
+                List of available device indices (e.g., [0, 1, 2])
+
+            Implementation:
+                - Try opening cv2.VideoCapture(i) for i in range(10)
+                - Check if cap.isOpened() returns True
+                - Release and add index to list if successful
+                - Return list of working device indices
+            """
+      </signature>
+      <path>backend/app/services/camera_service.py</path>
+    </interface>
+    <interface>
+      <name>POST /api/v1/cameras/{id}/test</name>
+      <kind>REST endpoint</kind>
+      <signature>
+        POST /api/v1/cameras/{id}/test
+        Response 200 (USB success):
+        {
+          "data": {
+            "success": true,
+            "message": "USB camera connected successfully",
+            "thumbnail": "base64_encoded_jpeg"
+          }
+        }
+        Response 200 (USB failure):
+        {
+          "data": {
+            "success": false,
+            "message": "USB camera not found at device index 0. Check that camera is connected."
+          }
+        }
+      </signature>
+      <path>backend/app/api/v1/cameras.py</path>
+    </interface>
+    <interface>
+      <name>Camera.device_index</name>
+      <kind>Database field</kind>
+      <signature>
+        device_index: Optional[int] = None
+        # Integer >= 0 for USB cameras
+        # None for RTSP cameras
+        # Validated by Pydantic @model_validator
+      </signature>
+      <path>backend/app/models/camera.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend testing uses pytest framework with pytest-asyncio for async support. Tests located in backend/tests/ directory. API tests use httpx TestClient. Service tests use mocking for VideoCapture. Target 80%+ code coverage measured with pytest-cov. Integration tests verify end-to-end flows. Manual testing required for actual USB camera hardware and cross-platform validation.
+    </standards>
+    <locations>
+      backend/tests/services/test_camera_service.py - Service layer unit tests
+      backend/tests/api/v1/test_cameras.py - API endpoint integration tests
+      backend/tests/conftest.py - Shared fixtures and mocks
+    </locations>
+    <ideas>
+      <test ac="1" idea="test_detect_usb_cameras() - Mock cv2.VideoCapture to return isOpened()=True for indices 0,1 and False for others. Verify method returns [0,1]." />
+      <test ac="2" idea="test_start_camera_usb() - Create USB camera with device_index=0. Call start_camera(). Verify thread spawned, VideoCapture(0) called, status set to starting." />
+      <test ac="2" idea="test_capture_loop_usb_frames() - Mock VideoCapture.read() to return frames. Verify frames captured at configured FPS (1, 5, 15, 30). Check frame timing." />
+      <test ac="3" idea="Platform-specific: Manual test on Linux with V4L2 backend and macOS with AVFoundation. Verify both platforms capture frames without errors." />
+      <test ac="4" idea="test_usb_disconnect_graceful() - Mock VideoCapture.read() to return (False, None) after 10 frames. Verify no exception, error logged, reconnection attempted." />
+      <test ac="5" idea="test_usb_hot_plug_reconnect() - Simulate disconnect (read returns False), wait 30s, simulate reconnect (read returns True). Verify reconnection log, frame capture resumes." />
+      <test ac="6" idea="test_device_index_selection() - Create cameras with device_index 0, 1, 2. Verify each initializes VideoCapture with correct index. Test switching between devices." />
+      <test ac="7" idea="test_test_connection_usb_endpoint() - POST /cameras/{id}/test with USB camera. Mock VideoCapture to return frame. Verify 200 response with success=true and thumbnail." />
+      <test ac="7" idea="test_test_connection_usb_not_found() - POST /cameras/{id}/test with device_index=99 (doesn't exist). Verify response contains 'USB camera not found' error message." />
+      <test ac="7" idea="test_test_connection_usb_permission_denied() - Mock VideoCapture to raise permission error. Verify error message instructs user to add to 'video' group (Linux)." />
+      <test ac="8" idea="test_frame_capture_latency() - Measure time between VideoCapture.read() calls. Verify latency &lt;100ms. Log DEBUG messages with timestamps for manual verification." />
+      <test idea="test_usb_camera_create_api() - POST /cameras with type='usb', device_index=0. Verify 201 response, camera saved to DB, thread started." />
+      <test idea="test_usb_camera_already_in_use() - Attempt to start same device_index twice. Verify second attempt fails with clear error message." />
+    </ideas>
+  </tests>
+
+</story-context>
