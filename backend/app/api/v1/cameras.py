@@ -11,7 +11,7 @@ Provides REST API for camera configuration management:
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import logging
 import cv2
 import base64
@@ -22,7 +22,7 @@ from app.models.camera import Camera
 from app.schemas.camera import CameraCreate, CameraUpdate, CameraResponse, CameraTestResponse
 from app.schemas.motion import (
     MotionConfigUpdate, MotionConfigResponse, MotionTestRequest, MotionTestResponse,
-    DetectionZone
+    DetectionZone, DetectionSchedule
 )
 from app.services.camera_service import CameraService
 from app.services.motion_detection_service import motion_detection_service
@@ -913,4 +913,196 @@ def test_camera_zones(
         "zones_count": len(zones_to_test),
         "enabled_zones_count": sum(1 for z in zones_to_test if z.enabled),
         "preview_image": f"data:image/jpeg;base64,{preview_b64}"
+    }
+
+
+# ============================================================================
+# Detection Schedule Endpoints (F2.3)
+# ============================================================================
+
+@router.put("/{camera_id}/schedule", response_model=CameraResponse)
+def update_camera_schedule(
+    camera_id: str,
+    schedule: DetectionSchedule,
+    db: Session = Depends(get_db)
+):
+    """
+    Update detection schedule for camera
+
+    Args:
+        camera_id: Camera UUID
+        schedule: DetectionSchedule schema with time/day configuration
+
+    Returns:
+        Updated camera with new detection_schedule
+
+    Raises:
+        404: Camera not found
+        422: Invalid schedule format
+
+    Example Request:
+        PUT /api/v1/cameras/{id}/schedule
+        {
+            "id": "schedule-1",
+            "name": "Weekday Nights",
+            "days_of_week": [0, 1, 2, 3, 4],
+            "start_time": "22:00",
+            "end_time": "06:00",
+            "enabled": true
+        }
+    """
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera {camera_id} not found"
+        )
+
+    # Serialize schedule to JSON
+    try:
+        import json
+        schedule_json = json.dumps(schedule.model_dump())
+    except Exception as e:
+        logger.error(f"Failed to serialize schedule: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid schedule format"
+        )
+
+    # Update camera
+    camera.detection_schedule = schedule_json
+
+    try:
+        db.commit()
+        db.refresh(camera)
+        logger.info(f"Updated detection schedule for camera {camera_id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to update camera schedule: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update schedule"
+        )
+
+    return camera
+
+
+@router.get("/{camera_id}/schedule", response_model=Optional[DetectionSchedule])
+def get_camera_schedule(
+    camera_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get detection schedule for camera
+
+    Args:
+        camera_id: Camera UUID
+
+    Returns:
+        DetectionSchedule or null if not configured
+
+    Raises:
+        404: Camera not found
+
+    Example Response:
+        {
+            "id": "schedule-1",
+            "name": "Weekday Nights",
+            "days_of_week": [0, 1, 2, 3, 4],
+            "start_time": "22:00",
+            "end_time": "06:00",
+            "enabled": true
+        }
+    """
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera {camera_id} not found"
+        )
+
+    if not camera.detection_schedule:
+        return None
+
+    # Parse JSON schedule
+    try:
+        import json
+        schedule_dict = json.loads(camera.detection_schedule)
+        return DetectionSchedule(**schedule_dict)
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        logger.error(f"Failed to parse camera schedule: {e}")
+        return None
+
+
+@router.get("/{camera_id}/schedule/status")
+def get_camera_schedule_status(
+    camera_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get current schedule status for camera
+
+    Args:
+        camera_id: Camera UUID
+
+    Returns:
+        Current schedule active state with reason
+
+    Raises:
+        404: Camera not found
+
+    Example Response:
+        {
+            "active": true,
+            "reason": "Within scheduled time and day",
+            "current_time": "22:30:00",
+            "current_day": 1,
+            "schedule_enabled": true
+        }
+    """
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera {camera_id} not found"
+        )
+
+    # Import schedule manager
+    from app.services.schedule_manager import schedule_manager
+    from datetime import datetime
+
+    # Check if detection is currently active
+    is_active = schedule_manager.is_detection_active(camera_id, camera.detection_schedule)
+
+    # Determine reason
+    if not camera.detection_schedule:
+        reason = "No schedule configured (always active)"
+        schedule_enabled = None
+    else:
+        try:
+            import json
+            schedule_dict = json.loads(camera.detection_schedule)
+            schedule_enabled = schedule_dict.get('enabled', False)
+
+            if not schedule_enabled:
+                reason = "Schedule disabled (always active)"
+            elif is_active:
+                reason = "Within scheduled time and day"
+            else:
+                reason = "Outside scheduled time or day"
+        except (json.JSONDecodeError, TypeError, ValueError):
+            reason = "Invalid schedule format (always active)"
+            schedule_enabled = None
+
+    # Get current time and day
+    now = datetime.now()
+    current_time = now.strftime('%H:%M:%S')
+    current_day = now.weekday()  # 0=Monday, 6=Sunday
+
+    return {
+        "active": is_active,
+        "reason": reason,
+        "current_time": current_time,
+        "current_day": current_day,
+        "schedule_enabled": schedule_enabled
     }

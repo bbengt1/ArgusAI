@@ -733,3 +733,283 @@ def test_zone_auto_close_polygon():
     saved_zones = get_response.json()
     assert len(saved_zones[0]["vertices"]) == 5  # Original 4 + auto-closed vertex
     assert saved_zones[0]["vertices"][0] == saved_zones[0]["vertices"][-1]
+
+
+# ============================================================================
+# Detection Schedule Tests (F2.3)
+# ============================================================================
+
+def test_put_schedule_creates_new():
+    """Test that PUT /cameras/{id}/schedule creates new schedule"""
+    # Create camera
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "Schedule Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Create schedule
+    schedule = {
+        "id": "schedule-1",
+        "name": "Weekday Nights",
+        "days_of_week": [0, 1, 2, 3, 4],  # Mon-Fri
+        "start_time": "22:00",
+        "end_time": "06:00",
+        "enabled": True
+    }
+
+    response = client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule)
+    assert response.status_code == 200
+
+    # Verify schedule stored
+    camera_data = response.json()
+    assert camera_data["detection_schedule"] is not None
+
+
+def test_put_schedule_updates_existing():
+    """Test that PUT /cameras/{id}/schedule updates existing schedule"""
+    # Create camera
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "Schedule Update Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Create initial schedule
+    schedule1 = {
+        "id": "schedule-1",
+        "name": "Original Schedule",
+        "days_of_week": [0, 1, 2, 3, 4],
+        "start_time": "09:00",
+        "end_time": "17:00",
+        "enabled": True
+    }
+    client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule1)
+
+    # Update schedule
+    schedule2 = {
+        "id": "schedule-2",
+        "name": "Updated Schedule",
+        "days_of_week": [5, 6],  # Weekend only
+        "start_time": "00:00",
+        "end_time": "23:59",
+        "enabled": True
+    }
+    response = client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule2)
+    assert response.status_code == 200
+
+    # Verify updated
+    get_response = client.get(f"/api/v1/cameras/{camera_id}/schedule")
+    saved_schedule = get_response.json()
+    assert saved_schedule["name"] == "Updated Schedule"
+    assert saved_schedule["days_of_week"] == [5, 6]
+
+
+def test_get_schedule_returns_config():
+    """Test that GET /cameras/{id}/schedule returns configured schedule"""
+    # Create camera
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "Get Schedule Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Create schedule
+    schedule = {
+        "id": "schedule-1",
+        "name": "Test Schedule",
+        "days_of_week": [0, 1, 2],
+        "start_time": "08:00",
+        "end_time": "18:00",
+        "enabled": True
+    }
+    client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule)
+
+    # Get schedule
+    response = client.get(f"/api/v1/cameras/{camera_id}/schedule")
+    assert response.status_code == 200
+
+    saved_schedule = response.json()
+    assert saved_schedule["id"] == "schedule-1"
+    assert saved_schedule["name"] == "Test Schedule"
+    assert saved_schedule["days_of_week"] == [0, 1, 2]
+    assert saved_schedule["start_time"] == "08:00"
+    assert saved_schedule["end_time"] == "18:00"
+    assert saved_schedule["enabled"] is True
+
+
+def test_get_schedule_null_when_not_set():
+    """Test that GET /cameras/{id}/schedule returns null when not configured"""
+    # Create camera without schedule
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "No Schedule Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Get schedule (should be null)
+    response = client.get(f"/api/v1/cameras/{camera_id}/schedule")
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+def test_get_schedule_status_active():
+    """Test GET /cameras/{id}/schedule/status returns active state"""
+    from unittest.mock import patch
+    from datetime import datetime
+
+    # Create camera
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "Status Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Create schedule (Mon-Fri 08:00-18:00)
+    schedule = {
+        "id": "schedule-1",
+        "name": "Business Hours",
+        "days_of_week": [0, 1, 2, 3, 4],
+        "start_time": "08:00",
+        "end_time": "18:00",
+        "enabled": True
+    }
+    client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule)
+
+    # Mock datetime to Monday 10:00am
+    with patch('app.services.schedule_manager.datetime') as mock_datetime:
+        mock_datetime.now.return_value = datetime(2025, 11, 17, 10, 0)  # Monday 10am
+
+        # Get schedule status
+        response = client.get(f"/api/v1/cameras/{camera_id}/schedule/status")
+        assert response.status_code == 200
+
+        status_data = response.json()
+        assert status_data["active"] is True
+        assert "within" in status_data["reason"].lower()
+        assert status_data["schedule_enabled"] is True
+
+
+def test_get_schedule_status_inactive():
+    """Test GET /cameras/{id}/schedule/status returns inactive state"""
+    from unittest.mock import patch
+    from datetime import datetime
+
+    # Create camera
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "Status Inactive Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Create schedule (Mon-Fri 08:00-18:00)
+    schedule = {
+        "id": "schedule-1",
+        "name": "Business Hours",
+        "days_of_week": [0, 1, 2, 3, 4],
+        "start_time": "08:00",
+        "end_time": "18:00",
+        "enabled": True
+    }
+    client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule)
+
+    # Mock datetime to Saturday 10:00am (outside Mon-Fri)
+    with patch('app.services.schedule_manager.datetime') as mock_datetime:
+        mock_datetime.now.return_value = datetime(2025, 11, 22, 10, 0)  # Saturday 10am
+
+        # Get schedule status
+        response = client.get(f"/api/v1/cameras/{camera_id}/schedule/status")
+        assert response.status_code == 200
+
+        status_data = response.json()
+        assert status_data["active"] is False
+        assert "outside" in status_data["reason"].lower()
+
+
+def test_schedule_validation_rejects_invalid_time():
+    """Test that schedule validation rejects invalid time format"""
+    # Create camera
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "Invalid Time Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Invalid time format
+    schedule = {
+        "id": "schedule-1",
+        "name": "Bad Time",
+        "days_of_week": [0, 1, 2, 3, 4],
+        "start_time": "25:00",  # Invalid hour
+        "end_time": "18:00",
+        "enabled": True
+    }
+
+    response = client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule)
+    # Should fail validation (422)
+    assert response.status_code == 422
+
+
+def test_schedule_validation_rejects_invalid_days():
+    """Test that schedule validation rejects invalid days_of_week"""
+    # Create camera
+    create_response = client.post("/api/v1/cameras", json={
+        "name": "Invalid Days Test",
+        "type": "usb",
+        "device_index": 0,
+        "is_enabled": False
+    })
+    camera_id = create_response.json()["id"]
+
+    # Invalid day (7 is outside 0-6 range)
+    schedule = {
+        "id": "schedule-1",
+        "name": "Bad Days",
+        "days_of_week": [0, 1, 7],  # 7 is invalid
+        "start_time": "08:00",
+        "end_time": "18:00",
+        "enabled": True
+    }
+
+    response = client.put(f"/api/v1/cameras/{camera_id}/schedule", json=schedule)
+    # Should fail validation (422)
+    assert response.status_code == 422
+
+
+def test_schedule_404_for_nonexistent_camera():
+    """Test that schedule endpoints return 404 for non-existent camera"""
+    fake_id = "00000000-0000-0000-0000-000000000000"
+
+    # GET schedule
+    response = client.get(f"/api/v1/cameras/{fake_id}/schedule")
+    assert response.status_code == 404
+
+    # PUT schedule
+    schedule = {
+        "id": "schedule-1",
+        "name": "Test",
+        "days_of_week": [0],
+        "start_time": "08:00",
+        "end_time": "18:00",
+        "enabled": True
+    }
+    response = client.put(f"/api/v1/cameras/{fake_id}/schedule", json=schedule)
+    assert response.status_code == 404
+
+    # GET schedule status
+    response = client.get(f"/api/v1/cameras/{fake_id}/schedule/status")
+    assert response.status_code == 404

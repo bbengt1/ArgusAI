@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.services.motion_detector import MotionDetector
 from app.services.detection_zone_manager import detection_zone_manager
+from app.services.schedule_manager import schedule_manager
 from app.models.motion_event import MotionEvent
 from app.models.camera import Camera
 from app.core.database import get_db
@@ -96,6 +97,12 @@ class MotionDetectionService:
         Performance Target: <100ms (CRITICAL)
         """
         if not camera.motion_enabled:
+            return None
+
+        # Check detection schedule (F2.3) - early exit if outside schedule window
+        # Performance optimization: Skip expensive processing if outside schedule
+        if not schedule_manager.is_detection_active(camera_id, camera.detection_schedule):
+            logger.debug(f"Camera {camera_id} outside detection schedule, skipping motion detection")
             return None
 
         # Get or create motion detector for this camera

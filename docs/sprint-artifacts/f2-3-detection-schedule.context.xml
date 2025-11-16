@@ -1,0 +1,297 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>F2</epicId>
+    <storyId>2.3</storyId>
+    <title>Detection Schedule</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-16</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/f2-3-detection-schedule.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system user</asA>
+    <iWant>to schedule when motion detection is active based on time and day of week</iWant>
+    <soThat>motion detection only runs during specific hours (e.g., "active 9pm-6am on weekdays") to match my routines and reduce false positives</soThat>
+    <tasks>
+      **Task 1: Extend Data Models for Schedule Storage**
+      - Verify `detection_schedule` JSON field exists in Camera model
+      - Create Alembic migration to add `detection_schedule` column
+      - Verify DetectionSchedule Pydantic schema (reuse existing schema)
+      - Add validation for time format (HH:MM 24-hour format)
+      - Add validation for day names (monday-sunday, case-insensitive)
+      - Test schedule serialization/deserialization
+
+      **Task 2: Implement Schedule Manager Service**
+      - Create `ScheduleManager` class in `app/services/schedule_manager.py`
+      - Implement `is_detection_active()` method
+      - Integrate schedule checking into `MotionDetectionService.process_frame()`
+      - Add schedule check BEFORE motion algorithm (performance optimization)
+      - Handle case where no schedule is defined (always active)
+      - Handle schedule enabled=false (always active)
+      - Add logging for schedule state changes
+
+      **Task 3: API Endpoints for Schedule Management**
+      - Add PUT endpoint `/cameras/{id}/schedule` to update detection schedule
+      - Add GET endpoint `/cameras/{id}/schedule` to retrieve current schedule
+      - Add GET endpoint `/cameras/{id}/schedule/status` to check current active state
+      - Implement Pydantic request/response schemas
+      - Add validation for time range (start < end, or allow overnight wrapping)
+      - Add validation for days list (valid day names)
+      - Return schedule configuration in existing `/cameras/{id}` endpoint
+
+      **Task 4: Frontend Schedule UI** (DEFERRED)
+      - Create `ScheduleEditor` React component
+      - Implement time range selector
+      - Add day-of-week checkboxes
+      - Display current schedule status
+      - Add "Enable Schedule" toggle
+      - Add "Save Schedule" button
+
+      **Task 5: Integration and Testing**
+      - Write unit tests for `ScheduleManager.is_detection_active()`
+      - Write integration tests for schedule filtering
+      - Test schedule persistence across camera restarts
+      - Test enabling/disabling schedule dynamically
+      - Test time boundary conditions (midnight wraparound)
+      - Test day boundaries (transition between days)
+      - Manual testing with real camera feed
+
+      **Task 6: Documentation** (DEFERRED)
+      - Update API documentation for new schedule endpoints
+      - Add schedule configuration examples
+      - Document time format requirements
+      - Document day naming conventions
+      - Add user guide section
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    **AC #1: Time-Based Scheduling**
+    - Motion detection only activates during configured time range
+    - Motion events not created outside the scheduled time window
+    - Example: Schedule "09:00 - 17:00" → No motion detection at 08:59 or 17:01
+
+    **AC #2: Day-of-Week Selection**
+    - Motion detection only activates on selected days
+    - Motion detection disabled on unselected days regardless of time
+    - Example: Schedule Monday-Friday → No detection on Saturday/Sunday
+
+    **AC #3: Schedule Persistence**
+    - Configured schedule remains active after system restart
+    - Motion detection follows configured schedule after reconnection
+    - Schedule stored in database with camera configuration
+
+    **AC #4: Schedule Enable/Disable**
+    - Schedule can be temporarily disabled without losing configuration
+    - Motion detection falls back to always-active when schedule disabled
+    - Toggle between scheduled and 24/7 detection modes
+
+    **AC #5: Current Schedule State**
+    - API returns current schedule state (active/inactive)
+    - State correctly reflects current time/day vs schedule rules
+    - Real-time status available via GET `/cameras/{id}/schedule/status`
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/prd.md" title="Product Requirements Document" section="F2.3: Detection Schedule" snippet="User can schedule when motion detection is active. Time-based schedules (e.g., only 9pm-6am). Day-of-week scheduling. Quick toggle for home/away modes. Motion detection only active during scheduled times. Schedule persists across system restarts." />
+
+      <doc path="docs/architecture.md" title="Architecture Document" section="Motion Detection System" snippet="Event-driven architecture using OpenCV for motion detection. Motion detection triggers AI processing. Backend: FastAPI + SQLAlchemy + OpenCV. SQLite database for MVP. Python 3.13+ with async/await support." />
+
+      <doc path="docs/sprint-artifacts/tech-spec-epic-f2.md" title="Epic F2 Tech Specification" section="DetectionSchedule Schema (lines 218-250)" snippet="DetectionSchedule Pydantic schema: id (UUID), name, days_of_week (0=Mon, 6=Sun), start_time (HH:MM), end_time (HH:MM), enabled (bool). Validation for time format, days validation (0-6 range). Example: Weekday Daytime schedule 08:00-18:00 Mon-Fri." />
+
+      <doc path="docs/sprint-artifacts/tech-spec-epic-f2.md" title="Epic F2 Tech Specification" section="ScheduleManager Service (lines 61-65)" snippet="ScheduleManager service handles time-based detection scheduling. Inputs: Current time, schedule config (time ranges, days of week). Output: Boolean (detection active). Integration point: MotionDetectionService checks schedule BEFORE running algorithm." />
+
+      <doc path="docs/sprint-artifacts/tech-spec-epic-f2.md" title="Epic F2 Tech Specification" section="Motion Detection Processing Flow (lines 270-296)" snippet="Step 3: ScheduleManager checks if detection active (time/day filters). If outside schedule → Skip to next frame. Optimization: Schedule check happens BEFORE expensive motion algorithm execution." />
+
+      <doc path="docs/sprint-artifacts/f2-2-motion-detection-zones.md" title="Story F2.2 Completion Notes" section="Dev Notes - Learnings" snippet="Follow singleton pattern with thread-safe Lock. Add schedule check BEFORE motion algorithm for performance. JSON column storage pattern established. REUSE DetectionSchedule schema from tech-spec. Maintain 100% test pass rate (100/100 tests). Integration point: MotionDetectionService.process_frame() line 96-101." />
+    </docs>
+
+    <code>
+      <file path="backend/app/models/camera.py" kind="model" symbol="Camera" lines="1-119" reason="MODIFY: Add detection_schedule column (Text, JSON). Currently has detection_zones at line 51. Follow same pattern for schedule storage." />
+
+      <file path="backend/app/schemas/motion.py" kind="schema" symbol="DetectionSchedule" lines="218-250" reason="REUSE: DetectionSchedule Pydantic schema already defined. Has id, name, days_of_week (0-6), start_time, end_time, enabled. Validation present for days and time format." />
+
+      <file path="backend/app/services/motion_detection_service.py" kind="service" symbol="MotionDetectionService" lines="72-163" reason="MODIFY: Add schedule check in process_frame() method. Insert BEFORE line 102 (before detector creation). Early exit if outside schedule to save CPU." />
+
+      <file path="backend/app/services/detection_zone_manager.py" kind="service" symbol="DetectionZoneManager" lines="20-169" reason="REFERENCE: Follow singleton pattern (lines 33-43 show Lock pattern). ScheduleManager should use same thread-safe design." />
+
+      <file path="backend/tests/test_services/test_detection_zone_manager.py" kind="test" symbol="TestDetectionZoneManager" lines="1-386" reason="REFERENCE: Testing pattern for similar service. Shows unit test structure, singleton tests, edge cases, performance benchmarks. Aim for similar 14+ tests for ScheduleManager." />
+
+      <file path="backend/app/api/v1/cameras.py" kind="api" symbol="/cameras routes" lines="ALL" reason="MODIFY: Add schedule endpoints (GET/PUT /cameras/{id}/schedule, GET /cameras/{id}/schedule/status). Follow existing CRUD pattern." />
+    </code>
+
+    <dependencies>
+      <python version="3.13+">
+        <package name="fastapi" version="0.115.0" usage="API endpoints for schedule configuration" />
+        <package name="sqlalchemy" version="2.0.36+" usage="ORM for detection_schedule column storage" />
+        <package name="alembic" version="1.14.0+" usage="Database migration to add detection_schedule field" />
+        <package name="pydantic" version="2.10.0+" usage="DetectionSchedule schema validation (REUSE existing)" />
+        <package name="pytest" version="7.4.3" usage="Unit tests for ScheduleManager service" />
+        <package name="opencv-python" version="4.12.0+" usage="Existing dependency, no new usage for F2.3" />
+      </python>
+
+      <system>
+        <requirement>SQLite 3.35+ with JSON functions for detection_schedule column</requirement>
+        <requirement>Python datetime and timezone handling for time/day validation</requirement>
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    **Architectural Constraints:**
+    - Backend-first implementation approach (consistent with F1/F2.1/F2.2 pattern)
+    - Singleton service pattern with thread-safe Lock (follow DetectionZoneManager design)
+    - Schedule check must be BEFORE motion algorithm execution (performance optimization)
+    - JSON column storage in SQLite Text column (follow detection_zones pattern)
+    - Database migrations using Alembic (follow existing migration numbering)
+
+    **Performance Requirements:**
+    - Schedule check overhead: <1ms (negligible impact on 100ms processing budget)
+    - No motion algorithm execution if outside schedule window (saves 30-50ms)
+    - Total motion detection latency remains <100ms (schedule adds <1% overhead)
+
+    **Code Quality Standards:**
+    - 100% test pass rate (currently 100/100 tests, must maintain)
+    - Unit test coverage for all ScheduleManager methods
+    - Integration tests for schedule API endpoints
+    - Edge case coverage (midnight wraparound, day boundaries, DST transitions)
+    - Type hints in Python code (established pattern)
+
+    **Development Rules:**
+    - REUSE DetectionSchedule schema from app/schemas/motion.py (lines 218-250)
+    - Follow singleton pattern from DetectionZoneManager (app/services/detection_zone_manager.py)
+    - Frontend UI deferred (backend API only for this story)
+    - API documentation deferred (same as F2.2 deferral)
+    - No schedule = always active (backward compatible with F2.1 cameras)
+    - Schedule enabled=false = always active (allow temporary disable)
+
+    **Testing Standards:**
+    - Pytest for all tests
+    - Test fixtures in conftest.py
+    - Unit tests in tests/test_services/test_schedule_manager.py (NEW)
+    - Integration tests in tests/test_api/test_cameras.py (EXTEND)
+    - Performance benchmark: Schedule check <1ms average
+    - Edge cases: Midnight wraparound, day transitions, overnight schedules
+  </constraints>
+
+  <interfaces>
+    **ScheduleManager Service Interface** (NEW - to implement)
+    ```python
+    class ScheduleManager:
+        _instance = None
+        _lock = threading.Lock()
+
+        def is_detection_active(
+            self,
+            camera_id: str,
+            detection_schedule: Optional[str]  # JSON string from Camera.detection_schedule
+        ) -> bool:
+            """
+            Check if motion detection should be active based on schedule.
+
+            Args:
+                camera_id: UUID of camera (for logging)
+                detection_schedule: JSON string or None
+
+            Returns:
+                True if detection should be active, False otherwise
+
+            Logic:
+                - If detection_schedule is None → return True (no schedule = always active)
+                - If enabled=false → return True (schedule disabled)
+                - Check current day_of_week in days list
+                - Check current time in time range (handle overnight wraparound)
+                - Return True only if both day and time match
+            """
+    ```
+
+    **Camera Model Extension** (MODIFY)
+    ```python
+    # Add to app/models/camera.py
+    detection_schedule = Column(Text, nullable=True)  # JSON: DetectionSchedule schema
+    ```
+
+    **API Endpoints** (NEW - to implement in app/api/v1/cameras.py)
+    ```python
+    PUT /api/v1/cameras/{camera_id}/schedule
+    Request: {
+        "id": "schedule-1",
+        "name": "Weekday Nights",
+        "days_of_week": [0, 1, 2, 3, 4],  # Mon-Fri
+        "start_time": "21:00",
+        "end_time": "06:00",
+        "enabled": true
+    }
+    Response: 200 OK + CameraResponse (includes updated detection_schedule)
+
+    GET /api/v1/cameras/{camera_id}/schedule
+    Response: 200 OK + DetectionSchedule or null
+
+    GET /api/v1/cameras/{camera_id}/schedule/status
+    Response: 200 OK + {
+        "active": true,  # Is detection currently active based on schedule?
+        "reason": "Within scheduled time and day",
+        "next_change_at": "2025-11-16T18:00:00Z"  # When status will change
+    }
+    ```
+
+    **MotionDetectionService Integration** (MODIFY app/services/motion_detection_service.py)
+    ```python
+    # Add after line 99 (after motion_enabled check)
+    # BEFORE line 102 (detector creation)
+
+    # Check schedule (F2.3)
+    if not schedule_manager.is_detection_active(camera_id, camera.detection_schedule):
+        return None  # Outside schedule, skip motion detection
+
+    # Continue with existing logic (detector, cooldown, etc.)
+    ```
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing follows pytest patterns established in F2.1 and F2.2. All tests must pass (100% pass rate maintained across 100+ tests). Unit tests for service logic, integration tests for API endpoints, edge case coverage including boundary conditions. Performance benchmarking included where relevant (e.g., schedule check latency).
+    </standards>
+
+    <locations>
+      tests/test_services/test_schedule_manager.py (NEW - unit tests for ScheduleManager)
+      tests/test_api/test_cameras.py (EXTEND - add schedule endpoint tests)
+      tests/conftest.py (REUSE - existing fixtures for db, client)
+    </locations>
+
+    <ideas>
+      **ScheduleManager Unit Tests (14+ tests):**
+      - test_singleton_pattern (verify only one instance exists)
+      - test_no_schedule_returns_true (None → always active)
+      - test_schedule_disabled_returns_true (enabled=false → always active)
+      - test_day_match_time_match_returns_true (Monday 09:00, schedule Mon 08:00-10:00 → true)
+      - test_day_match_time_outside_returns_false (Monday 07:00, schedule Mon 08:00-10:00 → false)
+      - test_day_outside_returns_false (Saturday, schedule Mon-Fri → false)
+      - test_overnight_schedule_before_midnight (23:00, schedule 22:00-06:00 → true)
+      - test_overnight_schedule_after_midnight (01:00, schedule 22:00-06:00 → true)
+      - test_midnight_exact (00:00, schedule 23:00-01:00 → true)
+      - test_day_transition (Saturday 23:59, schedule Sun 00:00-23:59 → false, then true at 00:00)
+      - test_invalid_json_returns_true (malformed JSON → fail open)
+      - test_performance_under_1ms (benchmark 100 iterations, avg <1ms)
+      - test_multiple_days (schedule Mon/Wed/Fri, test each day)
+      - test_all_days_selected (schedule Mon-Sun → always true if time matches)
+
+      **API Integration Tests (8+ tests):**
+      - test_put_schedule_creates_new (POST schedule to camera, verify stored)
+      - test_put_schedule_updates_existing (PUT updated schedule, verify changes)
+      - test_get_schedule_returns_config (GET schedule, verify correct JSON)
+      - test_get_schedule_null_when_not_set (GET schedule for camera without one → null)
+      - test_get_schedule_status_active (check status during scheduled time → active=true)
+      - test_get_schedule_status_inactive (check status outside schedule → active=false)
+      - test_schedule_validation_rejects_invalid_time (PUT invalid time format → 422)
+      - test_schedule_validation_rejects_invalid_days (PUT days_of_week=[7] → 422)
+
+      **Edge Cases:**
+      - Daylight saving time transitions (may defer to Phase 2)
+      - Leap seconds (ignore for MVP)
+      - Time zone handling (store in UTC, display in user timezone - deferred)
+    </ideas>
+  </tests>
+</story-context>

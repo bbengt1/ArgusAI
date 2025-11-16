@@ -100,6 +100,7 @@ class CameraResponse(CameraBase):
     username: Optional[str] = None
     device_index: Optional[int] = None
     detection_zones: Optional[str] = Field(None, description="JSON array of DetectionZone objects")
+    detection_schedule: Optional[str] = Field(None, description="JSON object: DetectionSchedule schema")
     created_at: datetime
     updated_at: datetime
 
