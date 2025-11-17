@@ -420,7 +420,7 @@ class AIService:
         self.providers: Dict[AIProvider, Optional[AIProviderBase]] = {}
         self.db: Optional[Session] = None  # Database session for usage tracking
 
-    def load_api_keys_from_db(self, db: Session):
+    async def load_api_keys_from_db(self, db: Session):
         """
         Load and decrypt API keys from system_settings table.
 
