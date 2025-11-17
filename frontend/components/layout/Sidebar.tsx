@@ -10,7 +10,7 @@ import { usePathname } from 'next/navigation';
 import { Home, Calendar, Video, Bell, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
@@ -26,15 +26,14 @@ const navigation = [
  */
 export function Sidebar() {
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  // Load collapsed state from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    if (saved !== null) {
-      setIsCollapsed(saved === 'true');
+  // Load collapsed state from localStorage on mount - only once
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebar-collapsed');
+      return saved === 'true';
     }
-  }, []);
+    return false;
+  });
 
   // Save collapsed state to localStorage
   const toggleCollapse = () => {
