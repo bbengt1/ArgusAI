@@ -6,17 +6,22 @@ Provides REST API for AI-generated semantic event management:
 - GET /events - List events with filtering, pagination, and full-text search
 - GET /events/{id} - Get single event
 - GET /events/stats - Get event statistics and aggregations
+- GET /events/export - Export events to JSON or CSV
+- DELETE /events/cleanup - Manual cleanup of old events
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, asc, text
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta, date
 import logging
 import json
 import os
 import base64
 import uuid
+import csv
+import io
 
 from app.core.database import get_db
 from app.models.event import Event
@@ -27,8 +32,11 @@ from app.schemas.event import (
     EventStatsResponse,
     EventFilterParams
 )
+from app.schemas.system import CleanupResponse
+from app.services.cleanup_service import get_cleanup_service
 
 logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger(f"{__name__}.audit")  # Dedicated audit logger for compliance
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -298,6 +306,347 @@ def list_events(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to list events"
+        )
+
+
+# IMPORTANT: These routes must come BEFORE /{event_id} to avoid path parameter shadowing
+@router.get("/export")
+async def export_events(
+    format: str = Query(..., pattern="^(json|csv)$", description="Export format (json or csv)"),
+    start_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    camera_id: Optional[str] = Query(None, description="Filter by camera UUID"),
+    min_confidence: Optional[int] = Query(None, ge=0, le=100, description="Minimum confidence score"),
+    db: Session = Depends(get_db)
+):
+    """
+    Export events to JSON or CSV format
+
+    Streams events in batches for memory efficiency. Supports filtering by date range,
+    camera, and confidence level.
+
+    Args:
+        format: Export format - "json" (newline-delimited) or "csv"
+        start_date: Optional start date filter (inclusive)
+        end_date: Optional end date filter (inclusive)
+        camera_id: Optional filter by camera UUID
+        min_confidence: Optional minimum confidence score (0-100)
+        db: Database session
+
+    Returns:
+        StreamingResponse with Content-Disposition header for download
+
+    **JSON Format** (newline-delimited JSON):
+    ```json
+    {"id": "...", "camera_id": "...", "timestamp": "...", ...}
+    {"id": "...", "camera_id": "...", "timestamp": "...", ...}
+    ```
+
+    **CSV Format**:
+    ```csv
+    id,camera_id,timestamp,description,confidence,objects_detected,alert_triggered
+    123,abc,2025-11-17T14:30:00Z,Person walking,85,"person,package",true
+    ```
+
+    **Status Codes:**
+    - 200: Success (streaming response)
+    - 400: Invalid format or date range
+    - 500: Internal server error
+
+    **Examples:**
+    - GET /events/export?format=json
+    - GET /events/export?format=csv&start_date=2025-11-01&end_date=2025-11-17
+    - GET /events/export?format=csv&camera_id=abc123&min_confidence=80
+    """
+    try:
+        # Build query with filters
+        query = db.query(Event)
+
+        # Date range filters
+        if start_date:
+            start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+            query = query.filter(Event.timestamp >= start_datetime)
+
+        if end_date:
+            end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+            query = query.filter(Event.timestamp <= end_datetime)
+
+        # Camera filter
+        if camera_id:
+            query = query.filter(Event.camera_id == camera_id)
+
+        # Confidence filter
+        if min_confidence is not None:
+            query = query.filter(Event.confidence >= min_confidence)
+
+        # Sort by timestamp
+        query = query.order_by(Event.timestamp)
+
+        # Generate filename
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"events_export_{timestamp_str}.{format}"
+
+        logger.info(
+            f"Starting export: format={format}, start_date={start_date}, "
+            f"end_date={end_date}, camera={camera_id}, min_confidence={min_confidence}"
+        )
+
+        # Stream generator functions
+        def generate_json():
+            """Generate newline-delimited JSON"""
+            batch_size = 100
+            offset = 0
+
+            while True:
+                events = query.offset(offset).limit(batch_size).all()
+
+                if not events:
+                    break
+
+                for event in events:
+                    event_dict = {
+                        "id": event.id,
+                        "camera_id": event.camera_id,
+                        "timestamp": event.timestamp.isoformat(),
+                        "description": event.description,
+                        "confidence": event.confidence,
+                        "objects_detected": json.loads(event.objects_detected),
+                        "thumbnail_path": event.thumbnail_path,
+                        "alert_triggered": event.alert_triggered,
+                        "created_at": event.created_at.isoformat()
+                    }
+                    yield json.dumps(event_dict) + "\n"
+
+                offset += batch_size
+
+        def generate_csv():
+            """Generate CSV with headers"""
+            batch_size = 100
+            offset = 0
+
+            # CSV headers
+            buffer = io.StringIO()
+            writer = csv.DictWriter(
+                buffer,
+                fieldnames=[
+                    "id", "camera_id", "timestamp", "description",
+                    "confidence", "objects_detected", "thumbnail_path",
+                    "alert_triggered", "created_at"
+                ]
+            )
+            writer.writeheader()
+            yield buffer.getvalue()
+
+            # Stream rows
+            while True:
+                events = query.offset(offset).limit(batch_size).all()
+
+                if not events:
+                    break
+
+                buffer = io.StringIO()
+                writer = csv.DictWriter(
+                    buffer,
+                    fieldnames=[
+                        "id", "camera_id", "timestamp", "description",
+                        "confidence", "objects_detected", "thumbnail_path",
+                        "alert_triggered", "created_at"
+                    ]
+                )
+
+                for event in events:
+                    writer.writerow({
+                        "id": event.id,
+                        "camera_id": event.camera_id,
+                        "timestamp": event.timestamp.isoformat(),
+                        "description": event.description,
+                        "confidence": event.confidence,
+                        "objects_detected": ",".join(json.loads(event.objects_detected)),
+                        "thumbnail_path": event.thumbnail_path or "",
+                        "alert_triggered": event.alert_triggered,
+                        "created_at": event.created_at.isoformat()
+                    })
+
+                yield buffer.getvalue()
+                offset += batch_size
+
+        # Select generator and media type
+        if format == "json":
+            generator = generate_json()
+            media_type = "application/x-ndjson"
+        else:  # csv
+            generator = generate_csv()
+            media_type = "text/csv"
+
+        return StreamingResponse(
+            generator,
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to export events: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to export events"
+        )
+
+
+@router.delete("/cleanup", response_model=CleanupResponse)
+async def manual_cleanup(
+    before_date: date = Query(..., description="Delete events before this date (YYYY-MM-DD)"),
+    confirm: bool = Query(False, description="Must be true to confirm deletion"),
+    db: Session = Depends(get_db)
+):
+    """
+    Manually trigger cleanup of events before a specific date
+
+    Deletes all events (and associated thumbnails) that occurred before the specified
+    date. Requires explicit confirmation via confirm=true parameter.
+
+    **CAUTION**: This operation is permanent and cannot be undone. Always verify the
+    before_date parameter before confirming.
+
+    Args:
+        before_date: Delete events before this date (exclusive)
+        confirm: Must be explicitly set to true to proceed with deletion
+        db: Database session
+
+    Returns:
+        CleanupResponse with deletion statistics:
+        - deleted_count: Number of events deleted
+        - thumbnails_deleted: Number of thumbnail files deleted
+        - space_freed_mb: Amount of disk space freed in megabytes
+
+    **Request:**
+    ```
+    DELETE /events/cleanup?before_date=2025-10-01&confirm=true
+    ```
+
+    **Response:**
+    ```json
+    {
+        "deleted_count": 450,
+        "thumbnails_deleted": 380,
+        "space_freed_mb": 12.3
+    }
+    ```
+
+    **Status Codes:**
+    - 200: Success (cleanup completed)
+    - 400: Invalid date (future date) or missing confirmation
+    - 500: Internal server error
+
+    **Examples:**
+    - DELETE /events/cleanup?before_date=2025-10-01&confirm=true
+    - DELETE /events/cleanup?before_date=2025-11-01&confirm=true
+    """
+    try:
+        # Validate confirmation
+        if not confirm:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Deletion must be explicitly confirmed with confirm=true"
+            )
+
+        # Validate date is not in future
+        today = date.today()
+        if before_date >= today:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"before_date must be in the past (today is {today})"
+            )
+
+        # Calculate retention days from before_date to now
+        days_ago = (datetime.now(timezone.utc) - datetime.combine(before_date, datetime.min.time()).replace(tzinfo=timezone.utc)).days
+
+        logger.warning(
+            f"Manual cleanup triggered: deleting events before {before_date} ({days_ago} days ago)",
+            extra={"before_date": str(before_date), "days_ago": days_ago, "confirmed": confirm}
+        )
+
+        # Execute cleanup
+        cleanup_service = get_cleanup_service()
+        stats = await cleanup_service.cleanup_old_events(retention_days=days_ago)
+
+        logger.info(
+            f"Manual cleanup complete: {stats['events_deleted']} events deleted, "
+            f"{stats['space_freed_mb']} MB freed",
+            extra=stats
+        )
+
+        # Audit log entry for compliance (AC #6 requirement)
+        # Use WARNING level to ensure permanent retention in production logging
+        audit_logger.warning(
+            "AUDIT: Manual cleanup operation completed",
+            extra={
+                "audit_event": "manual_cleanup",
+                "operation": "DELETE /events/cleanup",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "parameters": {
+                    "before_date": str(before_date),
+                    "confirm": confirm,
+                    "days_ago": days_ago
+                },
+                "result": {
+                    "deleted_count": stats["events_deleted"],
+                    "thumbnails_deleted": stats["thumbnails_deleted"],
+                    "space_freed_mb": stats["space_freed_mb"],
+                    "batches_processed": stats.get("batches_processed", 0)
+                },
+                "source": "api_endpoint",
+                "status": "success"
+            }
+        )
+
+        return CleanupResponse(
+            deleted_count=stats["events_deleted"],
+            thumbnails_deleted=stats["thumbnails_deleted"],
+            space_freed_mb=stats["space_freed_mb"]
+        )
+
+    except HTTPException as e:
+        # Audit log for rejected/failed operations
+        audit_logger.warning(
+            "AUDIT: Manual cleanup operation rejected",
+            extra={
+                "audit_event": "manual_cleanup",
+                "operation": "DELETE /events/cleanup",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "parameters": {
+                    "before_date": str(before_date),
+                    "confirm": confirm
+                },
+                "result": {"error": str(e.detail)},
+                "source": "api_endpoint",
+                "status": "rejected"
+            }
+        )
+        raise
+    except Exception as e:
+        # Audit log for system failures
+        audit_logger.error(
+            "AUDIT: Manual cleanup operation failed",
+            extra={
+                "audit_event": "manual_cleanup",
+                "operation": "DELETE /events/cleanup",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "parameters": {
+                    "before_date": str(before_date),
+                    "confirm": confirm
+                },
+                "result": {"error": str(e)},
+                "source": "api_endpoint",
+                "status": "failed"
+            },
+            exc_info=True
+        )
+        logger.error(f"Failed to perform manual cleanup: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to perform cleanup"
         )
 
 

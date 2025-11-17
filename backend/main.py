@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -15,7 +17,9 @@ from app.api.v1.motion_events import router as motion_events_router
 from app.api.v1.ai import router as ai_router
 from app.api.v1.events import router as events_router
 from app.api.v1.metrics import router as metrics_router
+from app.api.v1.system import router as system_router, get_retention_policy_from_db
 from app.services.event_processor import initialize_event_processor, shutdown_event_processor
+from app.services.cleanup_service import get_cleanup_service
 
 # Configure logging
 import os
@@ -46,6 +50,41 @@ ai_service_logger.addHandler(ai_file_handler)
 
 logger = logging.getLogger(__name__)
 
+# Global scheduler instance
+scheduler: AsyncIOScheduler = None
+
+
+async def scheduled_cleanup_job():
+    """
+    Scheduled cleanup job that runs daily at 2:00 AM
+
+    Deletes old events based on retention policy from system_settings table.
+    Only runs if retention policy is not set to "forever" (retention_days > 0).
+    """
+    try:
+        # Get retention policy from database
+        retention_days = get_retention_policy_from_db()
+
+        # Skip cleanup if retention is set to forever
+        if retention_days <= 0:
+            logger.info("Scheduled cleanup skipped (retention policy set to forever)")
+            return
+
+        logger.info(f"Starting scheduled cleanup (retention: {retention_days} days)")
+
+        # Execute cleanup
+        cleanup_service = get_cleanup_service()
+        stats = await cleanup_service.cleanup_old_events(retention_days=retention_days)
+
+        logger.info(
+            f"Scheduled cleanup complete: {stats['events_deleted']} events deleted, "
+            f"{stats['space_freed_mb']} MB freed",
+            extra=stats
+        )
+
+    except Exception as e:
+        logger.error(f"Scheduled cleanup failed: {e}", exc_info=True)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,6 +95,8 @@ async def lifespan(app: FastAPI):
     - Startup: Creates database tables and initializes resources
     - Shutdown: Stops camera threads and cleans up resources
     """
+    global scheduler
+
     # Startup logic
     logger.info("Application starting up...")
 
@@ -72,12 +113,29 @@ async def lifespan(app: FastAPI):
     await initialize_event_processor()
     logger.info("Event processor initialized and started")
 
+    # Initialize APScheduler for daily cleanup (Story 3.4)
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        scheduled_cleanup_job,
+        trigger=CronTrigger(hour=2, minute=0),  # Daily at 2:00 AM
+        id="daily_cleanup",
+        name="Daily event cleanup based on retention policy",
+        replace_existing=True
+    )
+    scheduler.start()
+    logger.info("Cleanup scheduler initialized (daily at 2:00 AM)")
+
     logger.info("Application startup complete")
 
     yield  # Application runs here
 
     # Shutdown logic
     logger.info("Application shutting down...")
+
+    # Stop scheduler
+    if scheduler and scheduler.running:
+        scheduler.shutdown(wait=False)
+        logger.info("Cleanup scheduler stopped")
 
     # Stop Event Processor (Story 3.3)
     await shutdown_event_processor(timeout=30.0)
@@ -115,6 +173,7 @@ app.include_router(cameras_router, prefix=settings.API_V1_PREFIX)
 app.include_router(ai_router, prefix=settings.API_V1_PREFIX)
 app.include_router(events_router, prefix=settings.API_V1_PREFIX)
 app.include_router(metrics_router, prefix=settings.API_V1_PREFIX)
+app.include_router(system_router, prefix=settings.API_V1_PREFIX)  # Story 3.4
 
 
 @app.get("/")
