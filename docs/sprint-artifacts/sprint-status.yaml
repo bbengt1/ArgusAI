@@ -79,12 +79,12 @@ development_status:
   5-1-implement-alert-rule-engine: done
   5-2-build-alert-rule-configuration-ui: done
   5-3-implement-webhook-integration: done
-  5-4-build-in-dashboard-notification-center: backlog
+  5-4-build-in-dashboard-notification-center: done
   epic-5-retrospective: optional
 
   # Epic 6: Security & System Management
   epic-6: backlog
-  6-1-implement-api-key-encryption-and-management: backlog
+  6-1-implement-api-key-encryption-and-management: ready-for-dev
   6-2-add-comprehensive-logging-and-monitoring: backlog
   6-3-implement-basic-user-authentication-phase-1-5: backlog
   6-4-add-system-backup-and-restore-functionality: backlog

@@ -503,53 +503,83 @@ class AlertEngine:
         """
         Execute dashboard notification action.
 
-        Broadcasts alert via WebSocket to all connected dashboard clients.
+        Creates persistent notification record in database and broadcasts
+        via WebSocket to all connected dashboard clients.
 
         Args:
             event: Event that triggered the alert
             rule: AlertRule that matched
 
         Returns:
-            True if at least one client was notified
+            True if notification was created successfully
         """
         try:
             from app.services.websocket_manager import get_websocket_manager
+            from app.models.notification import Notification
 
-            # Build event data for broadcast
-            event_data = {
-                "id": event.id,
-                "camera_id": event.camera_id,
-                "timestamp": event.timestamp.isoformat() if event.timestamp else None,
-                "description": event.description,
-                "confidence": event.confidence,
-                "objects_detected": json.loads(event.objects_detected) if isinstance(event.objects_detected, str) else event.objects_detected,
-                "alert_triggered": True
-            }
+            # Truncate event description for display (max 200 chars)
+            event_description = event.description[:200] if event.description else None
 
-            # Build rule data for broadcast
-            rule_data = {
-                "id": rule.id,
-                "name": rule.name
+            # Build thumbnail URL (follows existing pattern from events API)
+            thumbnail_url = f"/api/v1/events/{event.id}/thumbnail" if event.thumbnail_path else None
+
+            # Create notification record in database
+            notification = Notification(
+                event_id=event.id,
+                rule_id=rule.id,
+                rule_name=rule.name,
+                event_description=event_description,
+                thumbnail_url=thumbnail_url,
+                read=False
+            )
+            self.db.add(notification)
+            self.db.commit()
+            self.db.refresh(notification)
+
+            logger.info(
+                f"Created notification {notification.id} for rule '{rule.name}'",
+                extra={
+                    "notification_id": notification.id,
+                    "rule_id": rule.id,
+                    "event_id": event.id
+                }
+            )
+
+            # Build notification data for WebSocket broadcast
+            notification_data = {
+                "id": notification.id,
+                "event_id": event.id,
+                "rule_id": rule.id,
+                "rule_name": rule.name,
+                "event_description": event_description,
+                "thumbnail_url": thumbnail_url,
+                "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                "read": False
             }
 
             # Broadcast via WebSocket
             ws_manager = get_websocket_manager()
-            clients_notified = await ws_manager.broadcast_alert(event_data, rule_data)
+            clients_notified = await ws_manager.broadcast({
+                "type": "notification",
+                "data": notification_data
+            })
 
             logger.info(
-                f"Dashboard notification sent for rule '{rule.name}'",
+                f"Dashboard notification broadcast for rule '{rule.name}'",
                 extra={
+                    "notification_id": notification.id,
                     "rule_id": rule.id,
                     "event_id": event.id,
                     "clients_notified": clients_notified
                 }
             )
 
-            return clients_notified > 0
+            return True
 
         except Exception as e:
+            self.db.rollback()
             logger.error(
-                f"Failed to send dashboard notification: {e}",
+                f"Failed to create dashboard notification: {e}",
                 exc_info=True,
                 extra={"rule_id": rule.id, "event_id": event.id}
             )

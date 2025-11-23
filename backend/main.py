@@ -20,6 +20,8 @@ from app.api.v1.metrics import router as metrics_router
 from app.api.v1.system import router as system_router, get_retention_policy_from_db
 from app.api.v1.alert_rules import router as alert_rules_router
 from app.api.v1.webhooks import router as webhooks_router
+from app.api.v1.notifications import router as notifications_router
+from app.api.v1.websocket import router as websocket_router
 from app.services.event_processor import initialize_event_processor, shutdown_event_processor
 from app.services.cleanup_service import get_cleanup_service
 
@@ -194,6 +196,8 @@ app.include_router(metrics_router, prefix=settings.API_V1_PREFIX)
 app.include_router(system_router, prefix=settings.API_V1_PREFIX)  # Story 3.4
 app.include_router(alert_rules_router, prefix=settings.API_V1_PREFIX)  # Story 5.1
 app.include_router(webhooks_router, prefix=settings.API_V1_PREFIX)  # Story 5.3
+app.include_router(notifications_router, prefix=settings.API_V1_PREFIX)  # Story 5.4
+app.include_router(websocket_router)  # Story 5.4 - WebSocket at /ws (no prefix)
 
 
 @app.get("/")

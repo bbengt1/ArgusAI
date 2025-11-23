@@ -8,7 +8,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Video, Calendar, Bell, Settings, Menu, Home, User, Circle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Tooltip,
   TooltipContent,
@@ -17,6 +16,7 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { NotificationBell } from '@/components/notifications';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home, available: true },
@@ -94,25 +94,8 @@ export function Header() {
               </Tooltip>
             </TooltipProvider>
 
-            {/* Notification Bell */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell className="h-5 w-5" />
-                    <Badge
-                      variant="destructive"
-                      className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                    >
-                      0
-                    </Badge>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">No new notifications</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {/* Notification Bell (Story 5.4) */}
+            <NotificationBell />
 
             {/* User Menu (Phase 1.5 Placeholder) */}
             <TooltipProvider>

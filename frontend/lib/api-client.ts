@@ -33,6 +33,13 @@ import type {
   IWebhookLogsFilter,
   IWebhookLogsResponse,
 } from '@/types/alert-rule';
+import type {
+  INotification,
+  INotificationListResponse,
+  IMarkReadResponse,
+  IDeleteNotificationResponse,
+  IBulkDeleteResponse,
+} from '@/types/notification';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const API_V1_PREFIX = '/api/v1';
@@ -490,6 +497,79 @@ export const apiClient = {
       }
 
       return response.blob();
+    },
+  },
+
+  /**
+   * Notifications API namespace (Story 5.4)
+   */
+  notifications: {
+    /**
+     * Get notifications with optional filtering
+     * @param filters Optional filters (read status, pagination)
+     * @returns Paginated list of notifications with unread count
+     */
+    list: async (filters?: {
+      read?: boolean;
+      limit?: number;
+      offset?: number;
+    }): Promise<INotificationListResponse> => {
+      const params = new URLSearchParams();
+      if (filters?.read !== undefined) params.append('read', String(filters.read));
+      if (filters?.limit) params.append('limit', String(filters.limit));
+      if (filters?.offset) params.append('offset', String(filters.offset));
+
+      const queryString = params.toString();
+      return apiFetch<INotificationListResponse>(
+        `/notifications${queryString ? `?${queryString}` : ''}`
+      );
+    },
+
+    /**
+     * Mark a single notification as read
+     * @param id Notification UUID
+     * @returns Updated notification
+     */
+    markAsRead: async (id: string): Promise<INotification> => {
+      return apiFetch<INotification>(`/notifications/${id}/read`, {
+        method: 'PATCH',
+      });
+    },
+
+    /**
+     * Mark all notifications as read
+     * @returns Success status and count of updated notifications
+     */
+    markAllAsRead: async (): Promise<IMarkReadResponse> => {
+      return apiFetch<IMarkReadResponse>('/notifications/mark-all-read', {
+        method: 'PATCH',
+      });
+    },
+
+    /**
+     * Delete a single notification
+     * @param id Notification UUID
+     * @returns Deletion confirmation
+     */
+    delete: async (id: string): Promise<IDeleteNotificationResponse> => {
+      return apiFetch<IDeleteNotificationResponse>(`/notifications/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
+     * Delete notifications in bulk
+     * @param readOnly If true, only delete read notifications
+     * @returns Deletion confirmation with count
+     */
+    deleteAll: async (readOnly: boolean = false): Promise<IBulkDeleteResponse> => {
+      const params = new URLSearchParams();
+      if (readOnly) params.append('read_only', 'true');
+      const queryString = params.toString();
+      return apiFetch<IBulkDeleteResponse>(
+        `/notifications${queryString ? `?${queryString}` : ''}`,
+        { method: 'DELETE' }
+      );
     },
   },
 };
