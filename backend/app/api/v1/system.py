@@ -41,6 +41,46 @@ router = APIRouter(
 )
 
 
+@router.get("/debug/network")
+def debug_network_test():
+    """Debug endpoint to test network connectivity from server context"""
+    import socket
+    import ssl
+
+    results = {}
+    host = "10.0.1.254"
+    port = 7441
+
+    # Test 1: Raw socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect((host, port))
+        results["tcp_connect"] = "success"
+
+        # Test 2: SSL wrap
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        ssock = context.wrap_socket(sock, server_hostname=host)
+        results["ssl_wrap"] = f"success - {ssock.cipher()[0]}"
+        ssock.close()
+    except Exception as e:
+        results["socket_error"] = f"{type(e).__name__}: {e}"
+
+    # Test 3: PyAV
+    try:
+        import av
+        url = "rtsps://homebridge:2003Isaac@10.0.1.254:7441/5e90Pa1x8zldOgmF?enableSrtp"
+        container = av.open(url, options={'rtsp_transport': 'tcp'}, timeout=10)
+        results["pyav_connect"] = f"success - {len(container.streams)} streams"
+        container.close()
+    except Exception as e:
+        results["pyav_error"] = f"{type(e).__name__}: {e}"
+
+    return results
+
+
 def get_retention_policy_from_db(db: Optional[Session] = None) -> int:
     """
     Get current retention policy from system_settings table

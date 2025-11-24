@@ -2,12 +2,23 @@
  * Custom hooks for event data fetching using TanStack Query
  */
 
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import type { IEventFilters, IEvent, IEventsResponse } from '@/types/event';
 import { toast } from 'sonner';
 
 const EVENTS_PER_PAGE = 20;
+
+/**
+ * Simple query for recent events (dashboard use)
+ */
+export function useRecentEvents(limit: number = 5) {
+  return useQuery({
+    queryKey: ['events', 'recent', limit],
+    queryFn: () => apiClient.events.list({}, { skip: 0, limit }),
+    staleTime: 30 * 1000, // 30 seconds
+  });
+}
 
 /**
  * Infinite query for events timeline with filters

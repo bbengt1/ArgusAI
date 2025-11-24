@@ -88,7 +88,14 @@ export default function SettingsPage() {
     },
   });
 
-  const { formState: { isDirty, dirtyFields } } = form;
+  const { formState: { isDirty, dirtyFields, errors } } = form;
+
+  // Log validation errors for debugging
+  useEffect(() => {
+    if (Object.keys(errors).length > 0) {
+      console.error('Form validation errors:', errors);
+    }
+  }, [errors]);
 
   // Load settings on mount
   useEffect(() => {
@@ -334,17 +341,15 @@ export default function SettingsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={Intl.DateTimeFormat().resolvedOptions().timeZone}>
-                          {Intl.DateTimeFormat().resolvedOptions().timeZone} (Auto-detected)
-                        </SelectItem>
-                        <SelectItem value="America/New_York">America/New_York</SelectItem>
-                        <SelectItem value="America/Chicago">America/Chicago</SelectItem>
-                        <SelectItem value="America/Denver">America/Denver</SelectItem>
-                        <SelectItem value="America/Los_Angeles">America/Los_Angeles</SelectItem>
-                        <SelectItem value="Europe/London">Europe/London</SelectItem>
-                        <SelectItem value="Europe/Paris">Europe/Paris</SelectItem>
-                        <SelectItem value="Asia/Tokyo">Asia/Tokyo</SelectItem>
-                        <SelectItem value="Australia/Sydney">Australia/Sydney</SelectItem>
+                        <SelectItem value="America/New_York">America/New_York (Eastern)</SelectItem>
+                        <SelectItem value="America/Chicago">America/Chicago (Central)</SelectItem>
+                        <SelectItem value="America/Denver">America/Denver (Mountain)</SelectItem>
+                        <SelectItem value="America/Los_Angeles">America/Los_Angeles (Pacific)</SelectItem>
+                        <SelectItem value="Europe/London">Europe/London (GMT)</SelectItem>
+                        <SelectItem value="Europe/Paris">Europe/Paris (CET)</SelectItem>
+                        <SelectItem value="Asia/Tokyo">Asia/Tokyo (JST)</SelectItem>
+                        <SelectItem value="Australia/Sydney">Australia/Sydney (AEST)</SelectItem>
+                        <SelectItem value="UTC">UTC</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -699,19 +704,19 @@ export default function SettingsPage() {
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-muted-foreground">Total Events:</span>{' '}
-                          <span className="font-medium">{storageStats.total_events.toLocaleString()}</span>
+                          <span className="font-medium">{(storageStats.total_events ?? 0).toLocaleString()}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Database:</span>{' '}
-                          <span className="font-medium">{storageStats.database_mb.toFixed(1)} MB</span>
+                          <span className="font-medium">{(storageStats.database_mb ?? 0).toFixed(1)} MB</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Thumbnails:</span>{' '}
-                          <span className="font-medium">{storageStats.thumbnails_mb.toFixed(1)} MB</span>
+                          <span className="font-medium">{(storageStats.thumbnails_mb ?? 0).toFixed(1)} MB</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Total:</span>{' '}
-                          <span className="font-medium">{storageStats.total_mb.toFixed(1)} MB</span>
+                          <span className="font-medium">{(storageStats.total_mb ?? 0).toFixed(1)} MB</span>
                         </div>
                       </div>
                     </div>

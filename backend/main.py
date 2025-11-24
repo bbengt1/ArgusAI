@@ -167,6 +167,10 @@ async def lifespan(app: FastAPI):
             }
         )
 
+        # Small delay to ensure network stack is ready (helps with immediate RTSP connections)
+        import time
+        time.sleep(1)
+
         for camera in enabled_cameras:
             success = camera_service.start_camera(camera)
             if success:

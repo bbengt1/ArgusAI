@@ -504,7 +504,8 @@ def test_camera_connection(
             # Convert to base64
             thumbnail_b64 = base64.b64encode(buffer).decode('utf-8')
 
-            cap.release()
+            if cap is not None:
+                cap.release()
 
             # Type-specific success message
             if camera.type == "usb":
@@ -520,7 +521,8 @@ def test_camera_connection(
 
         except Exception as e:
             logger.error(f"Failed to generate thumbnail: {e}")
-            cap.release()
+            if cap is not None:
+                cap.release()
 
             return CameraTestResponse(
                 success=True,

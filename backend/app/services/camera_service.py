@@ -244,7 +244,14 @@ class CameraService:
                 if camera.type == "rtsp" and PYAV_AVAILABLE and connection_str.startswith("rtsps://"):
                     try:
                         logger.debug(f"Using PyAV for secure RTSP stream: {camera_id}")
-                        av_container = av.open(connection_str, options={'rtsp_transport': 'tcp'})
+                        av_container = av.open(
+                            connection_str,
+                            options={
+                                'rtsp_transport': 'tcp',
+                                'stimeout': '10000000',  # 10 second socket timeout in microseconds
+                            },
+                            timeout=15.0  # 15 second overall timeout
+                        )
                         av_stream = av_container.streams.video[0]
                         use_pyav = True
                         logger.debug(f"PyAV connected: {av_stream.codec_context.width}x{av_stream.codec_context.height}")
