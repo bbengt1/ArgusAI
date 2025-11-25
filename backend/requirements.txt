@@ -22,6 +22,7 @@ av>=12.0.0  # PyAV for secure RTSP (rtsps://) streams
 cryptography==41.0.7
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+slowapi>=0.1.9
 
 # AI Vision APIs
 openai>=1.54.0

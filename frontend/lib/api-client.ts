@@ -46,6 +46,14 @@ import type {
   LogsQueryParams,
   LogFilesResponse,
 } from '@/types/monitoring';
+import type {
+  IUser,
+  ILoginRequest,
+  ILoginResponse,
+  IChangePasswordRequest,
+  IMessageResponse,
+  ISetupStatusResponse,
+} from '@/types/auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const API_V1_PREFIX = '/api/v1';
@@ -654,6 +662,118 @@ export const apiClient = {
         throw new ApiError('Failed to get metrics', response.status);
       }
       return response.text();
+    },
+  },
+
+  /**
+   * Authentication API (Story 6.3)
+   */
+  auth: {
+    /**
+     * Login with username and password
+     * @param credentials Login credentials
+     * @returns Login response with user info
+     */
+    login: async (credentials: ILoginRequest): Promise<ILoginResponse> => {
+      const url = `${API_BASE_URL}${API_V1_PREFIX}/auth/login`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+        credentials: 'include', // Include cookies
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const errorMessage = data?.detail || `HTTP ${response.status}: ${response.statusText}`;
+        throw new ApiError(errorMessage, response.status, data);
+      }
+
+      return data as ILoginResponse;
+    },
+
+    /**
+     * Logout current user
+     * @returns Message response
+     */
+    logout: async (): Promise<IMessageResponse> => {
+      const url = `${API_BASE_URL}${API_V1_PREFIX}/auth/logout`;
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const errorMessage = data?.detail || `HTTP ${response.status}: ${response.statusText}`;
+        throw new ApiError(errorMessage, response.status, data);
+      }
+
+      return data as IMessageResponse;
+    },
+
+    /**
+     * Get current user info
+     * @returns Current user
+     */
+    getCurrentUser: async (): Promise<IUser> => {
+      const url = `${API_BASE_URL}${API_V1_PREFIX}/auth/me`;
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const errorMessage = data?.detail || `HTTP ${response.status}: ${response.statusText}`;
+        throw new ApiError(errorMessage, response.status, data);
+      }
+
+      return data as IUser;
+    },
+
+    /**
+     * Change password for current user
+     * @param passwordData Current and new password
+     * @returns Message response
+     */
+    changePassword: async (passwordData: IChangePasswordRequest): Promise<IMessageResponse> => {
+      const url = `${API_BASE_URL}${API_V1_PREFIX}/auth/change-password`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(passwordData),
+        credentials: 'include',
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const errorMessage = data?.detail || `HTTP ${response.status}: ${response.statusText}`;
+        throw new ApiError(errorMessage, response.status, data);
+      }
+
+      return data as IMessageResponse;
+    },
+
+    /**
+     * Check if initial setup is complete
+     * @returns Setup status
+     */
+    getSetupStatus: async (): Promise<ISetupStatusResponse> => {
+      const url = `${API_BASE_URL}${API_V1_PREFIX}/auth/setup-status`;
+      const response = await fetch(url);
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        const errorMessage = data?.detail || `HTTP ${response.status}: ${response.statusText}`;
+        throw new ApiError(errorMessage, response.status, data);
+      }
+
+      return data as ISetupStatusResponse;
     },
   },
 };
