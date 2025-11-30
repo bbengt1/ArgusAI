@@ -30,6 +30,9 @@ anthropic>=0.39.0
 google-generativeai>=0.8.0
 pillow>=10.0.0
 
+# UniFi Protect Integration (Phase 2)
+uiprotect>=6.0.0  # UniFi Protect API client
+
 # Logging and Monitoring
 python-json-logger>=2.0.0
 prometheus_client>=0.19.0

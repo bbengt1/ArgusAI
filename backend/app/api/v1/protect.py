@@ -7,6 +7,8 @@ Provides REST API for Protect controller configuration management:
 - GET /protect/controllers/{id} - Get single controller
 - PUT /protect/controllers/{id} - Update controller
 - DELETE /protect/controllers/{id} - Delete controller
+- POST /protect/controllers/test - Test connection with new credentials (Story P2-1.2)
+- POST /protect/controllers/{id}/test - Test connection with existing controller (Story P2-1.2)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -24,8 +26,12 @@ from app.schemas.protect import (
     ProtectControllerSingleResponse,
     ProtectControllerListResponse,
     ProtectControllerDeleteResponse,
+    ProtectControllerTest,
+    ProtectTestResultData,
+    ProtectTestResponse,
     MetaResponse,
 )
+from app.services.protect_service import get_protect_service
 
 logger = logging.getLogger(__name__)
 
@@ -279,3 +285,167 @@ def delete_controller(controller_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete controller"
         )
+
+
+# Story P2-1.2: Connection Test Endpoints
+
+@router.post("/controllers/test", response_model=ProtectTestResponse)
+async def test_controller_connection(test_data: ProtectControllerTest):
+    """
+    Test connection to a UniFi Protect controller with provided credentials.
+
+    This endpoint does NOT save any data - it's a test-only operation.
+    Use this before saving a new controller to verify connectivity.
+
+    Args:
+        test_data: Connection parameters (host, port, username, password, verify_ssl)
+
+    Returns:
+        Test result with success status, message, firmware_version (on success),
+        and camera_count (on success) in { data, meta } format.
+
+    Status Codes:
+        200: Test completed (check data.success for result)
+        401: Authentication failed
+        502: SSL certificate error
+        503: Host unreachable
+        504: Connection timed out
+    """
+    protect_service = get_protect_service()
+
+    result = await protect_service.test_connection(
+        host=test_data.host,
+        port=test_data.port,
+        username=test_data.username,
+        password=test_data.password,
+        verify_ssl=test_data.verify_ssl
+    )
+
+    # Map error types to HTTP status codes
+    if not result.success:
+        if result.error_type == "auth_error":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=result.message
+            )
+        elif result.error_type == "ssl_error":
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=result.message
+            )
+        elif result.error_type == "connection_error":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=result.message
+            )
+        elif result.error_type == "timeout":
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=result.message
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.message
+            )
+
+    return ProtectTestResponse(
+        data=ProtectTestResultData(
+            success=result.success,
+            message=result.message,
+            firmware_version=result.firmware_version,
+            camera_count=result.camera_count
+        ),
+        meta=create_meta()
+    )
+
+
+@router.post("/controllers/{controller_id}/test", response_model=ProtectTestResponse)
+async def test_existing_controller(controller_id: str, db: Session = Depends(get_db)):
+    """
+    Test connection to an existing UniFi Protect controller using stored credentials.
+
+    This endpoint retrieves the controller from the database, decrypts the
+    stored password, and tests the connection.
+
+    Args:
+        controller_id: Controller UUID
+        db: Database session
+
+    Returns:
+        Test result with success status, message, firmware_version (on success),
+        and camera_count (on success) in { data, meta } format.
+
+    Raises:
+        404: Controller not found
+        401: Authentication failed
+        502: SSL certificate error
+        503: Host unreachable
+        504: Connection timed out
+    """
+    # Load controller from database
+    controller = db.query(ProtectController).filter(ProtectController.id == controller_id).first()
+
+    if not controller:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Controller with id '{controller_id}' not found"
+        )
+
+    # Get decrypted password
+    try:
+        password = controller.get_decrypted_password()
+    except Exception as e:
+        logger.error(f"Failed to decrypt password for controller {controller_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decrypt controller credentials"
+        )
+
+    protect_service = get_protect_service()
+
+    result = await protect_service.test_connection(
+        host=controller.host,
+        port=controller.port,
+        username=controller.username,
+        password=password,
+        verify_ssl=controller.verify_ssl
+    )
+
+    # Map error types to HTTP status codes
+    if not result.success:
+        if result.error_type == "auth_error":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=result.message
+            )
+        elif result.error_type == "ssl_error":
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=result.message
+            )
+        elif result.error_type == "connection_error":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=result.message
+            )
+        elif result.error_type == "timeout":
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=result.message
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.message
+            )
+
+    return ProtectTestResponse(
+        data=ProtectTestResultData(
+            success=result.success,
+            message=result.message,
+            firmware_version=result.firmware_version,
+            camera_count=result.camera_count
+        ),
+        meta=create_meta()
+    )

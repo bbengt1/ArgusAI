@@ -109,3 +109,58 @@ class ProtectControllerDeleteResponse(BaseModel):
 
     data: dict = Field(default={"deleted": True})
     meta: MetaResponse
+
+
+# Story P2-1.2: Connection Test Schemas
+
+class ProtectControllerTest(BaseModel):
+    """Schema for testing controller connection (no name required)"""
+
+    host: str = Field(..., min_length=1, max_length=255, description="IP address or hostname")
+    port: int = Field(default=443, ge=1, le=65535, description="HTTPS port")
+    username: str = Field(..., min_length=1, max_length=100, description="Protect authentication username")
+    password: str = Field(..., min_length=1, max_length=100, description="Protect password")
+    verify_ssl: bool = Field(default=False, description="Whether to verify SSL certificates")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "host": "192.168.1.1",
+                    "port": 443,
+                    "username": "admin",
+                    "password": "secretpassword",
+                    "verify_ssl": False
+                }
+            ]
+        }
+    }
+
+
+class ProtectTestResultData(BaseModel):
+    """Connection test result data"""
+
+    success: bool = Field(..., description="Whether connection was successful")
+    message: str = Field(..., description="Human-readable result message")
+    firmware_version: Optional[str] = Field(None, description="Controller firmware version (on success)")
+    camera_count: Optional[int] = Field(None, description="Number of cameras discovered (on success)")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "success": True,
+                    "message": "Connected successfully",
+                    "firmware_version": "3.0.16",
+                    "camera_count": 6
+                }
+            ]
+        }
+    }
+
+
+class ProtectTestResponse(BaseModel):
+    """Connection test response with meta"""
+
+    data: ProtectTestResultData
+    meta: MetaResponse

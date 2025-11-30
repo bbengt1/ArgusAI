@@ -1,0 +1,183 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P2-1</epicId>
+    <storyId>2</storyId>
+    <title>Implement Controller Connection Validation and Test Endpoint</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p2-1-2-implement-controller-connection-validation-and-test-endpoint.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to test my Protect controller connection before saving</iWant>
+    <soThat>I can verify credentials are correct and the controller is reachable</soThat>
+    <tasks>
+      <task id="1" name="Install and Configure uiprotect Library">
+        <subtask>1.1 Add uiprotect>=5.0.0 to requirements.txt</subtask>
+        <subtask>1.2 Verify library installation with pip install</subtask>
+        <subtask>1.3 Create test script to verify basic connectivity pattern</subtask>
+      </task>
+      <task id="2" name="Create ProtectService Class">
+        <subtask>2.1 Create backend/app/services/protect_service.py</subtask>
+        <subtask>2.2 Implement test_connection(host, port, username, password, verify_ssl) async method</subtask>
+        <subtask>2.3 Use uiprotect.ProtectApiClient for connection</subtask>
+        <subtask>2.4 Return structured result with firmware_version and camera_count on success</subtask>
+        <subtask>2.5 Handle and map exceptions to user-friendly error messages</subtask>
+      </task>
+      <task id="3" name="Implement Error Handling">
+        <subtask>3.1 Catch AuthError from uiprotect and return authentication failed</subtask>
+        <subtask>3.2 Catch ConnectionError/aiohttp.ClientConnectorError for unreachable host</subtask>
+        <subtask>3.3 Catch SSL errors (ssl.SSLError, aiohttp.ClientConnectorCertificateError)</subtask>
+        <subtask>3.4 Implement 10-second timeout using asyncio.wait_for()</subtask>
+        <subtask>3.5 Catch asyncio.TimeoutError and return timeout message</subtask>
+      </task>
+      <task id="4" name="Create Test Endpoint for New Credentials">
+        <subtask>4.1 Add POST /protect/controllers/test endpoint to router</subtask>
+        <subtask>4.2 Create ProtectControllerTest Pydantic schema</subtask>
+        <subtask>4.3 Create ProtectTestResponse schema with success, message, firmware_version, camera_count</subtask>
+        <subtask>4.4 Call ProtectService.test_connection() and return result</subtask>
+        <subtask>4.5 Ensure no database writes occur</subtask>
+      </task>
+      <task id="5" name="Create Test Endpoint for Existing Controller">
+        <subtask>5.1 Add POST /protect/controllers/{id}/test endpoint</subtask>
+        <subtask>5.2 Load controller from database by ID</subtask>
+        <subtask>5.3 Decrypt password using controller.get_decrypted_password()</subtask>
+        <subtask>5.4 Call test_connection() with decrypted credentials</subtask>
+        <subtask>5.5 Return 404 if controller not found</subtask>
+      </task>
+      <task id="6" name="Add Logging">
+        <subtask>6.1 Log connection attempt start (host only, no credentials)</subtask>
+        <subtask>6.2 Log connection success with firmware version</subtask>
+        <subtask>6.3 Log connection failure with error type (not details for security)</subtask>
+        <subtask>6.4 Use structured logging format consistent with existing patterns</subtask>
+      </task>
+      <task id="7" name="Write Tests">
+        <subtask>7.1 Add tests to backend/tests/test_api/test_protect.py</subtask>
+        <subtask>7.2 Test successful connection (mock uiprotect client)</subtask>
+        <subtask>7.3 Test authentication failure</subtask>
+        <subtask>7.4 Test host unreachable</subtask>
+        <subtask>7.5 Test timeout behavior</subtask>
+        <subtask>7.6 Test existing controller test endpoint</subtask>
+        <subtask>7.7 Test that no database writes occur during test</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">POST /api/v1/protect/controllers/test accepts { host, port, username, password, verify_ssl } and attempts connection</criterion>
+    <criterion id="AC2">Successful connection returns { success: true, message: "Connected successfully", firmware_version: "X.X.X", camera_count: N }</criterion>
+    <criterion id="AC3">Failed authentication returns { success: false, message: "Authentication failed" } with 401 status</criterion>
+    <criterion id="AC4">Unreachable host returns { success: false, message: "Host unreachable" } with appropriate error</criterion>
+    <criterion id="AC5">SSL verification errors return specific error message when verify_ssl is true</criterion>
+    <criterion id="AC6">Connection test completes within 10 seconds (NFR3) with timeout handling</criterion>
+    <criterion id="AC7">POST /api/v1/protect/controllers/{id}/test tests existing controller with stored credentials</criterion>
+    <criterion id="AC8">Test endpoint does not save/persist any credentials (test-only operation)</criterion>
+    <criterion id="AC9">Connection attempts are logged (without credentials) for debugging</criterion>
+    <criterion id="AC10">ProtectService class created in backend/app/services/protect_service.py with test_connection() method</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/architecture.md" title="Architecture" section="Phase 2 API Contracts">
+        POST /protect/controllers/{id}/test - Test controller connection. Response: { data: { success: bool, message: string, firmware_version?: string }, meta: {...} }
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Phase 2 Service Architecture - ProtectService">
+        ProtectService in backend/app/services/protect_service.py manages connection to UniFi Protect controller. Key methods include connect(), disconnect(), discover_cameras(), get_snapshot(), _websocket_listener(), _handle_event(), _reconnect_with_backoff().
+      </doc>
+      <doc path="docs/PRD-phase2.md" title="PRD Phase 2" section="FR2, FR6">
+        FR2: System validates controller connection and authentication before saving. FR6: Users can test controller connectivity from the UI.
+      </doc>
+      <doc path="docs/epics-phase2.md" title="Epics Phase 2" section="Story 1.2">
+        Story 1.2 acceptance criteria: Use uiprotect library, 10-second timeout, handle AuthError/ConnectionError/TimeoutError, return firmware_version and camera_count on success.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="backend/app/models/protect_controller.py" kind="model" symbol="ProtectController" lines="13-104">
+        SQLAlchemy model with get_decrypted_password() method for retrieving plaintext password for API connection. Use this method to get credentials for testing existing controllers.
+      </artifact>
+      <artifact path="backend/app/schemas/protect.py" kind="schema" symbol="ProtectControllerCreate, MetaResponse" lines="17-112">
+        Pydantic schemas for protect API. MetaResponse provides { request_id, timestamp, count } format. Add ProtectControllerTest and ProtectTestResponse schemas here.
+      </artifact>
+      <artifact path="backend/app/api/v1/protect.py" kind="router" symbol="router" lines="32-281">
+        FastAPI router for /protect endpoints. Add test endpoints here. Use create_meta() helper for response format. Follow existing error handling patterns.
+      </artifact>
+      <artifact path="backend/app/utils/encryption.py" kind="utility" symbol="encrypt_password, decrypt_password">
+        Fernet encryption utilities. Already used by ProtectController model.
+      </artifact>
+      <artifact path="backend/tests/test_api/test_protect.py" kind="test" symbol="TestProtectControllerAPI" lines="102-304">
+        Existing test file with 26 tests. Add new test classes for test endpoint validation. Uses file-based SQLite and TestClient.
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0" />
+        <package name="uvicorn" version="0.24.0" />
+        <package name="sqlalchemy" version=">=2.0.36" />
+        <package name="pydantic" version=">=2.10.0" />
+        <package name="cryptography" version="41.0.7" />
+        <package name="pytest" version="7.4.3" />
+        <package name="pytest-asyncio" version="0.21.1" />
+        <package name="httpx" version="0.25.2" />
+        <package name="uiprotect" version=">=5.0.0" note="NEW - Add to requirements.txt" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="security">Never log credentials (password, API keys). Log host/port only for debugging.</constraint>
+    <constraint type="timeout">Connection test must complete within 10 seconds per NFR3.</constraint>
+    <constraint type="async">Use async/await pattern for all network operations. uiprotect library is async-native.</constraint>
+    <constraint type="response-format">All API responses must follow { data, meta } format using MetaResponse schema.</constraint>
+    <constraint type="error-handling">Map external library exceptions to user-friendly error messages with appropriate HTTP status codes.</constraint>
+    <constraint type="service-pattern">Business logic belongs in services layer (backend/app/services/), not in router functions.</constraint>
+    <constraint type="no-persist">Test endpoints must not write to database - test-only operations.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="POST /api/v1/protect/controllers/test" kind="REST endpoint">
+      <signature>POST /api/v1/protect/controllers/test</signature>
+      <request>{ host: string, port: int, username: string, password: string, verify_ssl: bool }</request>
+      <response>{ data: { success: bool, message: string, firmware_version?: string, camera_count?: int }, meta: MetaResponse }</response>
+      <path>backend/app/api/v1/protect.py</path>
+    </interface>
+    <interface name="POST /api/v1/protect/controllers/{id}/test" kind="REST endpoint">
+      <signature>POST /api/v1/protect/controllers/{id}/test</signature>
+      <request>None (uses stored credentials)</request>
+      <response>{ data: { success: bool, message: string, firmware_version?: string, camera_count?: int }, meta: MetaResponse }</response>
+      <path>backend/app/api/v1/protect.py</path>
+    </interface>
+    <interface name="ProtectService.test_connection" kind="async method">
+      <signature>async def test_connection(host: str, port: int, username: str, password: str, verify_ssl: bool) -> dict</signature>
+      <returns>{ success: bool, message: str, firmware_version?: str, camera_count?: int }</returns>
+      <path>backend/app/services/protect_service.py</path>
+    </interface>
+    <interface name="ProtectController.get_decrypted_password" kind="method">
+      <signature>def get_decrypted_password(self) -> str</signature>
+      <returns>Decrypted plaintext password</returns>
+      <path>backend/app/models/protect_controller.py:81-100</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      pytest with pytest-asyncio for async tests. Use TestClient for API integration testing. Mock external dependencies (uiprotect client) to avoid real network calls. File-based SQLite database for test isolation. Follow existing test patterns in test_protect.py.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_protect.py</location>
+      <location>backend/tests/test_services/ (create if needed)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1,AC2">Test POST /protect/controllers/test with valid credentials returns success=true, firmware_version, camera_count (mock uiprotect client)</idea>
+      <idea ac="AC3">Test POST /protect/controllers/test with invalid credentials returns success=false, message="Authentication failed", 401 status</idea>
+      <idea ac="AC4">Test POST /protect/controllers/test with unreachable host returns success=false, message="Host unreachable", 503 status</idea>
+      <idea ac="AC5">Test POST /protect/controllers/test with SSL error returns success=false, message="SSL certificate verification failed"</idea>
+      <idea ac="AC6">Test POST /protect/controllers/test with slow response times out at 10 seconds, returns timeout message</idea>
+      <idea ac="AC7">Test POST /protect/controllers/{id}/test loads existing controller and tests with decrypted password</idea>
+      <idea ac="AC7">Test POST /protect/controllers/{id}/test returns 404 for non-existent controller</idea>
+      <idea ac="AC8">Verify no database writes occur during test operations (check db state before/after)</idea>
+      <idea ac="AC10">Test ProtectService.test_connection() directly with mocked uiprotect client</idea>
+    </ideas>
+  </tests>
+</story-context>

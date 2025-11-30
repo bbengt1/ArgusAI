@@ -101,7 +101,7 @@ development_status:
   # Epic P2-1: UniFi Protect Controller Integration
   epic-p2-1: backlog
   p2-1-1-create-protect-controller-database-model-and-api-endpoints: done
-  p2-1-2-implement-controller-connection-validation-and-test-endpoint: backlog
+  p2-1-2-implement-controller-connection-validation-and-test-endpoint: done
   p2-1-3-build-controller-configuration-ui-in-settings-page: backlog
   p2-1-4-implement-websocket-connection-manager-with-auto-reconnect: backlog
   p2-1-5-add-controller-edit-and-delete-functionality: backlog
