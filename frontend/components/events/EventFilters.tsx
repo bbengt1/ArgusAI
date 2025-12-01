@@ -5,8 +5,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, X, Calendar, Camera, Tag, Gauge } from 'lucide-react';
-import type { IEventFilters, DetectedObject } from '@/types/event';
+import { Search, X, Calendar, Camera, Tag, Gauge, Shield, Bell } from 'lucide-react';
+import type { IEventFilters, DetectedObject, SourceType, SmartDetectionType } from '@/types/event';
 import type { ICamera } from '@/types/camera';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,21 @@ interface EventFiltersProps {
 }
 
 const OBJECT_TYPES: DetectedObject[] = ['person', 'vehicle', 'animal', 'package', 'unknown'];
+
+const SOURCE_TYPES: { value: SourceType; label: string }[] = [
+  { value: 'protect', label: 'UniFi Protect' },
+  { value: 'rtsp', label: 'RTSP' },
+  { value: 'usb', label: 'USB' },
+];
+
+const SMART_DETECTION_TYPES: { value: SmartDetectionType; label: string; icon?: string }[] = [
+  { value: 'ring', label: 'Doorbell Ring' },
+  { value: 'person', label: 'Person' },
+  { value: 'vehicle', label: 'Vehicle' },
+  { value: 'package', label: 'Package' },
+  { value: 'animal', label: 'Animal' },
+  { value: 'motion', label: 'Motion' },
+];
 
 const DATE_PRESETS = [
   { label: 'Last 24 hours', value: 24 },
@@ -42,6 +57,12 @@ export function EventFilters({ filters, onFiltersChange, cameras }: EventFilters
     start: filters.start_date || '',
     end: filters.end_date || '',
   });
+  const [selectedSources, setSelectedSources] = useState<Set<SourceType>>(
+    new Set(filters.source_type ? [filters.source_type] : [])
+  );
+  const [selectedSmartDetection, setSelectedSmartDetection] = useState<SmartDetectionType | null>(
+    filters.smart_detection_type || null
+  );
 
   // Debounce search input
   const debouncedSearch = useDebounce(searchInput, 500);
@@ -130,12 +151,43 @@ export function EventFilters({ filters, onFiltersChange, cameras }: EventFilters
     });
   };
 
+  // Handle source type selection
+  const handleSourceToggle = (sourceType: SourceType) => {
+    const newSelected = new Set(selectedSources);
+    if (newSelected.has(sourceType)) {
+      newSelected.delete(sourceType);
+    } else {
+      newSelected.add(sourceType);
+    }
+    setSelectedSources(newSelected);
+
+    // Pass first selected source as filter (API supports single source)
+    onFiltersChange({
+      ...filters,
+      source_type: newSelected.size > 0 ? Array.from(newSelected)[0] : undefined,
+    });
+  };
+
+  // Handle smart detection type selection (single select - radio behavior)
+  const handleSmartDetectionSelect = (detectionType: SmartDetectionType) => {
+    // Toggle off if already selected, otherwise select
+    const newValue = selectedSmartDetection === detectionType ? null : detectionType;
+    setSelectedSmartDetection(newValue);
+
+    onFiltersChange({
+      ...filters,
+      smart_detection_type: newValue || undefined,
+    });
+  };
+
   // Clear all filters
   const handleClearAll = () => {
     setSearchInput('');
     setMinConfidence(0);
     setSelectedCameras(new Set());
     setSelectedObjects(new Set());
+    setSelectedSources(new Set());
+    setSelectedSmartDetection(null);
     setCustomDateRange({ start: '', end: '' });
     onFiltersChange({});
   };
@@ -146,6 +198,8 @@ export function EventFilters({ filters, onFiltersChange, cameras }: EventFilters
     minConfidence > 0 ||
     selectedCameras.size > 0 ||
     selectedObjects.size > 0 ||
+    selectedSources.size > 0 ||
+    selectedSmartDetection !== null ||
     customDateRange.start ||
     customDateRange.end;
 
@@ -244,6 +298,58 @@ export function EventFilters({ filters, onFiltersChange, cameras }: EventFilters
             ))}
           </div>
         )}
+      </div>
+
+      {/* Source Types */}
+      <div className="space-y-3">
+        <label className="flex items-center text-sm font-medium">
+          <Shield className="w-4 h-4 mr-2" />
+          Event Source
+        </label>
+        <div className="space-y-2">
+          {SOURCE_TYPES.map((source) => (
+            <div key={source.value} className="flex items-center space-x-2">
+              <Checkbox
+                id={`source-${source.value}`}
+                checked={selectedSources.has(source.value)}
+                onCheckedChange={() => handleSourceToggle(source.value)}
+              />
+              <label
+                htmlFor={`source-${source.value}`}
+                className="text-sm cursor-pointer flex-1"
+              >
+                {source.label}
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Smart Detection Types (Protect events) */}
+      <div className="space-y-3">
+        <label className="flex items-center text-sm font-medium">
+          <Bell className="w-4 h-4 mr-2" />
+          Smart Detection
+        </label>
+        <div className="space-y-2">
+          {SMART_DETECTION_TYPES.map((detection) => (
+            <div key={detection.value} className="flex items-center space-x-2">
+              <Checkbox
+                id={`detection-${detection.value}`}
+                checked={selectedSmartDetection === detection.value}
+                onCheckedChange={() => handleSmartDetectionSelect(detection.value)}
+              />
+              <label
+                htmlFor={`detection-${detection.value}`}
+                className={`text-sm cursor-pointer flex-1 ${
+                  detection.value === 'ring' ? 'text-cyan-700 font-medium' : ''
+                }`}
+              >
+                {detection.label}
+              </label>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Object Types */}

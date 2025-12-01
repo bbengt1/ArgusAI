@@ -5,6 +5,26 @@
 /**
  * Main Event interface matching backend Event model
  */
+/**
+ * Event source types - matches backend Event.source_type
+ */
+export type SourceType = 'rtsp' | 'usb' | 'protect';
+
+/**
+ * Smart detection types from UniFi Protect
+ */
+export type SmartDetectionType = 'person' | 'vehicle' | 'package' | 'animal' | 'motion' | 'ring';
+
+/**
+ * Story P2-4.4: Correlated event info for multi-camera event display
+ */
+export interface ICorrelatedEvent {
+  id: string;                     // Event UUID
+  camera_name: string;            // Camera name (not ID) for display
+  thumbnail_url: string | null;   // Full URL to thumbnail image
+  timestamp: string;              // ISO 8601 datetime
+}
+
 export interface IEvent {
   id: string;                     // UUID
   camera_id: string;              // UUID foreign key
@@ -16,6 +36,14 @@ export interface IEvent {
   thumbnail_base64: string | null;
   alert_triggered: boolean;
   created_at: string;             // ISO 8601 datetime
+  // Phase 2: UniFi Protect event source fields
+  source_type: SourceType;        // Event source: 'rtsp', 'usb', 'protect'
+  smart_detection_type: SmartDetectionType | null; // Protect smart detection type
+  // Story P2-4.1: Doorbell ring event support
+  is_doorbell_ring: boolean;      // True if event was triggered by doorbell ring
+  // Story P2-4.4: Multi-camera event correlation
+  correlation_group_id?: string | null;  // UUID linking correlated events across cameras
+  correlated_events?: ICorrelatedEvent[]; // Related events from same correlation group
 }
 
 /**
@@ -28,6 +56,8 @@ export interface IEventFilters {
   end_date?: string;              // ISO 8601 datetime
   objects?: string[];             // Filter by detected objects
   min_confidence?: number;        // Minimum confidence score (0-100)
+  source_type?: SourceType;       // Filter by event source (Phase 2)
+  smart_detection_type?: SmartDetectionType; // Filter by smart detection type (Phase 2)
 }
 
 /**

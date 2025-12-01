@@ -21,9 +21,10 @@ class EventCreate(BaseModel):
     # Phase 2: UniFi Protect event source fields
     source_type: Literal["rtsp", "usb", "protect"] = Field(default="rtsp", description="Event source type")
     protect_event_id: Optional[str] = Field(None, max_length=100, description="UniFi Protect's native event ID")
-    smart_detection_type: Optional[Literal["person", "vehicle", "package", "animal", "motion"]] = Field(
+    smart_detection_type: Optional[Literal["person", "vehicle", "package", "animal", "motion", "ring"]] = Field(
         None, description="Protect smart detection type"
     )
+    is_doorbell_ring: bool = Field(default=False, description="Whether event was triggered by doorbell ring")
 
     @field_validator('objects_detected')
     @classmethod
@@ -50,6 +51,18 @@ class EventCreate(BaseModel):
     }
 
 
+class CorrelatedEventResponse(BaseModel):
+    """Schema for correlated events in multi-camera event display (Story P2-4.4)"""
+    id: str = Field(..., description="Event UUID")
+    camera_name: str = Field(..., description="Camera name for display")
+    thumbnail_url: Optional[str] = Field(None, description="Full URL to thumbnail image")
+    timestamp: datetime = Field(..., description="Event timestamp (UTC)")
+
+    model_config = {
+        "from_attributes": True,
+    }
+
+
 class EventResponse(BaseModel):
     """Schema for event API responses"""
     id: str = Field(..., description="Event UUID")
@@ -64,8 +77,12 @@ class EventResponse(BaseModel):
     # Phase 2: UniFi Protect event source fields
     source_type: str = Field(default="rtsp", description="Event source type (rtsp, usb, protect)")
     protect_event_id: Optional[str] = Field(None, description="UniFi Protect's native event ID")
-    smart_detection_type: Optional[str] = Field(None, description="Protect smart detection type")
+    smart_detection_type: Optional[str] = Field(None, description="Protect smart detection type (person/vehicle/package/animal/motion/ring)")
+    is_doorbell_ring: bool = Field(default=False, description="Whether event was triggered by doorbell ring")
     created_at: datetime = Field(..., description="Record creation timestamp (UTC)")
+    # Story P2-4.4: Multi-camera event correlation
+    correlation_group_id: Optional[str] = Field(None, description="UUID linking correlated events across cameras")
+    correlated_events: Optional[List["CorrelatedEventResponse"]] = Field(None, description="Related events from same correlation group")
 
     @field_validator('objects_detected', mode='before')
     @classmethod

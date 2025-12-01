@@ -853,3 +853,411 @@ def test_fts5_search_performance(test_camera):
         assert response.json()["total_count"] > 0
     finally:
         db.close()
+
+
+# ==================== Source Type Filter Tests (Phase 2) ====================
+
+def test_list_events_filter_by_source_type_single(test_camera):
+    """Test filtering events by a single source_type"""
+    db = TestingSessionLocal()
+    try:
+        # Create events with different source types
+        event_rtsp = Event(
+            id="event-rtsp",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="RTSP camera event",
+            confidence=80,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="rtsp"
+        )
+        event_protect = Event(
+            id="event-protect",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Protect camera event",
+            confidence=85,
+            objects_detected=json.dumps(["vehicle"]),
+            alert_triggered=False,
+            source_type="protect",
+            smart_detection_type="vehicle"
+        )
+        event_usb = Event(
+            id="event-usb",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="USB camera event",
+            confidence=75,
+            objects_detected=json.dumps(["animal"]),
+            alert_triggered=False,
+            source_type="usb"
+        )
+        db.add_all([event_rtsp, event_protect, event_usb])
+        db.commit()
+    finally:
+        db.close()
+
+    # Filter for protect only
+    response = client.get("/api/v1/events?source_type=protect")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_count"] == 1
+    assert data["events"][0]["source_type"] == "protect"
+    assert data["events"][0]["smart_detection_type"] == "vehicle"
+
+
+def test_list_events_filter_by_source_type_multiple(test_camera):
+    """Test filtering events by multiple source_types (comma-separated)"""
+    db = TestingSessionLocal()
+    try:
+        event_rtsp = Event(
+            id="event-rtsp",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="RTSP event",
+            confidence=80,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="rtsp"
+        )
+        event_protect = Event(
+            id="event-protect",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Protect event",
+            confidence=85,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="protect"
+        )
+        event_usb = Event(
+            id="event-usb",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="USB event",
+            confidence=75,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="usb"
+        )
+        db.add_all([event_rtsp, event_protect, event_usb])
+        db.commit()
+    finally:
+        db.close()
+
+    # Filter for rtsp and protect
+    response = client.get("/api/v1/events?source_type=rtsp,protect")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_count"] == 2
+    source_types = {e["source_type"] for e in data["events"]}
+    assert source_types == {"rtsp", "protect"}
+
+
+def test_list_events_filter_by_source_type_invalid_ignored(test_camera):
+    """Test that invalid source_type values are ignored"""
+    db = TestingSessionLocal()
+    try:
+        event = Event(
+            id="event-1",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Test event",
+            confidence=80,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="rtsp"
+        )
+        db.add(event)
+        db.commit()
+    finally:
+        db.close()
+
+    # Filter with invalid source type - should return nothing
+    # because "invalid" is not a valid source type and is filtered out
+    response = client.get("/api/v1/events?source_type=invalid")
+    assert response.status_code == 200
+    data = response.json()
+    # All events returned when filter is effectively empty after validation
+    assert data["total_count"] == 1
+
+
+def test_list_events_filter_source_type_with_other_filters(test_camera):
+    """Test source_type filter combined with other filters"""
+    db = TestingSessionLocal()
+    try:
+        event1 = Event(
+            id="event-1",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="High confidence protect event",
+            confidence=95,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="protect"
+        )
+        event2 = Event(
+            id="event-2",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Low confidence protect event",
+            confidence=50,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="protect"
+        )
+        event3 = Event(
+            id="event-3",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="High confidence rtsp event",
+            confidence=95,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            source_type="rtsp"
+        )
+        db.add_all([event1, event2, event3])
+        db.commit()
+    finally:
+        db.close()
+
+    # Filter for protect events with confidence >= 80
+    response = client.get("/api/v1/events?source_type=protect&min_confidence=80")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_count"] == 1
+    assert data["events"][0]["source_type"] == "protect"
+    assert data["events"][0]["confidence"] >= 80
+
+
+def test_event_response_includes_source_fields(test_camera):
+    """Test that event responses include source_type and smart_detection_type"""
+    db = TestingSessionLocal()
+    try:
+        event = Event(
+            id="event-protect-1",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Person detected at front door",
+            confidence=90,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=True,
+            source_type="protect",
+            smart_detection_type="person"
+        )
+        db.add(event)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/events/event-protect-1")
+    assert response.status_code == 200
+    data = response.json()
+    assert "source_type" in data
+    assert data["source_type"] == "protect"
+    assert "smart_detection_type" in data
+    assert data["smart_detection_type"] == "person"
+
+
+# ==================== Story P2-4.4: Correlated Events Tests ====================
+
+def test_get_event_with_correlated_events(test_camera):
+    """Test that GET /events/{id} returns correlated_events when correlation_group_id exists (AC7)"""
+    db = TestingSessionLocal()
+    try:
+        # Create a second camera
+        camera2 = Camera(
+            id="camera-2-corr",
+            name="Front Door Camera",
+            type="rtsp",
+            rtsp_url="rtsp://test.local/stream2",
+            frame_rate=5,
+            is_enabled=True
+        )
+        db.add(camera2)
+        db.commit()
+
+        correlation_id = "corr-group-123"
+        now = datetime.now(timezone.utc)
+
+        # Create primary event
+        event1 = Event(
+            id="event-corr-1",
+            camera_id=test_camera.id,
+            timestamp=now,
+            description="Person detected at primary camera",
+            confidence=85,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            correlation_group_id=correlation_id
+        )
+        # Create correlated event from second camera
+        event2 = Event(
+            id="event-corr-2",
+            camera_id=camera2.id,
+            timestamp=now - timedelta(seconds=5),
+            description="Person detected at secondary camera",
+            confidence=90,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            correlation_group_id=correlation_id,
+            thumbnail_path="thumbnails/2025-11-30/event-corr-2.jpg"
+        )
+        db.add_all([event1, event2])
+        db.commit()
+    finally:
+        db.close()
+
+    # Fetch the primary event - should include correlated_events
+    response = client.get("/api/v1/events/event-corr-1")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Verify correlated_events is populated
+    assert "correlated_events" in data
+    assert data["correlated_events"] is not None
+    assert len(data["correlated_events"]) == 1
+
+    # Verify correlated event structure
+    correlated = data["correlated_events"][0]
+    assert correlated["id"] == "event-corr-2"
+    assert correlated["camera_name"] == "Front Door Camera"
+    assert correlated["thumbnail_url"] == "/api/v1/thumbnails/thumbnails/2025-11-30/event-corr-2.jpg"
+    assert "timestamp" in correlated
+
+
+def test_get_event_without_correlation_returns_null(test_camera):
+    """Test that GET /events/{id} returns null correlated_events when no correlation_group_id"""
+    db = TestingSessionLocal()
+    try:
+        event = Event(
+            id="event-no-corr",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Standalone event",
+            confidence=80,
+            objects_detected=json.dumps(["vehicle"]),
+            alert_triggered=False,
+            correlation_group_id=None  # No correlation
+        )
+        db.add(event)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/events/event-no-corr")
+    assert response.status_code == 200
+    data = response.json()
+
+    # correlated_events should be null/None when no correlation
+    assert data.get("correlated_events") is None
+
+
+def test_get_event_correlation_excludes_self(test_camera):
+    """Test that correlated_events does not include the event being fetched"""
+    db = TestingSessionLocal()
+    try:
+        correlation_id = "corr-group-self"
+        now = datetime.now(timezone.utc)
+
+        # Create event with correlation
+        event = Event(
+            id="event-self",
+            camera_id=test_camera.id,
+            timestamp=now,
+            description="Self-referential test",
+            confidence=85,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            correlation_group_id=correlation_id
+        )
+        db.add(event)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/events/event-self")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Should return empty list (not None) when no other correlated events
+    # Actually based on implementation, should be None if no OTHER events in group
+    assert data.get("correlated_events") is None or len(data.get("correlated_events", [])) == 0
+
+
+def test_get_event_correlation_multiple_cameras(test_camera):
+    """Test correlated_events with 3+ cameras in same correlation group"""
+    db = TestingSessionLocal()
+    try:
+        # Create additional cameras
+        camera2 = Camera(
+            id="camera-multi-2",
+            name="Backyard Camera",
+            type="rtsp",
+            rtsp_url="rtsp://test.local/backyard",
+            frame_rate=5,
+            is_enabled=True
+        )
+        camera3 = Camera(
+            id="camera-multi-3",
+            name="Side Entrance",
+            type="usb",
+            device_index=0,
+            frame_rate=5,
+            is_enabled=True
+        )
+        db.add_all([camera2, camera3])
+        db.commit()
+
+        correlation_id = "corr-group-multi"
+        now = datetime.now(timezone.utc)
+
+        # Create events from 3 cameras
+        event1 = Event(
+            id="event-multi-1",
+            camera_id=test_camera.id,
+            timestamp=now,
+            description="Event from primary",
+            confidence=85,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            correlation_group_id=correlation_id
+        )
+        event2 = Event(
+            id="event-multi-2",
+            camera_id=camera2.id,
+            timestamp=now - timedelta(seconds=3),
+            description="Event from backyard",
+            confidence=80,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            correlation_group_id=correlation_id
+        )
+        event3 = Event(
+            id="event-multi-3",
+            camera_id=camera3.id,
+            timestamp=now - timedelta(seconds=7),
+            description="Event from side entrance",
+            confidence=75,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            correlation_group_id=correlation_id
+        )
+        db.add_all([event1, event2, event3])
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/events/event-multi-1")
+    assert response.status_code == 200
+    data = response.json()
+
+    # Should have 2 correlated events (excludes self)
+    assert data["correlated_events"] is not None
+    assert len(data["correlated_events"]) == 2
+
+    # Verify camera names
+    camera_names = {e["camera_name"] for e in data["correlated_events"]}
+    assert "Backyard Camera" in camera_names
+    assert "Side Entrance" in camera_names

@@ -1,0 +1,198 @@
+<story-context id="p2-4-1-implement-doorbell-ring-event-detection-and-handling" v="1.0">
+  <metadata>
+    <epicId>P2-4</epicId>
+    <storyId>P2-4.1</storyId>
+    <title>Implement Doorbell Ring Event Detection and Handling</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-01</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p2-4-1-implement-doorbell-ring-event-detection-and-handling.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>to detect and process doorbell ring events distinctly from motion events</iWant>
+    <soThat>users receive immediate, prioritized notifications when someone rings the doorbell</soThat>
+    <tasks>
+      <task id="1" acs="3,5">Extend Event Model for Doorbell Ring Support
+        <subtask>1.1 Add `is_doorbell_ring` (BOOLEAN DEFAULT FALSE) column to `events` table via Alembic migration</subtask>
+        <subtask>1.2 Update Event SQLAlchemy model in `backend/app/models/event.py`</subtask>
+        <subtask>1.3 Update EventResponse Pydantic schema in `backend/app/schemas/event.py`</subtask>
+        <subtask>1.4 Verify migration runs successfully and column is nullable for existing events</subtask>
+      </task>
+      <task id="2" acs="1,2">Implement Doorbell Ring Detection in Event Handler
+        <subtask>2.1 Update `ProtectEventHandler` to detect `ring` event type from uiprotect WebSocket</subtask>
+        <subtask>2.2 Create `process_doorbell_ring()` method in `protect_event_handler.py`</subtask>
+        <subtask>2.3 On ring detection: immediately fetch snapshot (bypass motion event flow)</subtask>
+        <subtask>2.4 Map doorbell ring event type to `smart_detection_type: 'ring'`</subtask>
+        <subtask>2.5 Verify enabled doorbell cameras have event processing enabled</subtask>
+      </task>
+      <task id="3" acs="4,7,8">Create Doorbell-Specific AI Prompt
+        <subtask>3.1 Create `DOORBELL_RING_PROMPT` constant in AI service or config</subtask>
+        <subtask>3.2 Prompt text: "Describe who is at the front door. Include their appearance, what they're wearing, and if they appear to be a delivery person, visitor, or solicitor."</subtask>
+        <subtask>3.3 Modify `_submit_to_ai_pipeline()` to check `is_doorbell_ring` flag and use appropriate prompt</subtask>
+        <subtask>3.4 Pass camera context (doorbell name) to AI for better descriptions</subtask>
+      </task>
+      <task id="4" acs="6">Implement Priority WebSocket Broadcast
+        <subtask>4.1 Create `DOORBELL_RING` WebSocket message type constant</subtask>
+        <subtask>4.2 Add `broadcast_doorbell_ring()` method to WebSocket manager</subtask>
+        <subtask>4.3 Include payload: `{ event_id, camera_id, camera_name, thumbnail_url, timestamp }`</subtask>
+        <subtask>4.4 Broadcast immediately upon event creation (before AI description completes for fast alert)</subtask>
+        <subtask>4.5 Send follow-up `EVENT_CREATED` message with full AI description when available</subtask>
+      </task>
+      <task id="5" acs="3,5">Update Event Storage for Doorbell Events
+        <subtask>5.1 Set `is_doorbell_ring: true` when storing ring events</subtask>
+        <subtask>5.2 Set `smart_detection_type: 'ring'` for ring events</subtask>
+        <subtask>5.3 Add priority flag or separate storage path for notification system</subtask>
+        <subtask>5.4 Ensure thumbnail is saved with event</subtask>
+      </task>
+      <task id="6" acs="all">Testing
+        <subtask>6.1 Unit test: `process_doorbell_ring()` correctly identifies ring events</subtask>
+        <subtask>6.2 Unit test: Doorbell prompt is used when `is_doorbell_ring` is true</subtask>
+        <subtask>6.3 Integration test: Ring event flows from detection to stored event</subtask>
+        <subtask>6.4 WebSocket test: `DOORBELL_RING` message is broadcast correctly</subtask>
+        <subtask>6.5 Database test: Event record has correct `is_doorbell_ring` and `smart_detection_type` values</subtask>
+        <subtask>6.6 API test: GET /events returns doorbell events with ring fields</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Given I have a UniFi Protect doorbell enabled, when someone presses the doorbell button, then the system detects this as a "ring" event (FR21)</ac>
+    <ac id="2">Ring event detection identifies event type from Protect: `ring` or doorbell-specific event and immediately fetches snapshot (don't wait for motion)</ac>
+    <ac id="3">Ring events are flagged with `is_doorbell_ring: true` in the event record</ac>
+    <ac id="4">AI uses doorbell-specific prompt: "Describe who is at the front door. Include their appearance, what they're wearing, and if they appear to be a delivery person, visitor, or solicitor." (FR23)</ac>
+    <ac id="5">Event storage sets `is_doorbell_ring: true` and `smart_detection_type: 'ring'` with priority flag for notification system</ac>
+    <ac id="6">WebSocket broadcasts `DOORBELL_RING` message type with higher priority than motion events, including: event_id, camera_id, camera_name, thumbnail_url (FR22)</ac>
+    <ac id="7">Doorbell ring events trigger AI analysis of who is at the door</ac>
+    <ac id="8">Ring events are processed through existing AI pipeline with modified prompt</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/architecture.md" relevance="high">
+        - Phase 2 architecture including ProtectEventHandler flow
+        - WebSocket protocol with EVENT_CREATED and DOORBELL_RING message types
+        - ProtectService and event processing pipeline
+      </doc>
+      <doc path="docs/epics-phase2.md" relevance="high">
+        - Epic P2-4: Doorbell Integration (FR21-FR25)
+        - Story P2-4.1 acceptance criteria
+      </doc>
+      <doc path="docs/sprint-artifacts/p2-3-4-add-event-source-type-display-in-dashboard.md" relevance="medium">
+        - Previous story learnings about smart_detection_type
+        - Badge components for source type and detection type
+      </doc>
+    </docs>
+    <code>
+      <file path="backend/app/services/protect_event_handler.py" relevance="critical">
+        - Primary file to modify for doorbell detection
+        - `_parse_event_types()` already checks for `ring` event type (line 337-341)
+        - `handle_event()` processes ring events through same pipeline as motion
+        - EVENT_TYPE_MAPPING includes `"ring": "ring"` (line 73)
+        - Need to add `process_doorbell_ring()` method for immediate handling
+      </file>
+      <file path="backend/app/models/event.py" relevance="critical">
+        - Event model needs `is_doorbell_ring` column (BOOLEAN)
+        - Already has `smart_detection_type` column (line 47)
+        - Already has `source_type` column (line 45)
+      </file>
+      <file path="backend/app/schemas/event.py" relevance="critical">
+        - EventResponse needs `is_doorbell_ring` field
+        - EventCreate needs `is_doorbell_ring` field
+        - Already has `smart_detection_type` field (lines 24-26, 67)
+      </file>
+      <file path="backend/app/services/websocket_manager.py" relevance="high">
+        - Add `broadcast_doorbell_ring()` method
+        - Existing `broadcast()` and `broadcast_alert()` patterns to follow
+      </file>
+      <file path="backend/app/services/ai_service.py" relevance="high">
+        - Add `DOORBELL_RING_PROMPT` constant
+        - Modify `generate_description()` to accept custom prompt
+        - Or modify `_submit_to_ai_pipeline()` in protect_event_handler
+      </file>
+      <file path="backend/app/services/snapshot_service.py" relevance="medium">
+        - Used by `_retrieve_snapshot()` for getting doorbell snapshots
+        - No changes needed, reuse existing implementation
+      </file>
+      <file path="backend/app/api/v1/events.py" relevance="medium">
+        - GET /events should return `is_doorbell_ring` field
+        - EventResponse schema handles serialization
+      </file>
+    </code>
+    <dependencies>
+      <dep name="uiprotect" version=">=4.0.0">UniFi Protect Python client - provides Doorbell model with `is_ringing` attribute</dep>
+      <dep name="alembic" version="current">Database migrations for `is_doorbell_ring` column</dep>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="performance">NFR2: Event-to-notification latency &lt;2 seconds - doorbell events should prioritize speed</constraint>
+    <constraint type="database">Must add migration for `is_doorbell_ring` column with DEFAULT FALSE for backwards compatibility</constraint>
+    <constraint type="api">WebSocket message format must include all required fields: event_id, camera_id, camera_name, thumbnail_url, timestamp</constraint>
+    <constraint type="integration">Ring detection already partially implemented in `_parse_event_types()` - extend, don't replace</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface type="websocket-message" name="DOORBELL_RING">
+      <description>WebSocket message for doorbell ring events, sent immediately for fast notification</description>
+      <schema>
+```json
+{
+  "type": "DOORBELL_RING",
+  "data": {
+    "event_id": "uuid",
+    "camera_id": "uuid",
+    "camera_name": "Front Door",
+    "thumbnail_url": "/api/v1/events/{event_id}/thumbnail",
+    "timestamp": "2025-12-01T10:30:00Z"
+  },
+  "timestamp": "2025-12-01T10:30:00Z"
+}
+```
+      </schema>
+    </interface>
+    <interface type="model" name="Event.is_doorbell_ring">
+      <description>Boolean flag indicating this event was triggered by a doorbell ring</description>
+      <schema>Column(Boolean, nullable=False, default=False)</schema>
+    </interface>
+    <interface type="api" name="EventResponse.is_doorbell_ring">
+      <description>Pydantic field for doorbell ring flag in API responses</description>
+      <schema>is_doorbell_ring: bool = Field(default=False, description="Whether event was triggered by doorbell ring")</schema>
+    </interface>
+    <interface type="method" name="ProtectEventHandler.process_doorbell_ring">
+      <description>Dedicated method for processing doorbell ring events with immediate notification</description>
+      <signature>async def process_doorbell_ring(self, controller_id: str, camera: Camera, protect_event_id: Optional[str]) -> Optional[Event]</signature>
+    </interface>
+    <interface type="method" name="WebSocketManager.broadcast_doorbell_ring">
+      <description>Broadcast doorbell ring notification to all connected clients</description>
+      <signature>async def broadcast_doorbell_ring(self, event_id: str, camera_id: str, camera_name: str, thumbnail_url: str) -> int</signature>
+    </interface>
+    <interface type="constant" name="DOORBELL_RING_PROMPT">
+      <description>AI prompt for describing doorbell visitors</description>
+      <value>"Describe who is at the front door. Include their appearance, what they're wearing, and if they appear to be a delivery person, visitor, or solicitor."</value>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      - Use pytest for all backend tests
+      - Mock uiprotect Doorbell objects for ring event testing
+      - Use TestingSessionLocal for database tests
+      - Assert WebSocket broadcasts contain correct message format
+    </standards>
+    <locations>
+      - `backend/tests/test_services/test_protect_event_handler.py` - Unit tests for ring detection
+      - `backend/tests/test_api/test_events.py` - API tests for doorbell events
+      - `backend/tests/test_api/test_protect.py` - Integration tests for Protect events
+      - `backend/tests/test_services/test_websocket_manager.py` - WebSocket broadcast tests
+    </locations>
+    <ideas>
+      <idea ac="1,2">Mock uiprotect Doorbell with `is_ringing=True`, verify `process_doorbell_ring()` is called</idea>
+      <idea ac="3,5">Create doorbell event via handler, query DB to verify `is_doorbell_ring=True` and `smart_detection_type='ring'`</idea>
+      <idea ac="4,8">Mock AIService, verify doorbell prompt is passed when processing ring events</idea>
+      <idea ac="6">Mock WebSocket, verify `DOORBELL_RING` message contains required fields</idea>
+      <idea ac="7">End-to-end test: ring event → snapshot → AI → stored event with description</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -120,15 +120,15 @@ development_status:
   p2-3-1-implement-protect-event-listener-and-event-handler: done
   p2-3-2-implement-snapshot-retrieval-from-protect-api: done
   p2-3-3-integrate-protect-events-with-existing-ai-pipeline: done
-  p2-3-4-add-event-source-type-display-in-dashboard: backlog
+  p2-3-4-add-event-source-type-display-in-dashboard: done
   epic-p2-3-retrospective: optional
 
   # Epic P2-4: Doorbell & Multi-Camera Features
   epic-p2-4: backlog
-  p2-4-1-implement-doorbell-ring-event-detection-and-handling: backlog
-  p2-4-2-build-doorbell-event-card-with-distinct-styling: backlog
-  p2-4-3-implement-multi-camera-event-correlation-service: backlog
-  p2-4-4-display-correlated-events-in-dashboard: backlog
+  p2-4-1-implement-doorbell-ring-event-detection-and-handling: done
+  p2-4-2-build-doorbell-event-card-with-distinct-styling: done
+  p2-4-3-implement-multi-camera-event-correlation-service: done
+  p2-4-4-display-correlated-events-in-dashboard: review
   epic-p2-4-retrospective: optional
 
   # Epic P2-5: xAI Grok Provider

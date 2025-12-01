@@ -1,0 +1,263 @@
+<story-context id="bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P2-4</epicId>
+    <storyId>4</storyId>
+    <title>Display Correlated Events in Dashboard</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-01</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p2-4-4-display-correlated-events-in-dashboard.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to see when events are correlated across cameras</iWant>
+    <soThat>I can understand the complete picture of what happened</soThat>
+    <tasks>
+      <task id="1" ac="1,2,3,8">Create CorrelationIndicator Component
+        <subtask id="1.1">Create frontend/components/events/CorrelationIndicator.tsx</subtask>
+        <subtask id="1.2">Display link chain icon and "Also captured by:" text</subtask>
+        <subtask id="1.3">Render clickable camera names as links/buttons</subtask>
+        <subtask id="1.4">Implement scroll-to-event behavior on camera name click</subtask>
+        <subtask id="1.5">Add highlight animation when scrolling to target event</subtask>
+        <subtask id="1.6">Conditionally render only when correlated_event_ids is non-empty</subtask>
+      </task>
+      <task id="2" ac="1,4,8">Enhance EventCard with Correlation Display
+        <subtask id="2.1">Import and integrate CorrelationIndicator in EventCard.tsx</subtask>
+        <subtask id="2.2">Add subtle left border or background tint for correlated events</subtask>
+        <subtask id="2.3">Pass correlation data props to CorrelationIndicator</subtask>
+        <subtask id="2.4">Ensure non-correlated events render without indicator</subtask>
+      </task>
+      <task id="3" ac="7">Backend API Enhancement for Correlated Events
+        <subtask id="3.1">Extend GET /events/{id} response to include correlated_events array</subtask>
+        <subtask id="3.2">Populate each item with: id, camera_name, thumbnail_url, timestamp</subtask>
+        <subtask id="3.3">Query events by correlation_group_id to find related events</subtask>
+        <subtask id="3.4">Exclude current event from correlated_events array</subtask>
+        <subtask id="3.5">Update Pydantic schema EventResponse to include correlated_events</subtask>
+      </task>
+      <task id="4" ac="5,6">Related Events Section in Event Detail Modal
+        <subtask id="4.1">Add "Related Events" section to EventDetailModal.tsx</subtask>
+        <subtask id="4.2">Display thumbnail grid of related events from correlation group</subtask>
+        <subtask id="4.3">Show camera name and timestamp below each thumbnail</subtask>
+        <subtask id="4.4">Implement click handler to switch modal to selected related event</subtask>
+        <subtask id="4.5">Conditionally hide section when no related events exist</subtask>
+      </task>
+      <task id="5" ac="7">Frontend Type Updates
+        <subtask id="5.1">Update frontend/types/event.ts IEvent interface with correlated_events field</subtask>
+        <subtask id="5.2">Define ICorrelatedEvent interface (id, camera_name, thumbnail_url, timestamp)</subtask>
+        <subtask id="5.3">Update API client types if needed</subtask>
+      </task>
+      <task id="6" ac="all">Testing
+        <subtask id="6.1">Unit test: CorrelationIndicator renders with correlated events</subtask>
+        <subtask id="6.2">Unit test: CorrelationIndicator hidden when no correlations</subtask>
+        <subtask id="6.3">Unit test: EventCard shows visual grouping for correlated events</subtask>
+        <subtask id="6.4">Integration test: Click camera name scrolls to related event</subtask>
+        <subtask id="6.5">API test: GET /events/{id} returns correlated_events array</subtask>
+        <subtask id="6.6">Component test: Related Events section in modal</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" verification="Visual test">Given events have been correlated, when I view a correlated event in the timeline, then I see a correlation indicator (link chain icon) at the bottom of the event card</criterion>
+    <criterion id="AC2" verification="Component test">Correlation indicator displays "Also captured by: [Camera Name], [Camera Name]" text with clickable camera names</criterion>
+    <criterion id="AC3" verification="Integration test">Clicking a camera name in correlation indicator scrolls to and highlights that related event in the timeline</criterion>
+    <criterion id="AC4" verification="Visual test">Correlated events share subtle visual connector (left border or background tint) to indicate grouping</criterion>
+    <criterion id="AC5" verification="Component test">Event detail modal includes "Related Events" section showing thumbnails from other cameras in correlation group</criterion>
+    <criterion id="AC6" verification="Integration test">Clicking a related event thumbnail in modal switches to that event's detail view</criterion>
+    <criterion id="AC7" verification="API test">GET /events/{id} API includes correlated_events array with id, camera_name, thumbnail_url, timestamp for each related event</criterion>
+    <criterion id="AC8" verification="Component test">Events without correlations display normally without correlation indicator</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase2.md</path>
+        <title>Phase 2 Epic Breakdown</title>
+        <section>Story 4.4: Display Correlated Events in Dashboard</section>
+        <snippet>FR26: Dashboard displays correlated events as related. Correlation indicator displays link chain icon, "Also captured by" text with clickable camera names.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX Design Specification</title>
+        <section>10.5 Enhanced Event Display - Correlation Indicator</section>
+        <snippet>Location: Bottom of event card. Content: "Also captured by: [Camera Name]". Visual: Link chain icon. Behavior: Click camera name scrolls to related event.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p2-4-3-implement-multi-camera-event-correlation-service.md</path>
+        <title>Previous Story P2-4.3</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>CorrelationService created. Database columns: correlation_group_id (indexed), correlated_event_ids (JSON array). Use these fields to display correlation info.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>frontend/components/events/EventCard.tsx</path>
+        <kind>component</kind>
+        <symbol>EventCard</symbol>
+        <lines>1-174</lines>
+        <reason>Main event card component - add CorrelationIndicator at bottom, add visual grouping for correlated events</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/events/EventDetailModal.tsx</path>
+        <kind>component</kind>
+        <symbol>EventDetailModal</symbol>
+        <lines>1-344</lines>
+        <reason>Event detail modal - add "Related Events" section with thumbnails from correlation group</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/types/event.ts</path>
+        <kind>types</kind>
+        <symbol>IEvent</symbol>
+        <lines>18-34</lines>
+        <reason>Event type interface - add correlated_events field and ICorrelatedEvent interface</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/api/v1/events.py</path>
+        <kind>api</kind>
+        <symbol>router</symbol>
+        <lines>1-150</lines>
+        <reason>Events API - extend GET /events/{id} to include correlated_events array</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/schemas/event.py</path>
+        <kind>schema</kind>
+        <symbol>EventResponse</symbol>
+        <lines>54-100</lines>
+        <reason>Event response schema - add correlated_events field and CorrelatedEventResponse schema</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>51-53</lines>
+        <reason>Event model with correlation_group_id and correlated_event_ids columns (from P2-4.3)</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/events/SourceTypeBadge.tsx</path>
+        <kind>component</kind>
+        <symbol>SourceTypeBadge</symbol>
+        <reason>Reference component for badge styling patterns in event cards</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/events/SmartDetectionBadge.tsx</path>
+        <kind>component</kind>
+        <symbol>SmartDetectionBadge</symbol>
+        <reason>Reference component for badge styling patterns in event cards</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <frontend>
+        <package>next@16.0.3</package>
+        <package>react@19.2.0</package>
+        <package>@tanstack/react-query@^5.90.10</package>
+        <package>lucide-react@^0.553.0</package>
+        <package>date-fns@^4.1.0</package>
+        <package>tailwind-merge@^3.4.0</package>
+        <package>class-variance-authority@^0.7.1</package>
+      </frontend>
+      <backend>
+        <package>fastapi==0.115.0</package>
+        <package>sqlalchemy>=2.0.36</package>
+        <package>pydantic>=2.10.0</package>
+        <package>pytest==7.4.3</package>
+      </backend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Use React functional components with hooks (no class components)</constraint>
+    <constraint type="pattern">Follow existing EventCard/EventDetailModal patterns for styling and structure</constraint>
+    <constraint type="pattern">Use lucide-react icons (Link2 for chain icon)</constraint>
+    <constraint type="pattern">Use TanStack Query for data fetching</constraint>
+    <constraint type="layer">Components in frontend/components/events/, types in frontend/types/</constraint>
+    <constraint type="layer">API endpoints in backend/app/api/v1/, schemas in backend/app/schemas/</constraint>
+    <constraint type="ux">Correlation indicator at bottom of event card per UX spec 10.5</constraint>
+    <constraint type="ux">Use scrollIntoView({ behavior: 'smooth', block: 'center' }) for scroll behavior</constraint>
+    <constraint type="database">Query by correlation_group_id to find related events</constraint>
+    <constraint type="database">Exclude current event from correlated_events array</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ICorrelatedEvent</name>
+      <kind>TypeScript Interface</kind>
+      <signature>
+interface ICorrelatedEvent {
+  id: string;
+  camera_name: string;
+  thumbnail_url: string | null;
+  timestamp: string;
+}
+      </signature>
+      <path>frontend/types/event.ts</path>
+    </interface>
+    <interface>
+      <name>IEvent (extended)</name>
+      <kind>TypeScript Interface</kind>
+      <signature>
+interface IEvent {
+  // ... existing fields ...
+  correlated_events?: ICorrelatedEvent[];  // NEW: Related events from same correlation group
+}
+      </signature>
+      <path>frontend/types/event.ts</path>
+    </interface>
+    <interface>
+      <name>CorrelatedEventResponse</name>
+      <kind>Pydantic Schema</kind>
+      <signature>
+class CorrelatedEventResponse(BaseModel):
+    id: str
+    camera_name: str
+    thumbnail_url: Optional[str]
+    timestamp: datetime
+      </signature>
+      <path>backend/app/schemas/event.py</path>
+    </interface>
+    <interface>
+      <name>CorrelationIndicator Props</name>
+      <kind>React Component Props</kind>
+      <signature>
+interface CorrelationIndicatorProps {
+  correlatedEvents: ICorrelatedEvent[];
+  onEventClick: (eventId: string) => void;
+}
+      </signature>
+      <path>frontend/components/events/CorrelationIndicator.tsx</path>
+    </interface>
+    <interface>
+      <name>Event Model Fields</name>
+      <kind>SQLAlchemy Model</kind>
+      <signature>
+# From P2-4.3:
+correlation_group_id = Column(String, nullable=True, index=True)
+correlated_event_ids = Column(Text, nullable=True)  # JSON array
+      </signature>
+      <path>backend/app/models/event.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Use pytest for backend API tests. Frontend tests use React Testing Library patterns.
+Backend tests in backend/tests/test_api/. Frontend would use Jest/Vitest if configured.
+Mock database operations for unit tests; use actual database for integration tests.
+Follow existing test patterns in test_events.py and test_protect.py.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_events.py</location>
+      <location>frontend/__tests__/ (if exists)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Visual test: Render EventCard with correlated event, verify CorrelationIndicator visible at bottom</idea>
+      <idea ac="AC2">Component test: CorrelationIndicator renders camera names as clickable elements</idea>
+      <idea ac="AC3">Integration test: Click camera name in indicator, verify scrollIntoView called with correct element</idea>
+      <idea ac="AC4">Visual test: Correlated EventCard has left border or background tint styling</idea>
+      <idea ac="AC5">Component test: EventDetailModal shows "Related Events" section when event has correlations</idea>
+      <idea ac="AC6">Integration test: Click related event thumbnail, verify onNavigate called with that event</idea>
+      <idea ac="AC7">API test: GET /events/{id} with correlated event returns correlated_events array with correct fields</idea>
+      <idea ac="AC8">Component test: EventCard without correlation_group_id renders without CorrelationIndicator</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { ChevronUp, AlertCircle, Loader2, Filter } from 'lucide-react';
 import { EventCard } from '@/components/events/EventCard';
+import { DoorbellEventCard } from '@/components/events/DoorbellEventCard';
 import { EventFilters } from '@/components/events/EventFilters';
 import { EventDetailModal } from '@/components/events/EventDetailModal';
 import { useEvents } from '@/lib/hooks/useEvents';
@@ -39,6 +40,16 @@ function parseFiltersFromURL(searchParams: URLSearchParams): IEventFilters {
   const minConfidence = searchParams.get('min_confidence');
   if (minConfidence) filters.min_confidence = parseInt(minConfidence, 10);
 
+  const sourceType = searchParams.get('source');
+  if (sourceType && ['rtsp', 'usb', 'protect'].includes(sourceType)) {
+    filters.source_type = sourceType as 'rtsp' | 'usb' | 'protect';
+  }
+
+  const smartDetectionType = searchParams.get('smart_detection_type');
+  if (smartDetectionType && ['person', 'vehicle', 'package', 'animal', 'motion', 'ring'].includes(smartDetectionType)) {
+    filters.smart_detection_type = smartDetectionType as 'person' | 'vehicle' | 'package' | 'animal' | 'motion' | 'ring';
+  }
+
   return filters;
 }
 
@@ -55,6 +66,12 @@ function filtersToURLParams(filters: IEventFilters): URLSearchParams {
   }
   if (filters.min_confidence !== undefined && filters.min_confidence > 0) {
     params.set('min_confidence', filters.min_confidence.toString());
+  }
+  if (filters.source_type) {
+    params.set('source', filters.source_type);
+  }
+  if (filters.smart_detection_type) {
+    params.set('smart_detection_type', filters.smart_detection_type);
   }
 
   return params;
@@ -223,13 +240,21 @@ export default function EventsPage() {
         {/* Events Timeline */}
         {!isLoading && !isError && allEvents.length > 0 && (
           <div className="space-y-4">
-            {allEvents.map((event) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                onClick={() => setSelectedEvent(event)}
-              />
-            ))}
+            {allEvents.map((event) =>
+              event.is_doorbell_ring ? (
+                <DoorbellEventCard
+                  key={event.id}
+                  event={event}
+                  onClick={() => setSelectedEvent(event)}
+                />
+              ) : (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  onClick={() => setSelectedEvent(event)}
+                />
+              )
+            )}
 
             {/* Loading More Indicator */}
             {isFetchingNextPage && (

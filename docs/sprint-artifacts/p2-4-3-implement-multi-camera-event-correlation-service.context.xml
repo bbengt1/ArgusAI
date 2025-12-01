@@ -1,0 +1,219 @@
+<story-context id="bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P2-4</epicId>
+    <storyId>3</storyId>
+    <title>Implement Multi-Camera Event Correlation Service</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-01</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p2-4-3-implement-multi-camera-event-correlation-service.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>to detect when multiple cameras capture the same real-world event</iWant>
+    <soThat>I can link related events together for comprehensive scene understanding</soThat>
+    <tasks>
+      <task id="1" ac="1,2,5">Create Correlation Service Foundation
+        <subtask id="1.1">Create backend/app/services/correlation_service.py</subtask>
+        <subtask id="1.2">Implement in-memory buffer using collections.deque with maxlen for 60-second window</subtask>
+        <subtask id="1.3">Add configuration for time window (default 10 seconds) via settings</subtask>
+        <subtask id="1.4">Implement add_event_to_buffer(event) method</subtask>
+        <subtask id="1.5">Implement find_correlation_candidates(event) method with O(n) scan</subtask>
+      </task>
+      <task id="2" ac="2,3,4,7,8">Implement Correlation Logic
+        <subtask id="2.1">Implement correlation criteria matching (time window, detection type, different cameras, same controller)</subtask>
+        <subtask id="2.2">Generate correlation_group_id (UUID) for first event in new group</subtask>
+        <subtask id="2.3">Implement group joining: if candidate has group_id, use it; else create new</subtask>
+        <subtask id="2.4">Handle simultaneous correlation (two events at same time get same group)</subtask>
+        <subtask id="2.5">Build correlated_event_ids array for all events in group</subtask>
+      </task>
+      <task id="3" ac="3,4">Database Model Updates
+        <subtask id="3.1">Add correlation_group_id column to Event model (nullable UUID)</subtask>
+        <subtask id="3.2">Add correlated_event_ids column to Event model (nullable JSON array)</subtask>
+        <subtask id="3.3">Create Alembic migration for new columns</subtask>
+        <subtask id="3.4">Add index on correlation_group_id for group lookups</subtask>
+      </task>
+      <task id="4" ac="6">Integration with Event Pipeline
+        <subtask id="4.1">Import correlation service in protect_event_handler.py</subtask>
+        <subtask id="4.2">Call correlation_service.process_event(event) after event storage</subtask>
+        <subtask id="4.3">Use fire-and-forget async pattern (don't await in main flow)</subtask>
+        <subtask id="4.4">Ensure event creation is not blocked by correlation processing</subtask>
+      </task>
+      <task id="5" ac="3,4,7">Update Database Records with Correlation
+        <subtask id="5.1">Implement update_event_correlation(event_id, group_id, correlated_ids) method</subtask>
+        <subtask id="5.2">Update all events in correlation group with updated correlated_event_ids</subtask>
+        <subtask id="5.3">Handle race conditions with database locks or atomic updates</subtask>
+      </task>
+      <task id="6" ac="all">Testing
+        <subtask id="6.1">Unit test: Correlation candidates found within time window</subtask>
+        <subtask id="6.2">Unit test: Correlation candidates NOT found outside time window</subtask>
+        <subtask id="6.3">Unit test: Same detection type correlates</subtask>
+        <subtask id="6.4">Unit test: Different detection types don't correlate</subtask>
+        <subtask id="6.5">Unit test: Same camera events don't correlate</subtask>
+        <subtask id="6.6">Unit test: Group ID generation and assignment</subtask>
+        <subtask id="6.7">Unit test: Joining existing correlation group</subtask>
+        <subtask id="6.8">Integration test: End-to-end correlation with multiple events</subtask>
+        <subtask id="6.9">Performance test: Buffer operations within acceptable latency</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" verification="Integration test">Given multiple Protect cameras are enabled, when a person/vehicle triggers events on multiple cameras within a 10-second time window, then the system correlates these events</criterion>
+    <criterion id="AC2" verification="Unit test">Correlation logic uses configurable time window (default 10 seconds), same or similar smart detection type, different cameras, same controller</criterion>
+    <criterion id="AC3" verification="Unit test">First event in group generates a correlation_group_id (UUID), correlated events receive the same ID</criterion>
+    <criterion id="AC4" verification="Unit test">Each correlated event stores correlated_event_ids JSON array referencing related events</criterion>
+    <criterion id="AC5" verification="Performance test">Correlation service maintains in-memory buffer of recent events (last 60 seconds) with O(n) scan for candidates</criterion>
+    <criterion id="AC6" verification="Unit test">Correlation check runs asynchronously after event storage (doesn't block event creation)</criterion>
+    <criterion id="AC7" verification="Unit test">When event correlates with multiple existing events, it joins the existing group</criterion>
+    <criterion id="AC8" verification="Unit test">When two events correlate simultaneously, they receive the same group ID</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase2.md</path>
+        <title>Phase 2 Epic Breakdown</title>
+        <section>Story 4.3: Implement Multi-Camera Event Correlation Service</section>
+        <snippet>FR24: System detects when multiple cameras capture the same event (time-window based). FR25: System links correlated events together in the event record. FR26: Dashboard displays correlated events as related.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Event Processing Pipeline</section>
+        <snippet>Events flow from camera capture through motion detection, event queue, AI description generation, and database storage. WebSocket broadcasts notify frontend of new events.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p2-4-2-build-doorbell-event-card-with-distinct-styling.md</path>
+        <title>Previous Story P2-4.2</title>
+        <section>Dev Agent Record</section>
+        <snippet>Smart Detection Filter added to backend. Event model has smart_detection_type and is_doorbell_ring fields. Event types available: person, vehicle, package, animal, motion, ring.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>1-62</lines>
+        <reason>Event SQLAlchemy model to extend with correlation_group_id and correlated_event_ids columns</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>service</kind>
+        <symbol>ProtectEventHandler</symbol>
+        <lines>86-950</lines>
+        <reason>Event handler to integrate correlation service call after event storage (line ~307)</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>function</kind>
+        <symbol>_store_protect_event</symbol>
+        <lines>727-800</lines>
+        <reason>Event storage method - correlation should be called after this succeeds</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/core/database.py</path>
+        <kind>module</kind>
+        <symbol>SessionLocal</symbol>
+        <reason>Database session factory for correlation service database operations</reason>
+      </artifact>
+      <artifact>
+        <path>backend/alembic/versions/</path>
+        <kind>directory</kind>
+        <reason>Location for new migration adding correlation columns to events table</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package>fastapi==0.115.0</package>
+        <package>sqlalchemy>=2.0.36</package>
+        <package>alembic>=1.14.0</package>
+        <package>pydantic>=2.10.0</package>
+        <package>pytest==7.4.3</package>
+        <package>pytest-asyncio==0.21.1</package>
+      </python>
+      <stdlib>
+        <package>collections.deque</package>
+        <package>datetime</package>
+        <package>uuid</package>
+        <package>asyncio</package>
+        <package>json</package>
+        <package>logging</package>
+      </stdlib>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Use singleton pattern for CorrelationService (like ProtectEventHandler)</constraint>
+    <constraint type="pattern">Use async/await for database operations to avoid blocking</constraint>
+    <constraint type="pattern">Fire-and-forget pattern: correlation must not block event storage</constraint>
+    <constraint type="layer">Service in backend/app/services/, model in backend/app/models/</constraint>
+    <constraint type="testing">Unit tests with pytest, use mocking for database in unit tests</constraint>
+    <constraint type="testing">Integration tests use actual database</constraint>
+    <constraint type="performance">Buffer operations must complete in O(n) where n = events in 60s window</constraint>
+    <constraint type="performance">Correlation scan should complete in less than 10ms for 1000 events</constraint>
+    <constraint type="database">Use TEXT type for correlation_group_id (SQLite compatibility)</constraint>
+    <constraint type="database">Use TEXT type for correlated_event_ids (JSON array as string)</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>Event Model Extension</name>
+      <kind>SQLAlchemy Model</kind>
+      <signature>
+correlation_group_id = Column(String, nullable=True, index=True)  # UUID as string
+correlated_event_ids = Column(Text, nullable=True)  # JSON array: ["uuid1", "uuid2"]
+      </signature>
+      <path>backend/app/models/event.py</path>
+    </interface>
+    <interface>
+      <name>CorrelationService</name>
+      <kind>Service Class</kind>
+      <signature>
+class CorrelationService:
+    def __init__(self, time_window_seconds: int = 10, buffer_max_age_seconds: int = 60)
+    async def process_event(self, event: Event) -> None  # Fire-and-forget
+    def add_to_buffer(self, event: Event) -> None
+    def find_candidates(self, event: Event) -> List[Event]
+    async def update_correlation(self, event_ids: List[str], group_id: str) -> None
+      </signature>
+      <path>backend/app/services/correlation_service.py</path>
+    </interface>
+    <interface>
+      <name>Event Storage Integration</name>
+      <kind>Function Call</kind>
+      <signature>
+# In protect_event_handler.py, after _store_protect_event():
+asyncio.create_task(correlation_service.process_event(stored_event))  # Fire-and-forget
+      </signature>
+      <path>backend/app/services/protect_event_handler.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Use pytest for all backend tests. Unit tests should mock database operations using pytest fixtures.
+Integration tests use actual SQLite database with test fixtures. Async tests use pytest-asyncio.
+Test files located in backend/tests/. Follow existing test patterns in test_services/ and test_api/.
+Performance tests should measure execution time and assert thresholds.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_correlation_service.py</location>
+      <location>backend/tests/test_api/test_events.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Integration test: Create 3 events from different cameras within 5 seconds, verify they share correlation_group_id</idea>
+      <idea ac="AC2">Unit test: Events within time window (9s) correlate; events outside (11s) don't correlate</idea>
+      <idea ac="AC2">Unit test: person+person correlates, person+vehicle doesn't correlate</idea>
+      <idea ac="AC2">Unit test: Same camera events never correlate regardless of time</idea>
+      <idea ac="AC3">Unit test: First event gets new UUID group_id, second event gets same group_id</idea>
+      <idea ac="AC4">Unit test: Verify correlated_event_ids contains all event IDs in group</idea>
+      <idea ac="AC5">Performance test: Add 1000 events to buffer, find_candidates completes in less than 10ms</idea>
+      <idea ac="AC6">Unit test: Verify event storage returns immediately, correlation runs in background</idea>
+      <idea ac="AC7">Unit test: Event C correlates with existing group {A, B} - all three get same group_id</idea>
+      <idea ac="AC8">Unit test: Events A and B arrive simultaneously, both get same group_id</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -26,6 +26,8 @@ class Event(Base):
         source_type: Event source - 'rtsp', 'usb', or 'protect' (Phase 2)
         protect_event_id: UniFi Protect's native event ID (Phase 2)
         smart_detection_type: Protect smart detection type - person/vehicle/package/animal/motion (Phase 2)
+        correlation_group_id: UUID linking correlated multi-camera events (Story P2-4.3)
+        correlated_event_ids: JSON array of related event UUIDs (Story P2-4.3)
         created_at: Record creation timestamp (UTC with timezone)
     """
 
@@ -44,7 +46,11 @@ class Event(Base):
     # Phase 2: UniFi Protect event source fields
     source_type = Column(String(20), nullable=False, default='rtsp')  # 'rtsp', 'usb', 'protect'
     protect_event_id = Column(String(100), nullable=True)  # Protect's native event ID (null for RTSP/USB)
-    smart_detection_type = Column(String(20), nullable=True)  # person/vehicle/package/animal/motion (null for RTSP/USB)
+    smart_detection_type = Column(String(20), nullable=True)  # person/vehicle/package/animal/motion/ring (null for RTSP/USB)
+    is_doorbell_ring = Column(Boolean, nullable=False, default=False)  # True if event triggered by doorbell ring (Story P2-4.1)
+    # Story P2-4.3: Multi-camera event correlation
+    correlation_group_id = Column(String, nullable=True, index=True)  # UUID linking correlated events
+    correlated_event_ids = Column(Text, nullable=True)  # JSON array: ["uuid1", "uuid2", ...]
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

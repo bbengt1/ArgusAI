@@ -7,13 +7,21 @@
 import { useState, memo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Video, ChevronDown, ChevronUp } from 'lucide-react';
-import type { IEvent } from '@/types/event';
+import type { IEvent, SmartDetectionType } from '@/types/event';
 import { getConfidenceColor } from '@/types/event';
 import { Card } from '@/components/ui/card';
+import { SourceTypeBadge } from './SourceTypeBadge';
+import { SmartDetectionBadge } from './SmartDetectionBadge';
+import { CorrelationIndicator } from './CorrelationIndicator';
+import { cn } from '@/lib/utils';
 
 interface EventCardProps {
   event: IEvent;
   onClick: () => void;
+  /** Story P2-4.4: Callback when a correlated event camera is clicked */
+  onCorrelatedEventClick?: (eventId: string) => void;
+  /** Story P2-4.4: Whether this card is currently highlighted (from correlation scroll) */
+  isHighlighted?: boolean;
 }
 
 const OBJECT_ICONS: Record<string, string> = {
@@ -33,9 +41,17 @@ function parseUTCTimestamp(timestamp: string): Date {
   return new Date(ts);
 }
 
-export const EventCard = memo(function EventCard({ event, onClick }: EventCardProps) {
+export const EventCard = memo(function EventCard({
+  event,
+  onClick,
+  onCorrelatedEventClick,
+  isHighlighted = false,
+}: EventCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [imageError, setImageError] = useState(false);
+
+  // Story P2-4.4: Check if event has correlations
+  const hasCorrelations = event.correlated_events && event.correlated_events.length > 0;
 
   const eventDate = parseUTCTimestamp(event.timestamp);
   const relativeTime = formatDistanceToNow(eventDate, {
@@ -63,8 +79,15 @@ export const EventCard = memo(function EventCard({ event, onClick }: EventCardPr
 
   return (
     <Card
-      className="overflow-hidden cursor-pointer transition-all hover:shadow-md hover:border-blue-300"
+      className={cn(
+        "overflow-hidden cursor-pointer transition-all hover:shadow-md hover:border-blue-300",
+        // Story P2-4.4: Visual grouping for correlated events (AC4)
+        hasCorrelations && "border-l-4 border-l-blue-400",
+        // Story P2-4.4: Highlight animation when scrolled to from correlation link (AC3)
+        isHighlighted && "ring-2 ring-blue-500 ring-offset-2 animate-pulse"
+      )}
       onClick={onClick}
+      data-event-id={event.id}
     >
       <div className="flex flex-col sm:flex-row">
         {/* Thumbnail */}
@@ -92,19 +115,24 @@ export const EventCard = memo(function EventCard({ event, onClick }: EventCardPr
 
         {/* Event Details */}
         <div className="flex-1 p-4 space-y-3">
-          {/* Timestamp and Camera */}
+          {/* Timestamp, Camera, and Source Type */}
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center space-x-2">
               <Video className="w-4 h-4" />
               <span>Camera {event.camera_id.slice(0, 8)}</span>
             </div>
-            <time
-              dateTime={event.timestamp}
-              title={eventDate.toLocaleString()}
-              className="font-medium"
-            >
-              {relativeTime}
-            </time>
+            <div className="flex items-center gap-2">
+              <time
+                dateTime={event.timestamp}
+                title={eventDate.toLocaleString()}
+                className="font-medium"
+              >
+                {relativeTime}
+              </time>
+              {event.source_type && (
+                <SourceTypeBadge sourceType={event.source_type} />
+              )}
+            </div>
           </div>
 
           {/* Description */}
@@ -133,8 +161,14 @@ export const EventCard = memo(function EventCard({ event, onClick }: EventCardPr
 
           {/* Confidence and Objects */}
           <div className="flex items-center justify-between flex-wrap gap-2">
-            {/* Detected Objects */}
+            {/* Detected Objects and Smart Detection Badge */}
             <div className="flex flex-wrap gap-1.5">
+              {/* Smart Detection Badge for Protect events */}
+              {event.smart_detection_type && (
+                <SmartDetectionBadge
+                  detectionType={event.smart_detection_type as SmartDetectionType}
+                />
+              )}
               {event.objects_detected.map((obj, idx) => (
                 <span
                   key={idx}
@@ -153,6 +187,14 @@ export const EventCard = memo(function EventCard({ event, onClick }: EventCardPr
               {event.confidence}% confident
             </div>
           </div>
+
+          {/* Story P2-4.4: Correlation Indicator (AC1, AC2, AC3, AC8) */}
+          {hasCorrelations && onCorrelatedEventClick && (
+            <CorrelationIndicator
+              correlatedEvents={event.correlated_events!}
+              onEventClick={onCorrelatedEventClick}
+            />
+          )}
         </div>
       </div>
     </Card>
