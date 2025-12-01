@@ -638,6 +638,15 @@ class ProtectEventHandler:
         try:
             # Lazy import to avoid circular imports (same pattern as snapshot_service)
             from app.services.ai_service import ai_service
+            from app.core.database import SessionLocal
+
+            # Ensure AI service has API keys loaded from database
+            # (The global ai_service singleton may not have keys loaded yet)
+            db = SessionLocal()
+            try:
+                await ai_service.load_api_keys_from_db(db)
+            finally:
+                db.close()
 
             # Convert base64 to numpy array (BGR format for OpenCV/AI)
             # (AC2: Use existing AIService.generate_description with image)

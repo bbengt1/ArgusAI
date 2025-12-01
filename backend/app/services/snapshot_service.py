@@ -458,20 +458,29 @@ class SnapshotService:
             height: Thumbnail height (default 180)
 
         Returns:
-            Path to saved thumbnail file
+            API URL path to thumbnail (e.g., /api/v1/thumbnails/2025-12-01/filename.jpg)
         """
         # Create thumbnail maintaining aspect ratio
         thumbnail = image.copy()
         thumbnail.thumbnail((width, height), Image.Resampling.LANCZOS)
 
-        # Generate unique filename
+        # Generate unique filename with date-based directory (consistent with RTSP events)
+        date_str = timestamp.strftime("%Y-%m-%d")
         timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
         unique_id = uuid.uuid4().hex[:8]
         filename = f"{camera_id}_{timestamp_str}_{unique_id}.jpg"
-        filepath = os.path.join(self._thumbnail_path, filename)
+
+        # Create date-based subdirectory
+        date_dir = os.path.join(self._thumbnail_path, date_str)
+        os.makedirs(date_dir, exist_ok=True)
+
+        filepath = os.path.join(date_dir, filename)
 
         # Save as JPEG
         thumbnail.save(filepath, "JPEG", quality=85)
+
+        # Return API URL path (not filesystem path) for frontend compatibility
+        api_url_path = f"/api/v1/thumbnails/{date_str}/{filename}"
 
         logger.debug(
             f"Thumbnail saved: {filepath}",
@@ -479,12 +488,13 @@ class SnapshotService:
                 "event_type": "thumbnail_saved",
                 "camera_id": camera_id,
                 "filepath": filepath,
+                "api_url_path": api_url_path,
                 "width": thumbnail.width,
                 "height": thumbnail.height
             }
         )
 
-        return filepath
+        return api_url_path
 
     def _to_base64(self, image: Image.Image) -> str:
         """

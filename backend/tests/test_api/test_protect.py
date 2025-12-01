@@ -3412,7 +3412,14 @@ class TestSnapshotProcessing:
         assert isinstance(result, SnapshotResult)
         assert result.image_base64  # Not empty
         assert result.thumbnail_path  # Not empty
-        assert os.path.exists(result.thumbnail_path)  # File created
+        # thumbnail_path is now an API URL path, verify format and file existence
+        assert result.thumbnail_path.startswith("/api/v1/thumbnails/")
+        # Extract date and filename from URL path to verify file exists
+        parts = result.thumbnail_path.split("/")  # ['', 'api', 'v1', 'thumbnails', 'YYYY-MM-DD', 'filename.jpg']
+        date_str = parts[4]
+        filename = parts[5]
+        actual_file = os.path.join(str(tmp_path), date_str, filename)
+        assert os.path.exists(actual_file)  # File created
         assert result.width > 0
         assert result.height > 0
         assert result.camera_id == "cam-123"
