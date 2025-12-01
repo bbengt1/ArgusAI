@@ -14,6 +14,8 @@ export interface INotification {
   thumbnail_url: string | null;
   read: boolean;
   created_at: string;
+  // Story P2-4.2: Doorbell ring notification support
+  is_doorbell_ring?: boolean;
 }
 
 /**
@@ -85,11 +87,26 @@ export interface IWebSocketCameraStatusChange {
 }
 
 /**
+ * WebSocket doorbell ring message payload (Story P2-4.1)
+ */
+export interface IWebSocketDoorbellRing {
+  type: 'DOORBELL_RING';
+  data: {
+    camera_id: string;
+    camera_name: string;
+    thumbnail_url: string;
+    timestamp: string;
+  };
+  timestamp: string;
+}
+
+/**
  * WebSocket message types
  */
 export type WebSocketMessage =
   | IWebSocketNotification
   | IWebSocketNewEvent
   | IWebSocketCameraStatusChange
+  | IWebSocketDoorbellRing
   | { type: 'ping' | 'pong' }
   | { type: 'ALERT_TRIGGERED'; data: { event: Record<string, unknown>; rule: Record<string, unknown> }; timestamp: string };

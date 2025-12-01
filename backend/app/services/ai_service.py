@@ -85,18 +85,40 @@ class AIProviderBase(ABC):
         image_base64: str,
         camera_name: str,
         timestamp: str,
-        detected_objects: List[str]
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
     ) -> AIResult:
-        """Generate description from base64-encoded image"""
+        """Generate description from base64-encoded image
+
+        Args:
+            image_base64: Base64-encoded JPEG image
+            camera_name: Name of the camera for context
+            timestamp: ISO 8601 timestamp
+            detected_objects: List of detected object types
+            custom_prompt: Optional custom prompt to override default (Story P2-4.1)
+        """
         pass
 
     def _build_user_prompt(
         self,
         camera_name: str,
         timestamp: str,
-        detected_objects: List[str]
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
     ) -> str:
-        """Build user prompt with context"""
+        """Build user prompt with context
+
+        Args:
+            camera_name: Name of the camera
+            timestamp: ISO 8601 timestamp
+            detected_objects: List of detected object types
+            custom_prompt: Optional custom prompt to use instead of default context (Story P2-4.1)
+        """
+        # Story P2-4.1: Use custom prompt if provided (e.g., for doorbell ring events)
+        if custom_prompt:
+            context = f"\nContext: Camera '{camera_name}' at {timestamp}.\n{custom_prompt}"
+            return context
+
         context = f"\nContext: Camera '{camera_name}' at {timestamp}."
         if detected_objects:
             context += f" Motion detected: {', '.join(detected_objects)}."
@@ -139,13 +161,14 @@ class OpenAIProvider(AIProviderBase):
         image_base64: str,
         camera_name: str,
         timestamp: str,
-        detected_objects: List[str]
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
     ) -> AIResult:
         """Generate description using OpenAI GPT-4o mini"""
         start_time = time.time()
 
         try:
-            user_prompt = self._build_user_prompt(camera_name, timestamp, detected_objects)
+            user_prompt = self._build_user_prompt(camera_name, timestamp, detected_objects, custom_prompt)
 
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -301,13 +324,14 @@ class ClaudeProvider(AIProviderBase):
         image_base64: str,
         camera_name: str,
         timestamp: str,
-        detected_objects: List[str]
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
     ) -> AIResult:
         """Generate description using Claude 3 Haiku"""
         start_time = time.time()
 
         try:
-            user_prompt = self._build_user_prompt(camera_name, timestamp, detected_objects)
+            user_prompt = self._build_user_prompt(camera_name, timestamp, detected_objects, custom_prompt)
 
             response = await self.client.messages.create(
                 model=self.model,
@@ -398,13 +422,14 @@ class GeminiProvider(AIProviderBase):
         image_base64: str,
         camera_name: str,
         timestamp: str,
-        detected_objects: List[str]
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
     ) -> AIResult:
         """Generate description using Gemini Flash"""
         start_time = time.time()
 
         try:
-            user_prompt = self._build_user_prompt(camera_name, timestamp, detected_objects)
+            user_prompt = self._build_user_prompt(camera_name, timestamp, detected_objects, custom_prompt)
             full_prompt = f"{self.system_prompt}\n\n{user_prompt}"
 
             # Decode base64 to bytes for Gemini
@@ -566,7 +591,8 @@ class AIService:
         camera_name: str,
         timestamp: Optional[str] = None,
         detected_objects: Optional[List[str]] = None,
-        sla_timeout_ms: int = 5000
+        sla_timeout_ms: int = 5000,
+        custom_prompt: Optional[str] = None
     ) -> AIResult:
         """
         Generate natural language description from camera frame.
@@ -580,6 +606,7 @@ class AIService:
             timestamp: ISO 8601 timestamp (default: now)
             detected_objects: Objects detected by motion detection
             sla_timeout_ms: Maximum time allowed in milliseconds (default: 5000ms = 5s)
+            custom_prompt: Optional custom prompt to use instead of default (Story P2-4.1)
 
         Returns:
             AIResult with description, confidence, objects, and usage stats
@@ -632,7 +659,8 @@ class AIService:
                 image_base64,
                 camera_name,
                 timestamp,
-                detected_objects
+                detected_objects,
+                custom_prompt=custom_prompt
             )
 
             # Track usage
@@ -728,7 +756,8 @@ class AIService:
         camera_name: str,
         timestamp: str,
         detected_objects: List[str],
-        max_retries: int = 3
+        max_retries: int = 3,
+        custom_prompt: Optional[str] = None
     ) -> AIResult:
         """Try API call with exponential backoff for rate limits"""
         delays = [2, 4, 8]  # Exponential backoff delays (seconds)
@@ -738,7 +767,8 @@ class AIService:
                 image_base64,
                 camera_name,
                 timestamp,
-                detected_objects
+                detected_objects,
+                custom_prompt=custom_prompt
             )
 
             # Check if rate limited (429)

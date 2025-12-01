@@ -3462,3 +3462,589 @@ class TestEventHandlerSnapshotIntegration:
         handler = ProtectEventHandler()
         assert hasattr(handler, '_retrieve_snapshot')
         assert callable(handler._retrieve_snapshot)
+
+
+# ==============================================================================
+# Story P2-4.1: Doorbell Ring Event Detection and Handling Tests
+# ==============================================================================
+
+class TestDoorbellRingConstants:
+    """Test suite for doorbell ring constants (Story P2-4.1)"""
+
+    def test_doorbell_ring_prompt_constant_defined(self):
+        """AC4: DOORBELL_RING_PROMPT constant is defined"""
+        from app.services.protect_event_handler import DOORBELL_RING_PROMPT
+
+        assert DOORBELL_RING_PROMPT is not None
+        assert isinstance(DOORBELL_RING_PROMPT, str)
+        assert len(DOORBELL_RING_PROMPT) > 0
+
+    def test_doorbell_ring_prompt_describes_visitor(self):
+        """AC4: Doorbell prompt asks for visitor description"""
+        from app.services.protect_event_handler import DOORBELL_RING_PROMPT
+
+        prompt_lower = DOORBELL_RING_PROMPT.lower()
+        # Should mention describing the person/visitor
+        assert any(word in prompt_lower for word in ['describe', 'who', 'person', 'visitor', 'front door'])
+
+    def test_ring_in_event_type_mapping(self):
+        """AC1: 'ring' is in EVENT_TYPE_MAPPING"""
+        from app.services.protect_event_handler import EVENT_TYPE_MAPPING
+
+        assert 'ring' in EVENT_TYPE_MAPPING
+        assert EVENT_TYPE_MAPPING['ring'] == 'ring'
+
+
+class TestDoorbellRingEventParsing:
+    """Test suite for doorbell ring event parsing (Story P2-4.1 AC1, AC2)"""
+
+    def test_parse_event_types_detects_doorbell_ring(self):
+        """AC1: Ring events detected via is_ringing=True on Doorbell model"""
+        from app.services.protect_event_handler import ProtectEventHandler
+
+        handler = ProtectEventHandler()
+
+        # Create mock Doorbell object with is_ringing=True
+        mock_doorbell = MagicMock()
+        mock_doorbell.is_motion_detected = False
+        mock_doorbell.smart_detect_types = []
+        mock_doorbell.is_ringing = True
+
+        event_types = handler._parse_event_types(mock_doorbell, 'Doorbell')
+
+        assert 'ring' in event_types
+
+    def test_parse_event_types_no_ring_when_not_ringing(self):
+        """Ring event NOT detected when is_ringing=False"""
+        from app.services.protect_event_handler import ProtectEventHandler
+
+        handler = ProtectEventHandler()
+
+        # Create mock Doorbell object with is_ringing=False
+        mock_doorbell = MagicMock()
+        mock_doorbell.is_motion_detected = False
+        mock_doorbell.smart_detect_types = []
+        mock_doorbell.is_ringing = False
+
+        event_types = handler._parse_event_types(mock_doorbell, 'Doorbell')
+
+        assert 'ring' not in event_types
+
+    def test_parse_event_types_no_ring_on_camera_model(self):
+        """Ring event NOT detected on Camera model (only Doorbell)"""
+        from app.services.protect_event_handler import ProtectEventHandler
+
+        handler = ProtectEventHandler()
+
+        # Create mock Camera object with is_ringing=True (shouldn't be checked)
+        mock_camera = MagicMock()
+        mock_camera.is_motion_detected = False
+        mock_camera.smart_detect_types = []
+        mock_camera.is_ringing = True
+
+        event_types = handler._parse_event_types(mock_camera, 'Camera')
+
+        # Ring should NOT be detected because it's a Camera, not Doorbell
+        assert 'ring' not in event_types
+
+    def test_parse_event_types_ring_with_motion(self):
+        """Doorbell can have both ring and motion detected"""
+        from app.services.protect_event_handler import ProtectEventHandler
+
+        handler = ProtectEventHandler()
+
+        # Create mock Doorbell with both motion and ring
+        mock_doorbell = MagicMock()
+        mock_doorbell.is_motion_detected = True
+        mock_doorbell.smart_detect_types = ['person']
+        mock_doorbell.is_ringing = True
+
+        event_types = handler._parse_event_types(mock_doorbell, 'Doorbell')
+
+        assert 'ring' in event_types
+        assert 'motion' in event_types
+        assert 'smart_detect_person' in event_types
+
+
+class TestDoorbellRingEventModel:
+    """Test suite for Event model doorbell ring support (Story P2-4.1 AC3, AC5)"""
+
+    def test_event_model_has_is_doorbell_ring_column(self):
+        """AC3: Event model has is_doorbell_ring column"""
+        from app.models.event import Event
+
+        assert hasattr(Event, 'is_doorbell_ring')
+
+    def test_event_model_is_doorbell_ring_defaults_to_false(self):
+        """AC3: is_doorbell_ring defaults to False"""
+        from app.models.event import Event
+
+        # Get the column default
+        column = Event.__table__.columns['is_doorbell_ring']
+        assert column.default is not None
+        # Default should be False (0)
+        assert column.default.arg == False
+
+    def test_event_create_schema_has_is_doorbell_ring(self):
+        """AC3: EventCreate schema has is_doorbell_ring field"""
+        from app.schemas.event import EventCreate
+
+        schema = EventCreate.model_json_schema()
+        assert 'is_doorbell_ring' in schema['properties']
+        # Check default
+        assert schema['properties']['is_doorbell_ring']['default'] == False
+
+    def test_event_response_schema_has_is_doorbell_ring(self):
+        """AC3: EventResponse schema has is_doorbell_ring field"""
+        from app.schemas.event import EventResponse
+
+        schema = EventResponse.model_json_schema()
+        assert 'is_doorbell_ring' in schema['properties']
+
+    def test_event_create_with_doorbell_ring_true(self):
+        """AC5: EventCreate accepts is_doorbell_ring=True"""
+        from app.schemas.event import EventCreate
+        from datetime import datetime, timezone
+
+        event_data = {
+            "camera_id": "test-camera-id",
+            "timestamp": datetime.now(timezone.utc),
+            "description": "Person at the front door",
+            "confidence": 85,
+            "objects_detected": ["person"],
+            "source_type": "protect",
+            "smart_detection_type": "ring",
+            "is_doorbell_ring": True
+        }
+
+        event = EventCreate(**event_data)
+        assert event.is_doorbell_ring == True
+        assert event.smart_detection_type == "ring"
+
+
+class TestDoorbellRingWebSocketBroadcast:
+    """Test suite for doorbell ring WebSocket broadcast (Story P2-4.1 AC6)"""
+
+    def test_event_handler_has_broadcast_doorbell_ring_method(self):
+        """Event handler has _broadcast_doorbell_ring method"""
+        from app.services.protect_event_handler import ProtectEventHandler
+
+        handler = ProtectEventHandler()
+        assert hasattr(handler, '_broadcast_doorbell_ring')
+        assert callable(handler._broadcast_doorbell_ring)
+
+    @pytest.mark.asyncio
+    async def test_broadcast_doorbell_ring_sends_correct_message_type(self):
+        """AC6: DOORBELL_RING WebSocket message is broadcast"""
+        from app.services.protect_event_handler import ProtectEventHandler
+        from datetime import datetime, timezone
+
+        handler = ProtectEventHandler()
+
+        with patch('app.services.websocket_manager.get_websocket_manager') as mock_get_ws:
+            mock_ws = MagicMock()
+            mock_ws.broadcast = AsyncMock(return_value=2)
+            mock_get_ws.return_value = mock_ws
+
+            timestamp = datetime.now(timezone.utc)
+            clients = await handler._broadcast_doorbell_ring(
+                camera_id="test-cam",
+                camera_name="Front Door",
+                thumbnail_url="/api/v1/thumbnails/2025-01-01/test.jpg",
+                timestamp=timestamp
+            )
+
+            assert clients == 2
+            mock_ws.broadcast.assert_called_once()
+
+            # Verify message format
+            call_args = mock_ws.broadcast.call_args[0][0]
+            assert call_args['type'] == 'DOORBELL_RING'
+            assert call_args['data']['camera_id'] == 'test-cam'
+            assert call_args['data']['camera_name'] == 'Front Door'
+            assert call_args['data']['thumbnail_url'] == '/api/v1/thumbnails/2025-01-01/test.jpg'
+            assert 'timestamp' in call_args['data']
+
+    @pytest.mark.asyncio
+    async def test_broadcast_doorbell_ring_handles_errors_gracefully(self):
+        """Broadcast errors don't crash the handler"""
+        from app.services.protect_event_handler import ProtectEventHandler
+        from datetime import datetime, timezone
+
+        handler = ProtectEventHandler()
+
+        with patch('app.services.websocket_manager.get_websocket_manager') as mock_get_ws:
+            mock_ws = MagicMock()
+            mock_ws.broadcast = AsyncMock(side_effect=Exception("WebSocket error"))
+            mock_get_ws.return_value = mock_ws
+
+            # Should not raise, just return 0
+            clients = await handler._broadcast_doorbell_ring(
+                camera_id="test-cam",
+                camera_name="Front Door",
+                thumbnail_url="/test.jpg",
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            assert clients == 0
+
+
+class TestDoorbellRingAIPrompt:
+    """Test suite for doorbell-specific AI prompt (Story P2-4.1 AC4, AC7, AC8)"""
+
+    def test_ai_provider_base_build_user_prompt_with_custom_prompt(self):
+        """AC4: _build_user_prompt handles custom_prompt parameter"""
+        from app.services.ai_service import AIProviderBase
+
+        # Create a concrete implementation for testing
+        class TestProvider(AIProviderBase):
+            async def generate_description(self, *args, **kwargs):
+                pass
+
+        provider = TestProvider(api_key="test")
+
+        # Test with custom prompt
+        prompt = provider._build_user_prompt(
+            camera_name="Front Door",
+            timestamp="2025-01-01T12:00:00Z",
+            detected_objects=["person"],
+            custom_prompt="Describe who is at the door."
+        )
+
+        # Should use custom prompt, not default template
+        assert "Describe who is at the door" in prompt
+        assert "Front Door" in prompt  # Camera context should still be present
+
+    def test_ai_provider_base_build_user_prompt_without_custom_prompt(self):
+        """_build_user_prompt uses default template without custom_prompt"""
+        from app.services.ai_service import AIProviderBase
+
+        class TestProvider(AIProviderBase):
+            async def generate_description(self, *args, **kwargs):
+                pass
+
+        provider = TestProvider(api_key="test")
+
+        # Test without custom prompt
+        prompt = provider._build_user_prompt(
+            camera_name="Front Door",
+            timestamp="2025-01-01T12:00:00Z",
+            detected_objects=["person"]
+        )
+
+        # Should use default template
+        assert "WHO" in prompt or "Describe what you see" in prompt
+
+    def test_ai_service_generate_description_signature_has_custom_prompt(self):
+        """AC4: AIService.generate_description accepts custom_prompt parameter"""
+        from app.services.ai_service import AIService
+        import inspect
+
+        sig = inspect.signature(AIService.generate_description)
+        params = list(sig.parameters.keys())
+
+        assert 'custom_prompt' in params
+
+    def test_openai_provider_signature_has_custom_prompt(self):
+        """OpenAIProvider.generate_description accepts custom_prompt"""
+        from app.services.ai_service import OpenAIProvider
+        import inspect
+
+        sig = inspect.signature(OpenAIProvider.generate_description)
+        params = list(sig.parameters.keys())
+
+        assert 'custom_prompt' in params
+
+    def test_claude_provider_signature_has_custom_prompt(self):
+        """ClaudeProvider.generate_description accepts custom_prompt"""
+        from app.services.ai_service import ClaudeProvider
+        import inspect
+
+        sig = inspect.signature(ClaudeProvider.generate_description)
+        params = list(sig.parameters.keys())
+
+        assert 'custom_prompt' in params
+
+    def test_gemini_provider_signature_has_custom_prompt(self):
+        """GeminiProvider.generate_description accepts custom_prompt"""
+        from app.services.ai_service import GeminiProvider
+        import inspect
+
+        sig = inspect.signature(GeminiProvider.generate_description)
+        params = list(sig.parameters.keys())
+
+        assert 'custom_prompt' in params
+
+
+class TestDoorbellRingEventStorage:
+    """Test suite for doorbell ring event storage (Story P2-4.1 AC5)"""
+
+    @pytest.mark.asyncio
+    async def test_store_protect_event_sets_is_doorbell_ring(self):
+        """AC5: _store_protect_event sets is_doorbell_ring=True for ring events"""
+        from app.services.protect_event_handler import ProtectEventHandler
+        from app.services.snapshot_service import SnapshotResult
+        from datetime import datetime, timezone
+        from dataclasses import dataclass
+
+        handler = ProtectEventHandler()
+
+        # Create mock AI result
+        @dataclass
+        class MockAIResult:
+            description: str = "Person at front door"
+            confidence: int = 85
+            objects_detected: list = None
+            provider: str = "openai"
+            success: bool = True
+            error: str = None
+
+            def __post_init__(self):
+                if self.objects_detected is None:
+                    self.objects_detected = ["person"]
+
+        mock_ai = MockAIResult()
+
+        # Create mock snapshot result
+        snapshot = SnapshotResult(
+            image_base64="base64data",
+            thumbnail_path="/api/v1/thumbnails/test.jpg",
+            width=1920,
+            height=1080,
+            camera_id="test-cam",
+            timestamp=datetime.now(timezone.utc)
+        )
+
+        # Create mock camera
+        mock_camera = MagicMock()
+        mock_camera.id = "test-cam"
+        mock_camera.name = "Front Door Doorbell"
+
+        # Mock database
+        mock_db = MagicMock()
+        mock_db.add = MagicMock()
+        mock_db.commit = MagicMock()
+        mock_db.refresh = MagicMock()
+
+        # Call with is_doorbell_ring=True
+        event = await handler._store_protect_event(
+            db=mock_db,
+            ai_result=mock_ai,
+            snapshot_result=snapshot,
+            camera=mock_camera,
+            event_type="ring",
+            protect_event_id="protect-123",
+            is_doorbell_ring=True
+        )
+
+        # Verify the event was created with is_doorbell_ring=True
+        assert mock_db.add.called
+        added_event = mock_db.add.call_args[0][0]
+        assert added_event.is_doorbell_ring == True
+        assert added_event.smart_detection_type == "ring"
+        assert added_event.source_type == "protect"
+
+
+class TestDoorbellRingEventCreatedBroadcast:
+    """Test suite for EVENT_CREATED broadcast including is_doorbell_ring (Story P2-4.1)"""
+
+    @pytest.mark.asyncio
+    async def test_broadcast_event_created_includes_is_doorbell_ring(self):
+        """EVENT_CREATED message includes is_doorbell_ring field"""
+        from app.services.protect_event_handler import ProtectEventHandler
+        from datetime import datetime, timezone
+
+        handler = ProtectEventHandler()
+
+        # Create mock event with is_doorbell_ring=True
+        mock_event = MagicMock()
+        mock_event.id = "event-123"
+        mock_event.camera_id = "cam-123"
+        mock_event.timestamp = datetime.now(timezone.utc)
+        mock_event.description = "Person at door"
+        mock_event.confidence = 85
+        mock_event.objects_detected = '["person"]'
+        mock_event.thumbnail_path = "/test.jpg"
+        mock_event.source_type = "protect"
+        mock_event.smart_detection_type = "ring"
+        mock_event.protect_event_id = "protect-123"
+        mock_event.is_doorbell_ring = True
+
+        mock_camera = MagicMock()
+        mock_camera.name = "Front Door"
+
+        with patch('app.services.websocket_manager.get_websocket_manager') as mock_get_ws:
+            mock_ws = MagicMock()
+            mock_ws.broadcast = AsyncMock(return_value=1)
+            mock_get_ws.return_value = mock_ws
+
+            await handler._broadcast_event_created(mock_event, mock_camera)
+
+            # Verify is_doorbell_ring is in the message
+            call_args = mock_ws.broadcast.call_args[0][0]
+            assert call_args['type'] == 'EVENT_CREATED'
+            assert call_args['data']['is_doorbell_ring'] == True
+
+
+class TestDoorbellRingIntegration:
+    """Integration tests for full doorbell ring event flow (Story P2-4.1)"""
+
+    @patch('app.services.protect_event_handler.SessionLocal', TestingSessionLocal)
+    @pytest.mark.asyncio
+    async def test_full_doorbell_ring_flow(self):
+        """AC1-8: Full integration test for doorbell ring event"""
+        from app.services.protect_event_handler import (
+            ProtectEventHandler, DOORBELL_RING_PROMPT
+        )
+        from app.services.snapshot_service import SnapshotResult
+        from datetime import datetime, timezone
+
+        handler = ProtectEventHandler()
+        handler.clear_event_tracking()
+
+        # Create a real camera in the test database
+        db = TestingSessionLocal()
+        try:
+            camera = Camera(
+                name="Front Door Doorbell",
+                type="rtsp",
+                source_type="protect",
+                protect_camera_id="protect-doorbell-123",
+                is_enabled=True,
+                smart_detection_types='["ring"]'  # Configured to process rings
+            )
+            db.add(camera)
+            db.commit()
+            db.refresh(camera)
+            camera_id = str(camera.id)
+
+            # Create mock Doorbell event message (must set __name__ to 'Doorbell')
+            mock_msg = MagicMock()
+            mock_msg.new_obj = MagicMock()
+            type(mock_msg.new_obj).__name__ = "Doorbell"
+            mock_msg.new_obj.id = "protect-doorbell-123"
+            mock_msg.new_obj.is_motion_detected = False
+            mock_msg.new_obj.smart_detect_types = []
+            mock_msg.new_obj.is_ringing = True
+            mock_msg.new_obj.last_motion = None
+            mock_msg.new_obj.last_smart_detect = None
+
+            # Mock snapshot result
+            mock_snapshot = SnapshotResult(
+                image_base64="base64imagedata",
+                thumbnail_path="/api/v1/thumbnails/test.jpg",
+                width=1920,
+                height=1080,
+                camera_id=camera_id,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            # Mock AI result
+            mock_ai_result = MagicMock()
+            mock_ai_result.description = "Person in blue jacket standing at front door"
+            mock_ai_result.confidence = 90
+            mock_ai_result.objects_detected = ["person"]
+            mock_ai_result.success = True
+            mock_ai_result.error = None
+
+            # Mock stored event
+            mock_event = MagicMock()
+            mock_event.id = "event-123"
+            mock_event.camera_id = camera_id
+            mock_event.timestamp = datetime.now(timezone.utc)
+            mock_event.description = mock_ai_result.description
+            mock_event.confidence = 90
+            mock_event.objects_detected = '["person"]'
+            mock_event.thumbnail_path = "/test.jpg"
+            mock_event.source_type = "protect"
+            mock_event.smart_detection_type = "ring"
+            mock_event.protect_event_id = "protect-123"
+            mock_event.is_doorbell_ring = True
+
+            with patch('app.services.protect_event_handler.get_snapshot_service') as mock_snapshot_svc, \
+                 patch.object(handler, '_submit_to_ai_pipeline', new_callable=AsyncMock) as mock_ai_submit, \
+                 patch.object(handler, '_store_protect_event', new_callable=AsyncMock) as mock_store, \
+                 patch.object(handler, '_broadcast_doorbell_ring', new_callable=AsyncMock) as mock_doorbell_broadcast, \
+                 patch.object(handler, '_broadcast_event_created', new_callable=AsyncMock) as mock_event_broadcast:
+
+                mock_service = MagicMock()
+                mock_service.get_snapshot = AsyncMock(return_value=mock_snapshot)
+                mock_snapshot_svc.return_value = mock_service
+
+                mock_ai_submit.return_value = mock_ai_result
+                mock_store.return_value = mock_event
+                mock_doorbell_broadcast.return_value = 3
+                mock_event_broadcast.return_value = 3
+
+                # Execute the handler
+                result = await handler.handle_event("controller-1", mock_msg)
+
+                # Verify: Event was processed
+                assert result == True
+
+                # Verify: Doorbell ring broadcast was called BEFORE AI processing
+                mock_doorbell_broadcast.assert_called_once()
+                doorbell_call_args = mock_doorbell_broadcast.call_args
+                assert doorbell_call_args[1]['camera_id'] == camera_id
+                assert doorbell_call_args[1]['camera_name'] == "Front Door Doorbell"
+
+                # Verify: AI submission used doorbell prompt (is_doorbell_ring=True)
+                mock_ai_submit.assert_called_once()
+                ai_call_args = mock_ai_submit.call_args
+                assert ai_call_args[1]['is_doorbell_ring'] == True
+
+                # Verify: Event was stored with is_doorbell_ring=True
+                # _store_protect_event(db, ai_result, snapshot_result, camera, event_type, protect_event_id, is_doorbell_ring)
+                mock_store.assert_called_once()
+                store_call_args = mock_store.call_args
+                # Check positional args: event_type is arg[4], is_doorbell_ring may be kwarg
+                store_args = store_call_args[0]  # positional args
+                store_kwargs = store_call_args[1]  # keyword args
+                assert store_args[4] == "ring"  # event_type
+                assert store_kwargs.get('is_doorbell_ring', False) == True
+
+                # Verify: EVENT_CREATED broadcast was called
+                mock_event_broadcast.assert_called_once()
+        finally:
+            db.close()
+
+
+class TestDoorbellRingDatabaseMigration:
+    """Test suite for doorbell ring database migration (Story P2-4.1 AC3)"""
+
+    def test_is_doorbell_ring_column_exists_in_events_table(self):
+        """AC3: is_doorbell_ring column exists in events table"""
+        from sqlalchemy import inspect as sa_inspect
+
+        inspector = sa_inspect(engine)
+        columns = {col['name'] for col in inspector.get_columns('events')}
+
+        assert 'is_doorbell_ring' in columns
+
+    def test_is_doorbell_ring_column_is_boolean(self):
+        """AC3: is_doorbell_ring column is BOOLEAN type"""
+        from sqlalchemy import inspect as sa_inspect
+
+        inspector = sa_inspect(engine)
+        columns = inspector.get_columns('events')
+        is_doorbell_ring_col = next(
+            (col for col in columns if col['name'] == 'is_doorbell_ring'),
+            None
+        )
+
+        assert is_doorbell_ring_col is not None
+        assert 'BOOLEAN' in str(is_doorbell_ring_col['type']).upper()
+
+    def test_is_doorbell_ring_column_not_nullable(self):
+        """AC3: is_doorbell_ring column is NOT NULL"""
+        from sqlalchemy import inspect as sa_inspect
+
+        inspector = sa_inspect(engine)
+        columns = inspector.get_columns('events')
+        is_doorbell_ring_col = next(
+            (col for col in columns if col['name'] == 'is_doorbell_ring'),
+            None
+        )
+
+        assert is_doorbell_ring_col is not None
+        assert is_doorbell_ring_col['nullable'] == False

@@ -312,6 +312,12 @@ export const apiClient = {
       if (filters?.min_confidence !== undefined) {
         params.append('min_confidence', String(filters.min_confidence));
       }
+      if (filters?.source_type) {
+        params.append('source_type', filters.source_type);
+      }
+      if (filters?.smart_detection_type) {
+        params.append('smart_detection_type', filters.smart_detection_type);
+      }
 
       const queryString = params.toString();
       const endpoint = `/events${queryString ? `?${queryString}` : ''}`;

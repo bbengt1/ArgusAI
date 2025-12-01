@@ -1,0 +1,199 @@
+<story-context id="p2-3-4-add-event-source-type-display-in-dashboard" v="1.0">
+  <metadata>
+    <epicId>P2-3</epicId>
+    <storyId>4</storyId>
+    <title>Add Event Source Type Display in Dashboard</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-01</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p2-3-4-add-event-source-type-display-in-dashboard.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to see which camera system captured each event</iWant>
+    <soThat>I can distinguish between Protect and RTSP/USB camera events</soThat>
+    <tasks>
+      <task id="1" name="Create Source Type Badge Component" acs="1,2,3,10">
+        <subtask>1.1 Create frontend/components/events/SourceTypeBadge.tsx</subtask>
+        <subtask>1.2 Import Lucide icons: Shield (Protect), Camera (RTSP), Usb (USB)</subtask>
+        <subtask>1.3 Accept sourceType prop with values: 'protect', 'rtsp', 'usb'</subtask>
+        <subtask>1.4 Render icon + text with muted styling (text-muted-foreground, text-xs)</subtask>
+        <subtask>1.5 Position badge in top-right corner of EventCard</subtask>
+      </task>
+      <task id="2" name="Create Smart Detection Badge Component" acs="4,5">
+        <subtask>2.1 Create frontend/components/events/SmartDetectionBadge.tsx</subtask>
+        <subtask>2.2 Import Lucide icons: User, Car, Package, PawPrint, Waves</subtask>
+        <subtask>2.3 Accept detectionType prop: 'person', 'vehicle', 'package', 'animal', 'motion'</subtask>
+        <subtask>2.4 Implement color scheme per type (Blue/Purple/Orange/Green/Gray)</subtask>
+        <subtask>2.5 Render as pill badge with icon + text</subtask>
+      </task>
+      <task id="3" name="Update EventCard Component" acs="1,2,3,4,5,10">
+        <subtask>3.1 Import SourceTypeBadge and SmartDetectionBadge</subtask>
+        <subtask>3.2 Add source_type and smart_detection_type to props/types</subtask>
+        <subtask>3.3 Render SourceTypeBadge in header (top-right, next to timestamp)</subtask>
+        <subtask>3.4 Render SmartDetectionBadge below description (if exists)</subtask>
+        <subtask>3.5 Preserve existing layout (regression-free)</subtask>
+      </task>
+      <task id="4" name="Add Backend Source Type Filter" acs="8">
+        <subtask>4.1 Add source_type query param to GET /api/v1/events</subtask>
+        <subtask>4.2 Update EventFilters Pydantic schema</subtask>
+        <subtask>4.3 Add SQLAlchemy filter: Event.source_type == filter_value</subtask>
+        <subtask>4.4 Allow multiple values: source_type=protect,rtsp</subtask>
+      </task>
+      <task id="5" name="Add Source Filter to Event Timeline UI" acs="6,7">
+        <subtask>5.1 Add "Source" dropdown to EventFilters component</subtask>
+        <subtask>5.2 Options: "All Sources", "UniFi Protect", "RTSP", "USB"</subtask>
+        <subtask>5.3 Update filter state to include source_type</subtask>
+        <subtask>5.4 Sync filter to URL query params (?source=protect)</subtask>
+        <subtask>5.5 Parse source from URL on page load</subtask>
+      </task>
+      <task id="6" name="Update TypeScript Types" acs="1,4">
+        <subtask>6.1 Update IEvent to include source_type: 'rtsp' | 'usb' | 'protect'</subtask>
+        <subtask>6.2 Update IEvent to include smart_detection_type: string | null</subtask>
+        <subtask>6.3 Update IEventFilters to include source_type filter</subtask>
+      </task>
+      <task id="7" name="Responsive and Mobile Testing" acs="9">
+        <subtask>7.1 Test badge rendering at mobile breakpoint</subtask>
+        <subtask>7.2 Ensure badges don't overflow</subtask>
+        <subtask>7.3 Test filter dropdown on mobile</subtask>
+      </task>
+      <task id="8" name="Testing" acs="all">
+        <subtask>8.1-8.6 Unit tests, integration tests, API tests, regression tests</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Event timeline shows source type indicator for each event (FR36)</criterion>
+    <criterion id="AC2">Source type badge: Protect (Shield), RTSP (Camera), USB (Usb) with muted styling</criterion>
+    <criterion id="AC3">Badge position: Top-right of event card, next to timestamp</criterion>
+    <criterion id="AC4">Smart detection badge colors: Person (Blue), Vehicle (Purple), Package (Orange), Animal (Green), Motion (Gray)</criterion>
+    <criterion id="AC5">Smart detection badge position: Below AI description, with object badges</criterion>
+    <criterion id="AC6">Event timeline filter includes "Source" dropdown: All, UniFi Protect, RTSP, USB</criterion>
+    <criterion id="AC7">Source filter persists in URL query params</criterion>
+    <criterion id="AC8">API /api/v1/events supports source_type query parameter</criterion>
+    <criterion id="AC9">Badges render correctly on mobile (responsive)</criterion>
+    <criterion id="AC10">Existing event card functionality unchanged (regression-free)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/ux-design-specification.md" title="UX Design Specification" section="10.5 Enhanced Event Display">
+        Source type indicator: top-right corner, Shield/Camera/USB icons. Smart detection badge: color-coded pills below description.
+      </doc>
+      <doc path="docs/epics-phase2.md" title="Phase 2 Epics" section="Story 3.4">
+        Full acceptance criteria, technical notes for SourceTypeBadge.tsx, SmartDetectionBadge.tsx, EventCard updates.
+      </doc>
+      <doc path="docs/architecture.md" title="Architecture" section="Phase 2 Additions">
+        Frontend component structure, event processing pipeline, WebSocket broadcasts.
+      </doc>
+      <doc path="docs/sprint-artifacts/p2-3-3-integrate-protect-events-with-existing-ai-pipeline.md" title="Story P2-3.3" section="Dev Notes">
+        Event model already extended with source_type, protect_event_id, smart_detection_type columns. Schema already updated.
+      </doc>
+    </docs>
+
+    <code>
+      <file path="frontend/components/events/EventCard.tsx" kind="component" lines="1-161" reason="Primary component to modify - add SourceTypeBadge and SmartDetectionBadge">
+        <symbol>EventCard</symbol>
+        <note>Header area lines 94-108 for badge placement. Objects area lines 134-155 for smart detection badge.</note>
+      </file>
+      <file path="frontend/components/events/EventFilters.tsx" kind="component" lines="1-300" reason="Add source type dropdown filter">
+        <symbol>EventFilters</symbol>
+        <note>Follow existing pattern for camera/object filters. Add Source section between Cameras and Object Types.</note>
+      </file>
+      <file path="frontend/types/event.ts" kind="types" lines="1-68" reason="Update IEvent and IEventFilters interfaces">
+        <symbol>IEvent, IEventFilters</symbol>
+        <note>Add source_type: 'rtsp' | 'usb' | 'protect' and smart_detection_type: string | null to IEvent.</note>
+      </file>
+      <file path="backend/app/api/v1/events.py" kind="router" lines="1-100" reason="Add source_type filter parameter">
+        <symbol>get_events</symbol>
+        <note>Add source_type query param, support multiple values (protect,rtsp), filter via Event.source_type.</note>
+      </file>
+      <file path="backend/app/schemas/event.py" kind="schema" lines="19-68" reason="EventResponse already has source_type, smart_detection_type">
+        <symbol>EventCreate, EventResponse</symbol>
+        <note>source_type (line 22) and smart_detection_type (line 24) already defined. Add to EventFilterParams.</note>
+      </file>
+      <file path="backend/app/models/event.py" kind="model" lines="42-48" reason="Event model already has source_type, smart_detection_type columns">
+        <symbol>Event</symbol>
+        <note>source_type (line 45) and smart_detection_type (line 47) already in model from P2-3.3.</note>
+      </file>
+      <file path="frontend/app/events/page.tsx" kind="page" reason="Handle source filter in URL query params">
+        <symbol>EventsPage</symbol>
+        <note>Parse ?source= from URL, pass to EventFilters, update on filter change.</note>
+      </file>
+    </code>
+
+    <dependencies>
+      <frontend>
+        <package name="lucide-react" version="^0.553.0">Icons: Shield, Camera, Usb, User, Car, Package, PawPrint, Waves</package>
+        <package name="tailwindcss" version="^4">bg-blue-100, text-blue-800, etc for badge colors</package>
+        <package name="@radix-ui/react-select" version="^2.2.6">Dropdown for source filter</package>
+        <package name="next" version="16.0.3">useSearchParams for URL query handling</package>
+      </frontend>
+      <backend>
+        <package name="fastapi" version="0.115.0">Query parameter handling</package>
+        <package name="sqlalchemy" version=">=2.0.36">Event.source_type filtering</package>
+        <package name="pydantic" version=">=2.10.0">EventFilterParams schema</package>
+      </backend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing EventCard layout - badge placement must not disrupt current structure</constraint>
+    <constraint type="pattern">Use shadcn/ui components (Badge not available, use manual Tailwind styling)</constraint>
+    <constraint type="pattern">Source filter dropdown follows same pattern as Camera filter checkbox list</constraint>
+    <constraint type="pattern">URL query params use lowercase: ?source=protect not ?source=Protect</constraint>
+    <constraint type="regression">Existing event display must remain unchanged when source_type is null/rtsp</constraint>
+    <constraint type="mobile">Badges must not overflow on mobile (<640px), use flex-wrap if needed</constraint>
+    <constraint type="accessibility">Badge icons need sr-only labels for screen readers</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="GET /api/v1/events" kind="REST endpoint">
+      <signature>GET /api/v1/events?source_type=protect&amp;source_type=rtsp&amp;...</signature>
+      <path>backend/app/api/v1/events.py</path>
+      <note>Add source_type as Query parameter, allow List[str] for multiple values</note>
+    </interface>
+    <interface name="IEvent" kind="TypeScript interface">
+      <signature>interface IEvent { ...; source_type: 'rtsp' | 'usb' | 'protect'; smart_detection_type: string | null; }</signature>
+      <path>frontend/types/event.ts</path>
+    </interface>
+    <interface name="EventResponse" kind="Pydantic schema">
+      <signature>class EventResponse(BaseModel): source_type: str; smart_detection_type: Optional[str]</signature>
+      <path>backend/app/schemas/event.py</path>
+      <note>Already exists from P2-3.3</note>
+    </interface>
+    <interface name="SourceTypeBadge" kind="React component">
+      <signature>SourceTypeBadge({ sourceType }: { sourceType: 'rtsp' | 'usb' | 'protect' })</signature>
+      <path>frontend/components/events/SourceTypeBadge.tsx (NEW)</path>
+    </interface>
+    <interface name="SmartDetectionBadge" kind="React component">
+      <signature>SmartDetectionBadge({ detectionType }: { detectionType: 'person' | 'vehicle' | 'package' | 'animal' | 'motion' })</signature>
+      <path>frontend/components/events/SmartDetectionBadge.tsx (NEW)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Frontend: Jest + React Testing Library for component tests. Test all badge variants.
+      Backend: pytest for API tests. Use TestClient from FastAPI.
+      Mobile: Manual testing at 320px, 640px, 1024px breakpoints.
+      URL params: Test browser back/forward with filter changes.
+    </standards>
+    <locations>
+      <location>frontend/__tests__/components/events/</location>
+      <location>backend/tests/test_api/test_events.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1,2,3">Test SourceTypeBadge renders correct icon/text for each sourceType value</idea>
+      <idea ac="4,5">Test SmartDetectionBadge renders correct color/icon for each detectionType value</idea>
+      <idea ac="3,5">Test EventCard places badges in correct positions</idea>
+      <idea ac="8">Test GET /api/v1/events?source_type=protect returns only Protect events</idea>
+      <idea ac="8">Test GET /api/v1/events?source_type=protect,rtsp returns both types</idea>
+      <idea ac="6,7">Test source filter updates URL params and persists on page reload</idea>
+      <idea ac="9">Visual regression test for mobile badge rendering</idea>
+      <idea ac="10">Test existing events without source_type still display correctly</idea>
+    </ideas>
+  </tests>
+</story-context>

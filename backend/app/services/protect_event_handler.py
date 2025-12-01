@@ -76,6 +76,12 @@ EVENT_TYPE_MAPPING = {
 # Valid event types we process
 VALID_EVENT_TYPES = set(EVENT_TYPE_MAPPING.keys())
 
+# Story P2-4.1: Doorbell-specific AI prompt for describing visitors
+DOORBELL_RING_PROMPT = (
+    "Describe who is at the front door. Include their appearance, what they're wearing, "
+    "and if they appear to be a delivery person, visitor, or solicitor."
+)
+
 
 class ProtectEventHandler:
     """
@@ -212,6 +218,9 @@ class ProtectEventHandler:
                         }
                     )
 
+                    # Story P2-4.1: Check if this is a doorbell ring event
+                    is_doorbell_ring = (filter_type == "ring")
+
                     # Story P2-3.2: Retrieve snapshot for AI processing
                     snapshot_result = await self._retrieve_snapshot(
                         controller_id,
@@ -228,13 +237,24 @@ class ProtectEventHandler:
                     # Extract protect_event_id from WebSocket message
                     protect_event_id = self._extract_protect_event_id(msg)
 
+                    # Story P2-4.1 AC6: For doorbell rings, broadcast DOORBELL_RING immediately
+                    # before AI processing for fast notification
+                    if is_doorbell_ring:
+                        await self._broadcast_doorbell_ring(
+                            camera_id=camera.id,
+                            camera_name=camera.name,
+                            thumbnail_url=snapshot_result.thumbnail_path,
+                            timestamp=snapshot_result.timestamp
+                        )
+
                     # Track total processing time (AC10, AC11)
                     pipeline_start = time.time()
 
                     ai_result = await self._submit_to_ai_pipeline(
                         snapshot_result,
                         camera,
-                        filter_type  # Use mapped type (person, vehicle, etc.)
+                        filter_type,  # Use mapped type (person, vehicle, ring, etc.)
+                        is_doorbell_ring=is_doorbell_ring  # Story P2-4.1: Use doorbell prompt
                     )
 
                     if not ai_result or not ai_result.success:
@@ -255,7 +275,8 @@ class ProtectEventHandler:
                         snapshot_result,
                         camera,
                         filter_type,
-                        protect_event_id
+                        protect_event_id,
+                        is_doorbell_ring=is_doorbell_ring  # Story P2-4.1 AC3, AC5
                     )
 
                     if not stored_event:
@@ -284,6 +305,10 @@ class ProtectEventHandler:
 
                     # Story P2-3.3: Broadcast EVENT_CREATED via WebSocket (AC12)
                     await self._broadcast_event_created(stored_event, camera)
+
+                    # Story P2-4.3: Fire-and-forget correlation processing (AC6)
+                    # Doesn't block event creation - runs asynchronously
+                    asyncio.create_task(self._process_correlation(stored_event))
 
                     return True
 
@@ -620,17 +645,20 @@ class ProtectEventHandler:
         self,
         snapshot_result: SnapshotResult,
         camera: Camera,
-        event_type: str
+        event_type: str,
+        is_doorbell_ring: bool = False
     ) -> Optional["AIResult"]:
         """
-        Submit snapshot to AI pipeline for description generation (Story P2-3.3 AC1-3).
+        Submit snapshot to AI pipeline for description generation (Story P2-3.3 AC1-3, P2-4.1 AC4).
 
         Converts base64 image to numpy array and calls AIService.generate_description().
+        Uses doorbell-specific prompt for ring events (Story P2-4.1).
 
         Args:
             snapshot_result: Snapshot with base64-encoded image
             camera: Camera that captured the event
-            event_type: Detection type (person, vehicle, etc.)
+            event_type: Detection type (person, vehicle, ring, etc.)
+            is_doorbell_ring: If True, use doorbell-specific AI prompt (Story P2-4.1)
 
         Returns:
             AIResult with description, or None on failure
@@ -660,6 +688,9 @@ class ProtectEventHandler:
             else:
                 frame_bgr = frame_rgb
 
+            # Story P2-4.1: Use doorbell-specific prompt for ring events (AC4)
+            custom_prompt = DOORBELL_RING_PROMPT if is_doorbell_ring else None
+
             # Call AI service (AC1, AC2, AC3)
             # detected_objects provides context about what was detected
             result = await ai_service.generate_description(
@@ -667,7 +698,8 @@ class ProtectEventHandler:
                 camera_name=camera.name,
                 timestamp=snapshot_result.timestamp.isoformat(),
                 detected_objects=[event_type],  # AC3: Include event type
-                sla_timeout_ms=5000  # 5s SLA target
+                sla_timeout_ms=5000,  # 5s SLA target
+                custom_prompt=custom_prompt  # Story P2-4.1: Doorbell prompt
             )
 
             logger.info(
@@ -677,7 +709,8 @@ class ProtectEventHandler:
                     "camera_id": camera.id,
                     "ai_provider": result.provider,
                     "confidence": result.confidence,
-                    "response_time_ms": result.response_time_ms
+                    "response_time_ms": result.response_time_ms,
+                    "is_doorbell_ring": is_doorbell_ring
                 }
             )
 
@@ -702,10 +735,11 @@ class ProtectEventHandler:
         snapshot_result: SnapshotResult,
         camera: Camera,
         event_type: str,
-        protect_event_id: Optional[str]
+        protect_event_id: Optional[str],
+        is_doorbell_ring: bool = False
     ) -> Optional[Event]:
         """
-        Store Protect event in database (Story P2-3.3 AC5-9).
+        Store Protect event in database (Story P2-3.3 AC5-9, P2-4.1 AC3, AC5).
 
         Creates Event record with source_type='protect' and all AI/snapshot fields.
 
@@ -714,14 +748,15 @@ class ProtectEventHandler:
             ai_result: AI description result
             snapshot_result: Snapshot with thumbnail path
             camera: Camera that captured the event
-            event_type: Detection type (person, vehicle, etc.)
+            event_type: Detection type (person, vehicle, ring, etc.)
             protect_event_id: Protect's native event ID
+            is_doorbell_ring: Whether this is a doorbell ring event (Story P2-4.1)
 
         Returns:
             Stored Event model or None on failure
         """
         try:
-            # Create Event record (AC5-9)
+            # Create Event record (AC5-9, P2-4.1 AC3, AC5)
             event = Event(
                 camera_id=camera.id,
                 timestamp=snapshot_result.timestamp,
@@ -733,7 +768,8 @@ class ProtectEventHandler:
                 alert_triggered=False,  # Will be evaluated by alert engine
                 source_type='protect',  # AC5
                 protect_event_id=protect_event_id,  # AC6
-                smart_detection_type=event_type  # AC7
+                smart_detection_type=event_type,  # AC7 (will be 'ring' for doorbell events)
+                is_doorbell_ring=is_doorbell_ring  # Story P2-4.1 AC3, AC5
             )
 
             db.add(event)
@@ -747,7 +783,8 @@ class ProtectEventHandler:
                     "event_id": event.id,
                     "camera_id": camera.id,
                     "source_type": event.source_type,
-                    "smart_detection_type": event.smart_detection_type
+                    "smart_detection_type": event.smart_detection_type,
+                    "is_doorbell_ring": event.is_doorbell_ring
                 }
             )
 
@@ -765,6 +802,70 @@ class ProtectEventHandler:
             )
             db.rollback()
             return None
+
+    async def _broadcast_doorbell_ring(
+        self,
+        camera_id: str,
+        camera_name: str,
+        thumbnail_url: str,
+        timestamp: datetime
+    ) -> int:
+        """
+        Broadcast DOORBELL_RING message for immediate notification (Story P2-4.1 AC6).
+
+        Sends priority notification before AI processing completes for fast alerting.
+
+        Args:
+            camera_id: Camera UUID
+            camera_name: Camera display name
+            thumbnail_url: URL/path to thumbnail image
+            timestamp: Event timestamp
+
+        Returns:
+            Number of clients notified
+        """
+        try:
+            # Lazy import to avoid circular imports
+            from app.services.websocket_manager import get_websocket_manager
+
+            websocket_manager = get_websocket_manager()
+
+            # Story P2-4.1 AC6: DOORBELL_RING message format
+            message = {
+                "type": "DOORBELL_RING",
+                "data": {
+                    "camera_id": camera_id,
+                    "camera_name": camera_name,
+                    "thumbnail_url": thumbnail_url,
+                    "timestamp": timestamp.isoformat()
+                }
+            }
+
+            clients_notified = await websocket_manager.broadcast(message)
+
+            logger.info(
+                f"DOORBELL_RING broadcast: {clients_notified} clients notified for '{camera_name}'",
+                extra={
+                    "event_type": "doorbell_ring_broadcast",
+                    "camera_id": camera_id,
+                    "camera_name": camera_name,
+                    "clients_notified": clients_notified
+                }
+            )
+
+            return clients_notified
+
+        except Exception as e:
+            logger.warning(
+                f"DOORBELL_RING broadcast error: {e}",
+                extra={
+                    "event_type": "doorbell_ring_broadcast_error",
+                    "camera_id": camera_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                }
+            )
+            return 0
 
     async def _broadcast_event_created(
         self,
@@ -809,7 +910,8 @@ class ProtectEventHandler:
                     "thumbnail_path": event.thumbnail_path,
                     "source_type": event.source_type,
                     "smart_detection_type": event.smart_detection_type,
-                    "protect_event_id": event.protect_event_id
+                    "protect_event_id": event.protect_event_id,
+                    "is_doorbell_ring": event.is_doorbell_ring  # Story P2-4.1
                 }
             }
 
@@ -837,6 +939,45 @@ class ProtectEventHandler:
                 }
             )
             return 0
+
+    async def _process_correlation(self, event: Event) -> None:
+        """
+        Process event for multi-camera correlation (Story P2-4.3 AC6).
+
+        Fire-and-forget pattern - called via asyncio.create_task() so it
+        doesn't block event creation.
+
+        Args:
+            event: Event to process for correlation
+        """
+        try:
+            # Lazy import to avoid circular imports
+            from app.services.correlation_service import get_correlation_service
+
+            correlation_service = get_correlation_service()
+            group_id = await correlation_service.process_event(event)
+
+            if group_id:
+                logger.info(
+                    f"Event {event.id[:8]}... correlated to group {group_id[:8]}...",
+                    extra={
+                        "event_type": "protect_event_correlated",
+                        "event_id": event.id,
+                        "correlation_group_id": group_id
+                    }
+                )
+
+        except Exception as e:
+            # Log but don't fail - correlation is non-critical
+            logger.warning(
+                f"Correlation processing error for event {event.id[:8]}...: {e}",
+                extra={
+                    "event_type": "protect_correlation_error",
+                    "event_id": event.id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                }
+            )
 
 
 # Global singleton instance

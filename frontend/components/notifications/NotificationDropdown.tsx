@@ -12,7 +12,7 @@
 
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, Trash2, Loader2 } from 'lucide-react';
+import { Check, Trash2, Loader2, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -92,14 +92,23 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
           </div>
         ) : (
           <div className="divide-y">
-            {notifications.map((notification) => (
-              <NotificationItem
-                key={notification.id}
-                notification={notification}
-                onClick={() => handleNotificationClick(notification)}
-                onDelete={(e) => handleDelete(e, notification.id)}
-              />
-            ))}
+            {/* Sort doorbell notifications to top, then by created_at */}
+            {[...notifications]
+              .sort((a, b) => {
+                // Doorbell rings first
+                if (a.is_doorbell_ring && !b.is_doorbell_ring) return -1;
+                if (!a.is_doorbell_ring && b.is_doorbell_ring) return 1;
+                // Then by created_at (newest first)
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+              })
+              .map((notification) => (
+                <NotificationItem
+                  key={notification.id}
+                  notification={notification}
+                  onClick={() => handleNotificationClick(notification)}
+                  onDelete={(e) => handleDelete(e, notification.id)}
+                />
+              ))}
           </div>
         )}
       </ScrollArea>
@@ -132,6 +141,7 @@ interface NotificationItemProps {
 
 function NotificationItem({ notification, onClick, onDelete }: NotificationItemProps) {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const isDoorbellRing = notification.is_doorbell_ring;
 
   // Format relative timestamp
   const timeAgo = formatDistanceToNow(new Date(notification.created_at), {
@@ -147,13 +157,16 @@ function NotificationItem({ notification, onClick, onDelete }: NotificationItemP
     <div
       className={cn(
         'flex gap-3 p-3 cursor-pointer transition-colors hover:bg-muted/50 group',
-        !notification.read && 'bg-primary/5'
+        !notification.read && 'bg-primary/5',
+        isDoorbellRing && 'border-l-3 border-l-cyan-500 bg-cyan-50/30'
       )}
       onClick={onClick}
     >
-      {/* Unread indicator */}
+      {/* Unread indicator or doorbell icon */}
       <div className="flex-shrink-0 mt-1">
-        {!notification.read ? (
+        {isDoorbellRing ? (
+          <Bell className="h-4 w-4 text-cyan-500" aria-label="Doorbell ring" />
+        ) : !notification.read ? (
           <div className="h-2 w-2 rounded-full bg-primary" />
         ) : (
           <div className="h-2 w-2" /> // Spacer for alignment
@@ -166,14 +179,24 @@ function NotificationItem({ notification, onClick, onDelete }: NotificationItemP
           <img
             src={thumbnailUrl}
             alt=""
-            className="h-16 w-16 rounded object-cover bg-muted"
+            className={cn(
+              'h-16 w-16 rounded object-cover bg-muted',
+              isDoorbellRing && 'ring-2 ring-cyan-400'
+            )}
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none';
             }}
           />
         ) : (
-          <div className="h-16 w-16 rounded bg-muted flex items-center justify-center">
-            <span className="text-xs text-muted-foreground">No image</span>
+          <div className={cn(
+            'h-16 w-16 rounded bg-muted flex items-center justify-center',
+            isDoorbellRing && 'bg-cyan-100'
+          )}>
+            {isDoorbellRing ? (
+              <Bell className="h-6 w-6 text-cyan-400" />
+            ) : (
+              <span className="text-xs text-muted-foreground">No image</span>
+            )}
           </div>
         )}
       </div>
@@ -183,10 +206,11 @@ function NotificationItem({ notification, onClick, onDelete }: NotificationItemP
         <p
           className={cn(
             'text-sm truncate',
-            !notification.read && 'font-semibold'
+            !notification.read && 'font-semibold',
+            isDoorbellRing && 'text-cyan-700'
           )}
         >
-          {notification.rule_name}
+          {isDoorbellRing ? 'Doorbell Ring' : notification.rule_name}
         </p>
         {notification.event_description && (
           <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">

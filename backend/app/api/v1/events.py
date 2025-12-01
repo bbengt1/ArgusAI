@@ -259,6 +259,8 @@ def list_events(
     object_types: Optional[str] = Query(None, description="Comma-separated object types (e.g., 'person,vehicle')"),
     alert_triggered: Optional[bool] = Query(None, description="Filter by alert status"),
     search_query: Optional[str] = Query(None, min_length=1, max_length=500, description="Full-text search in descriptions"),
+    source_type: Optional[str] = Query(None, description="Filter by event source type: 'rtsp', 'usb', 'protect' (comma-separated for multiple)"),
+    smart_detection_type: Optional[str] = Query(None, description="Filter by smart detection type: 'person', 'vehicle', 'package', 'animal', 'motion', 'ring' (comma-separated for multiple)"),
     limit: int = Query(50, ge=1, le=500, description="Number of results per page"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$", description="Sort by timestamp"),
@@ -319,6 +321,45 @@ def list_events(
                 Event.objects_detected.like(f'%"{obj}"%') for obj in object_type_list
             ]
             query = query.filter(or_(*object_filters))
+
+        # Apply source type filter (Phase 2: UniFi Protect integration)
+        if source_type:
+            source_type_list = [src.strip().lower() for src in source_type.split(',')]
+            # Validate source types
+            valid_sources = {'rtsp', 'usb', 'protect'}
+            source_type_list = [src for src in source_type_list if src in valid_sources]
+            if source_type_list:
+                if len(source_type_list) == 1:
+                    query = query.filter(Event.source_type == source_type_list[0])
+                else:
+                    query = query.filter(Event.source_type.in_(source_type_list))
+
+        # Apply smart detection type filter (Phase 2: Story P2-4.2)
+        if smart_detection_type:
+            detection_type_list = [dt.strip().lower() for dt in smart_detection_type.split(',')]
+            # Validate detection types
+            valid_detections = {'person', 'vehicle', 'package', 'animal', 'motion', 'ring'}
+            detection_type_list = [dt for dt in detection_type_list if dt in valid_detections]
+            if detection_type_list:
+                # Special handling for 'ring' - filter by is_doorbell_ring column
+                if 'ring' in detection_type_list:
+                    ring_filter = Event.is_doorbell_ring == True
+                    other_types = [dt for dt in detection_type_list if dt != 'ring']
+                    if other_types:
+                        # Combine ring filter with other smart detection types
+                        if len(other_types) == 1:
+                            query = query.filter(or_(ring_filter, Event.smart_detection_type == other_types[0]))
+                        else:
+                            query = query.filter(or_(ring_filter, Event.smart_detection_type.in_(other_types)))
+                    else:
+                        # Only filtering by ring
+                        query = query.filter(ring_filter)
+                else:
+                    # No ring filter, just smart detection types
+                    if len(detection_type_list) == 1:
+                        query = query.filter(Event.smart_detection_type == detection_type_list[0])
+                    else:
+                        query = query.filter(Event.smart_detection_type.in_(detection_type_list))
 
         # Apply full-text search using FTS5
         if search_query:
@@ -737,7 +778,7 @@ def get_event(
         db: Database session
 
     Returns:
-        Event with full details including thumbnail
+        Event with full details including thumbnail and correlated events (Story P2-4.4)
 
     Raises:
         404: Event not found
@@ -746,6 +787,9 @@ def get_event(
     Example:
         GET /events/123e4567-e89b-12d3-a456-426614174000
     """
+    from app.models.camera import Camera
+    from app.schemas.event import CorrelatedEventResponse
+
     try:
         event = db.query(Event).filter(Event.id == event_id).first()
 
@@ -757,7 +801,55 @@ def get_event(
 
         logger.debug(f"Retrieved event {event_id}")
 
-        return event
+        # Story P2-4.4: Populate correlated_events if event has correlation_group_id
+        correlated_events = None
+        if event.correlation_group_id:
+            # Find all events in the same correlation group, excluding this event
+            related_events = db.query(Event).filter(
+                Event.correlation_group_id == event.correlation_group_id,
+                Event.id != event_id
+            ).all()
+
+            if related_events:
+                correlated_events = []
+                for related in related_events:
+                    # Get camera name
+                    camera = db.query(Camera).filter(Camera.id == related.camera_id).first()
+                    camera_name = camera.name if camera else f"Camera {related.camera_id[:8]}"
+
+                    # Build thumbnail URL
+                    thumbnail_url = None
+                    if related.thumbnail_path:
+                        thumbnail_url = f"/api/v1/thumbnails/{related.thumbnail_path}"
+
+                    correlated_events.append(CorrelatedEventResponse(
+                        id=related.id,
+                        camera_name=camera_name,
+                        thumbnail_url=thumbnail_url,
+                        timestamp=related.timestamp
+                    ))
+
+        # Convert to dict and add correlated_events
+        event_dict = {
+            "id": event.id,
+            "camera_id": event.camera_id,
+            "timestamp": event.timestamp,
+            "description": event.description,
+            "confidence": event.confidence,
+            "objects_detected": event.objects_detected,
+            "thumbnail_path": event.thumbnail_path,
+            "thumbnail_base64": event.thumbnail_base64,
+            "alert_triggered": event.alert_triggered,
+            "source_type": event.source_type,
+            "protect_event_id": event.protect_event_id,
+            "smart_detection_type": event.smart_detection_type,
+            "is_doorbell_ring": event.is_doorbell_ring,
+            "created_at": event.created_at,
+            "correlation_group_id": event.correlation_group_id,
+            "correlated_events": correlated_events,
+        }
+
+        return EventResponse(**event_dict)
 
     except HTTPException:
         raise

@@ -1,0 +1,219 @@
+<story-context id="bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P2-4</epicId>
+    <storyId>2</storyId>
+    <title>Build Doorbell Event Card with Distinct Styling</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-01</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p2-4-2-build-doorbell-event-card-with-distinct-styling.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>doorbell ring events to stand out in my timeline</iWant>
+    <soThat>I can quickly identify when someone was at my door</soThat>
+    <tasks>
+      <task id="1" acs="1,2,3,4,5">Create DoorbellEventCard Component
+        <subtask id="1.1">Create frontend/components/events/DoorbellEventCard.tsx component</subtask>
+        <subtask id="1.2">Implement header with "🔔 DOORBELL RING" label styling</subtask>
+        <subtask id="1.3">Add cyan left border accent (3px, #0ea5e9 or Tailwind cyan-500)</subtask>
+        <subtask id="1.4">Display camera name below header in muted text</subtask>
+        <subtask id="1.5">Use relative time formatting ("Just now", "2 min ago", etc.)</subtask>
+        <subtask id="1.6">Ensure AI description displays correctly</subtask>
+        <subtask id="1.7">Always show Person badge when objects_detected includes "person"</subtask>
+      </task>
+      <task id="2" acs="1,7">Integrate DoorbellEventCard in Event Timeline
+        <subtask id="2.1">Update EventCard.tsx or timeline component to detect is_doorbell_ring: true</subtask>
+        <subtask id="2.2">Render DoorbellEventCard for doorbell events, standard EventCard for others</subtask>
+        <subtask id="2.3">Ensure doorbell cards maintain timeline position (sorted by timestamp)</subtask>
+        <subtask id="2.4">Verify responsive layout on mobile (&lt;640px) and desktop</subtask>
+      </task>
+      <task id="3" acs="6">Update Notification Dropdown for Doorbell Events
+        <subtask id="3.1">Update notification dropdown to detect doorbell ring notifications</subtask>
+        <subtask id="3.2">Sort doorbell rings to top of notification list</subtask>
+        <subtask id="3.3">Add doorbell icon (🔔 or bell icon) for ring notifications</subtask>
+        <subtask id="3.4">Use distinct badge styling for doorbell notifications</subtask>
+      </task>
+      <task id="4" acs="8">Add Doorbell Filter Support to Events Timeline
+        <subtask id="4.1">Add "Doorbell" filter option to event type filter dropdown</subtask>
+        <subtask id="4.2">Filter calls API with smart_detection_type=ring when selected</subtask>
+        <subtask id="4.3">Combine with existing source_type filter (protect + ring)</subtask>
+      </task>
+      <task id="5" acs="all">Testing
+        <subtask id="5.1">Unit test: DoorbellEventCard renders with correct styling</subtask>
+        <subtask id="5.2">Unit test: Person badge displays when person detected</subtask>
+        <subtask id="5.3">Integration test: Doorbell events display correctly in timeline</subtask>
+        <subtask id="5.4">Visual test: Verify cyan accent border and header styling</subtask>
+        <subtask id="5.5">Responsive test: Verify mobile and desktop layouts</subtask>
+        <subtask id="5.6">API test: Doorbell filter returns only ring events</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" verification="Visual test">Given a doorbell ring event appears in the timeline, when I view the event timeline, then the doorbell event card has distinct styling with header "🔔 DOORBELL RING" label (replaces camera name position)</criterion>
+    <criterion id="AC2" verification="Visual test">Doorbell card has cyan left border (3px) accent to stand out from regular events</criterion>
+    <criterion id="AC3" verification="Visual test">Camera name shown below header, timestamp shows "Just now" / relative time format</criterion>
+    <criterion id="AC4" verification="Integration test">AI description displayed is focused on "who is at the door" (uses doorbell prompt from Story P2-4.1)</criterion>
+    <criterion id="AC5" verification="Unit test">Person badge always shown on doorbell cards when person detected</criterion>
+    <criterion id="AC6" verification="Integration test">Doorbell rings appear at top of notification dropdown with doorbell icon badge</criterion>
+    <criterion id="AC7" verification="Visual test">Responsive behavior: Same layout on mobile and desktop, full-width card on mobile timeline</criterion>
+    <criterion id="AC8" verification="API test">Doorbell card filters correctly - can filter by source_type='protect' and smart_detection_type='ring'</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase2.md</path>
+        <title>Phase 2 Epic Breakdown</title>
+        <section>Story 4.2: Build Doorbell Event Card with Distinct Styling</section>
+        <snippet>Doorbell event card with distinct styling including 🔔 header, cyan accent border, camera name below, and notification dropdown integration.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p2-4-1-implement-doorbell-ring-event-detection-and-handling.md</path>
+        <title>Story P2-4.1 (Previous)</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>Backend implementation complete: is_doorbell_ring field, DOORBELL_RING WebSocket broadcast, EVENT_CREATED includes is_doorbell_ring in payload. 27 tests passing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/ux-design-specification.md</path>
+        <title>UX Design Specification</title>
+        <section>Section 10 - Phase 2 UI Components</section>
+        <snippet>Camera discovery UI, event cards with source type badges, discovered camera list with doorbell type indicators.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>frontend/components/events/EventCard.tsx</path>
+        <kind>component</kind>
+        <symbol>EventCard</symbol>
+        <lines>1-174</lines>
+        <reason>Main event card component - need to add conditional rendering for doorbell events. Uses IEvent interface with source_type and smart_detection_type fields.</reason>
+      </file>
+      <file>
+        <path>frontend/components/events/SourceTypeBadge.tsx</path>
+        <kind>component</kind>
+        <symbol>SourceTypeBadge</symbol>
+        <reason>Existing badge component for event source display - reuse pattern for doorbell styling</reason>
+      </file>
+      <file>
+        <path>frontend/components/events/SmartDetectionBadge.tsx</path>
+        <kind>component</kind>
+        <symbol>SmartDetectionBadge</symbol>
+        <reason>Existing badge for smart detection types - need to add 'ring' type support</reason>
+      </file>
+      <file>
+        <path>frontend/components/events/EventFilters.tsx</path>
+        <kind>component</kind>
+        <symbol>EventFilters</symbol>
+        <lines>1-353</lines>
+        <reason>Filter component - need to add doorbell filter option using smart_detection_type=ring</reason>
+      </file>
+      <file>
+        <path>frontend/components/notifications/NotificationDropdown.tsx</path>
+        <kind>component</kind>
+        <symbol>NotificationDropdown, NotificationItem</symbol>
+        <lines>1-215</lines>
+        <reason>Notification dropdown - need to sort doorbell rings to top and add distinct doorbell icon</reason>
+      </file>
+      <file>
+        <path>frontend/types/event.ts</path>
+        <kind>types</kind>
+        <symbol>IEvent, SmartDetectionType, SourceType</symbol>
+        <lines>1-82</lines>
+        <reason>TypeScript interfaces - need to add is_doorbell_ring field and 'ring' to SmartDetectionType</reason>
+      </file>
+      <file>
+        <path>frontend/app/events/page.tsx</path>
+        <kind>page</kind>
+        <symbol>EventsPage</symbol>
+        <reason>Events page that renders EventCard - verify doorbell cards render correctly in timeline</reason>
+      </file>
+      <file>
+        <path>backend/app/schemas/event.py</path>
+        <kind>schema</kind>
+        <symbol>EventResponse</symbol>
+        <lines>54-99</lines>
+        <reason>Backend schema with is_doorbell_ring field - frontend types must match</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>next</package><version>16.0.3</version>
+        <package>react</package><version>19.2.0</version>
+        <package>tailwindcss</package><version>^4</version>
+        <package>date-fns</package><version>^4.1.0</version>
+        <package>lucide-react</package><version>^0.553.0</version>
+        <package>@tanstack/react-query</package><version>^5.90.10</version>
+        <package>@radix-ui/react-dropdown-menu</package><version>^2.1.16</version>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture">Use Tailwind CSS for all styling - no custom CSS files</constraint>
+    <constraint source="architecture">Components must be 'use client' for React 19 client-side interactivity</constraint>
+    <constraint source="architecture">Use shadcn/ui components (Card, Button, etc.) for consistency</constraint>
+    <constraint source="previous-story">is_doorbell_ring boolean field already exists in backend EventResponse schema</constraint>
+    <constraint source="previous-story">SmartDetectionType includes 'ring' value from P2-4.1</constraint>
+    <constraint source="ux">Doorbell accent color: cyan-500 (#0ea5e9) - must be distinct from other badges</constraint>
+    <constraint source="ux">Relative time formatting with date-fns formatDistanceToNow</constraint>
+    <constraint source="api">Filter by smart_detection_type=ring for doorbell events (already supported)</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>IEvent.is_doorbell_ring</name>
+      <kind>type property</kind>
+      <signature>is_doorbell_ring: boolean</signature>
+      <path>frontend/types/event.ts</path>
+      <note>MUST ADD - matches backend EventResponse.is_doorbell_ring</note>
+    </interface>
+    <interface>
+      <name>SmartDetectionType</name>
+      <kind>type union</kind>
+      <signature>'person' | 'vehicle' | 'package' | 'animal' | 'motion' | 'ring'</signature>
+      <path>frontend/types/event.ts</path>
+      <note>MUST ADD 'ring' to existing type union</note>
+    </interface>
+    <interface>
+      <name>DOORBELL_RING WebSocket message</name>
+      <kind>WebSocket event</kind>
+      <signature>{ type: 'DOORBELL_RING', data: { camera_id, camera_name, thumbnail_url, timestamp } }</signature>
+      <path>backend/app/services/protect_event_handler.py</path>
+      <note>Broadcast immediately before AI processing - use for instant notification</note>
+    </interface>
+    <interface>
+      <name>EVENT_CREATED WebSocket message</name>
+      <kind>WebSocket event</kind>
+      <signature>{ type: 'EVENT_CREATED', data: { ...event_data, is_doorbell_ring: boolean } }</signature>
+      <path>backend/app/services/protect_event_handler.py</path>
+      <note>Full event data including is_doorbell_ring field</note>
+    </interface>
+    <interface>
+      <name>GET /api/v1/events</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/events?smart_detection_type=ring&amp;source_type=protect</signature>
+      <path>backend/app/api/v1/events.py</path>
+      <note>Filter doorbell events using existing query parameters</note>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use Vitest or Jest for React component tests. Mock IEvent with doorbell fields (is_doorbell_ring: true, smart_detection_type: 'ring'). Test conditional rendering based on is_doorbell_ring flag. Visual regression testing for styling if available.</standards>
+    <locations>
+      <location>frontend/__tests__/components/events/</location>
+      <location>frontend/__tests__/components/notifications/</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1,AC2,AC3">Test DoorbellEventCard renders with header "🔔 DOORBELL RING", cyan border, camera name below, relative time</idea>
+      <idea ac="AC4">Test AI description from doorbell prompt displays correctly (mock EventResponse)</idea>
+      <idea ac="AC5">Test Person badge always appears when objects_detected includes "person"</idea>
+      <idea ac="AC6">Test notification dropdown sorts doorbell rings to top with bell icon</idea>
+      <idea ac="AC7">Test responsive layout - check Tailwind classes for mobile/desktop</idea>
+      <idea ac="AC8">Test filter dropdown includes "Doorbell" option that triggers smart_detection_type=ring query</idea>
+      <idea ac="integration">Integration test: Create event with is_doorbell_ring:true, verify DoorbellEventCard renders instead of EventCard</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -18,6 +18,7 @@ import {
   ChevronRight,
   AlertTriangle,
   Video,
+  Link2,
 } from 'lucide-react';
 import type { IEvent } from '@/types/event';
 import { getConfidenceColor, getConfidenceLevel } from '@/types/event';
@@ -298,6 +299,74 @@ export function EventDetailModal({
               </div>
             )}
           </div>
+
+          {/* Story P2-4.4: Related Events Section (AC5, AC6) */}
+          {event.correlated_events && event.correlated_events.length > 0 && (
+            <div className="space-y-3 pt-4 border-t">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-blue-500" />
+                <h3 className="text-sm font-semibold text-gray-700">Related Events</h3>
+                <span className="text-xs text-muted-foreground">
+                  ({event.correlated_events.length} other camera{event.correlated_events.length > 1 ? 's' : ''})
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {event.correlated_events.map((relatedEvent) => {
+                  const relatedDate = parseUTCTimestamp(relatedEvent.timestamp);
+                  const relatedRelativeTime = formatDistanceToNow(relatedDate, { addSuffix: true });
+
+                  // Build full thumbnail URL
+                  const relatedThumbnailSrc = relatedEvent.thumbnail_url
+                    ? `${apiUrl}${relatedEvent.thumbnail_url}`
+                    : null;
+
+                  // Find the full event object in allEvents to navigate to
+                  const fullRelatedEvent = allEvents.find((e) => e.id === relatedEvent.id);
+
+                  return (
+                    <button
+                      key={relatedEvent.id}
+                      type="button"
+                      onClick={() => {
+                        if (fullRelatedEvent && onNavigate) {
+                          onNavigate(fullRelatedEvent);
+                        }
+                      }}
+                      className="group flex flex-col rounded-lg border border-gray-200 overflow-hidden hover:border-blue-400 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      disabled={!fullRelatedEvent}
+                    >
+                      {/* Thumbnail */}
+                      <div className="relative w-full h-24 bg-gray-100">
+                        {relatedThumbnailSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={relatedThumbnailSrc}
+                            alt={`Event from ${relatedEvent.camera_name}`}
+                            className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
+                            <Video className="w-8 h-8 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div className="p-2 text-left">
+                        <p className="text-xs font-medium text-gray-800 truncate">
+                          {relatedEvent.camera_name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {relatedRelativeTime}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
