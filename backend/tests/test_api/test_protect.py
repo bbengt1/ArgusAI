@@ -980,7 +980,7 @@ class TestProtectService:
         """Test that client is properly closed after successful connection"""
         mock_client = MagicMock()
         mock_client.update = AsyncMock()
-        mock_client.close = AsyncMock()
+        mock_client.close_session = AsyncMock()  # ProtectApiClient uses close_session()
         mock_client.bootstrap = MagicMock()
         mock_client.bootstrap.nvr = MagicMock()
         mock_client.bootstrap.nvr.version = "3.0.16"
@@ -996,8 +996,8 @@ class TestProtectService:
             verify_ssl=False
         )
 
-        # Verify close was called
-        mock_client.close.assert_called_once()
+        # Verify close_session was called (ProtectApiClient uses close_session, not close)
+        mock_client.close_session.assert_called_once()
 
     @pytest.mark.asyncio
     @patch('app.services.protect_service.ProtectApiClient')
@@ -1007,7 +1007,7 @@ class TestProtectService:
 
         mock_client = MagicMock()
         mock_client.update = AsyncMock(side_effect=NotAuthorized("Bad creds"))
-        mock_client.close = AsyncMock()
+        mock_client.close_session = AsyncMock()  # ProtectApiClient uses close_session()
         mock_client_class.return_value = mock_client
 
         service = ProtectService()
@@ -1019,8 +1019,8 @@ class TestProtectService:
             verify_ssl=False
         )
 
-        # Verify close was called even on error
-        mock_client.close.assert_called_once()
+        # Verify close_session was called even on error
+        mock_client.close_session.assert_called_once()
 
 
 # Story P2-1.4: Connection Management Tests

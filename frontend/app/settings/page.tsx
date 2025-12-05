@@ -2,6 +2,7 @@
  * System Settings Page
  * Centralized settings management with tabbed interface
  * Story 4.4: Build System Settings Page
+ * Story P2-6.3: Error handling with ErrorBoundary (AC17)
  */
 
 'use client';
@@ -26,6 +27,9 @@ import {
   Shield,
 } from 'lucide-react';
 
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { ConnectionErrorBanner, getConnectionErrorType } from '@/components/protect/ConnectionErrorBanner';
+
 import { apiClient } from '@/lib/api-client';
 import { completeSettingsSchema } from '@/lib/settings-validation';
 import type { SystemSettings, StorageStats } from '@/types/settings';
@@ -42,8 +46,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/settings/ConfirmDialog';
 import { BackupRestore } from '@/components/settings/BackupRestore';
+import { AIProviders } from '@/components/settings/AIProviders';
 import { ControllerForm, type ControllerData, DeleteControllerDialog, DiscoveredCameraList } from '@/components/protect';
 import { useQuery } from '@tanstack/react-query';
+import type { AIProvider } from '@/types/settings';
 
 const DEFAULT_PROMPT = 'Describe what you see in this image in one concise sentence. Focus on objects, people, and actions.';
 
@@ -67,6 +73,10 @@ export default function SettingsPage() {
     description: '',
     onConfirm: () => {},
   });
+
+  // AI Providers state - track which providers have API keys configured
+  const [configuredProviders, setConfiguredProviders] = useState<Set<AIProvider>>(new Set());
+  const [providerOrder, setProviderOrder] = useState<AIProvider[]>(['openai', 'grok', 'anthropic', 'google']);
 
   // UniFi Protect controller state
   const [showControllerForm, setShowControllerForm] = useState(false);
@@ -119,6 +129,7 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSettings();
     loadStorageStats();
+    loadAIProvidersStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -141,6 +152,26 @@ export default function SettingsPage() {
       setStorageStats(stats);
     } catch (error) {
       console.error('Failed to load storage stats:', error);
+    }
+  };
+
+  const loadAIProvidersStatus = async () => {
+    try {
+      const response = await apiClient.settings.getAIProvidersStatus();
+      const configured = new Set<AIProvider>();
+      response.providers.forEach((p) => {
+        if (p.configured) {
+          configured.add(p.provider as AIProvider);
+        }
+      });
+      setConfiguredProviders(configured);
+
+      // Load provider order if available
+      if (response.order && response.order.length > 0) {
+        setProviderOrder(response.order as AIProvider[]);
+      }
+    } catch (error) {
+      console.error('Failed to load AI providers status:', error);
     }
   };
 
@@ -551,6 +582,27 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* AI Providers List - Story P2-5.2, wrapped with ErrorBoundary (P2-6.3 AC17) */}
+              <ErrorBoundary context="AI Providers">
+                <AIProviders
+                  configuredProviders={configuredProviders}
+                  providerOrder={providerOrder}
+                  onProviderConfigured={(provider) => {
+                    setConfiguredProviders((prev) => new Set([...prev, provider]));
+                  }}
+                  onProviderRemoved={(provider) => {
+                    setConfiguredProviders((prev) => {
+                      const next = new Set(prev);
+                      next.delete(provider);
+                      return next;
+                    });
+                  }}
+                  onProviderOrderChanged={(order) => {
+                    setProviderOrder(order);
+                  }}
+                />
+              </ErrorBoundary>
             </TabsContent>
 
             {/* Motion Detection Tab */}
@@ -897,12 +949,20 @@ export default function SettingsPage() {
                             </span>
                           </div>
                         </div>
-                        {controller?.last_error && (
-                          <p className="mt-2 text-sm text-red-500">
-                            Last error: {controller.last_error}
-                          </p>
-                        )}
                       </div>
+                      {/* Story P2-6.3 AC1-4: Connection error banner */}
+                      {controller && !controller.is_connected && (
+                        <ConnectionErrorBanner
+                          errorType={getConnectionErrorType(undefined, controller.last_error ?? undefined)}
+                          errorMessage={controller.last_error ?? 'Controller is not connected'}
+                          onRetry={() => controllersQuery.refetch()}
+                          onEditCredentials={() => {
+                            setEditingController(controller as ControllerData);
+                            setShowControllerForm(true);
+                          }}
+                          className="mt-3"
+                        />
+                      )}
                       {/* Edit and Remove buttons (Story P2-1.5) */}
                       <div className="flex gap-2">
                         <Button
@@ -923,12 +983,14 @@ export default function SettingsPage() {
                         </Button>
                       </div>
 
-                      {/* Discovered Cameras List (Story P2-2.2) */}
+                      {/* Discovered Cameras List (Story P2-2.2), wrapped with ErrorBoundary (P2-6.3 AC17) */}
                       {controller && (
-                        <DiscoveredCameraList
-                          controllerId={controller.id}
-                          isControllerConnected={controller.is_connected}
-                        />
+                        <ErrorBoundary context="Discovered Cameras">
+                          <DiscoveredCameraList
+                            controllerId={controller.id}
+                            isControllerConnected={controller.is_connected}
+                          />
+                        </ErrorBoundary>
                       )}
                     </div>
                   ) : showControllerForm ? (

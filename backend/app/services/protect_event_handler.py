@@ -807,7 +807,8 @@ class ProtectEventHandler:
                 source_type='protect',  # AC5
                 protect_event_id=protect_event_id,  # AC6
                 smart_detection_type=event_type,  # AC7 (will be 'ring' for doorbell events)
-                is_doorbell_ring=is_doorbell_ring  # Story P2-4.1 AC3, AC5
+                is_doorbell_ring=is_doorbell_ring,  # Story P2-4.1 AC3, AC5
+                provider_used=ai_result.provider  # Story P2-5.3: AI provider tracking
             )
 
             db.add(event)

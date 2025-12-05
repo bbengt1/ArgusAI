@@ -15,7 +15,8 @@ AI-powered event detection and monitoring for home security. Analyzes video feed
 - **USB/Webcam Support** - Use local cameras for testing or monitoring
 
 ### AI-Powered Analysis
-- **Multi-Provider Support**: OpenAI GPT-4o → Claude Haiku → Gemini Flash (automatic fallback)
+- **Multi-Provider Support**: OpenAI GPT-4o → xAI Grok → Claude Haiku → Gemini Flash (automatic fallback)
+- **xAI Grok Integration** (Phase 2) - Vision-capable AI with fast response times
 - **Natural Language Descriptions**: Rich, contextual descriptions of events
 - **Smart Filtering**: Configure which event types trigger AI analysis per camera
 
@@ -163,10 +164,18 @@ Configure AI providers in **Settings** → **AI Providers**:
 | Provider | Model | Use Case |
 |----------|-------|----------|
 | OpenAI | GPT-4o-mini | Primary (best cost/quality) |
-| Anthropic | Claude 3 Haiku | Fallback |
+| xAI | Grok 2 Vision | Fast vision analysis |
+| Anthropic | Claude 3 Haiku | Reliable fallback |
 | Google | Gemini Flash | Free tier fallback |
 
 The system automatically falls back to the next provider if one fails.
+
+### xAI Grok Provider
+
+To enable xAI Grok:
+1. Get an API key from [xAI Console](https://console.x.ai)
+2. Add to **Settings** → **AI Providers** → **xAI Grok**
+3. Grok uses the `grok-2-vision-1212` model for image analysis
 
 ## Project Structure
 
@@ -185,7 +194,7 @@ live-object-ai-classifier/
 │   │       ├── correlation_service.py # Multi-camera correlation
 │   │       └── alert_engine.py        # Rule evaluation
 │   ├── alembic/             # Database migrations
-│   └── tests/               # 444 tests
+│   └── tests/               # 590+ tests
 ├── frontend/                 # Next.js frontend
 │   ├── app/                 # App Router pages
 │   ├── components/          # React components
@@ -219,7 +228,7 @@ pytest tests/ --cov=app --cov-report=html
 pytest tests/test_api/test_protect.py -v
 ```
 
-**Current Coverage:** 444 tests, 100% pass rate
+**Current Coverage:** 590+ tests including integration and performance tests
 
 ### Frontend
 
@@ -244,6 +253,7 @@ ENCRYPTION_KEY=<generate-with-fernet>
 
 # AI Providers (at least one required)
 OPENAI_API_KEY=sk-...
+XAI_API_KEY=xai-...           # xAI Grok
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_API_KEY=AIza...
 
@@ -276,9 +286,9 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## Roadmap
 
-### Completed (MVP + Phase 2.1-2.4)
+### Completed (MVP + Phase 2)
 - ✅ RTSP/USB camera support with motion detection
-- ✅ Multi-provider AI descriptions (OpenAI, Claude, Gemini)
+- ✅ Multi-provider AI descriptions (OpenAI, xAI Grok, Claude, Gemini)
 - ✅ Event storage with search and retention
 - ✅ Alert rules with webhook integration
 - ✅ Real-time dashboard with notifications
@@ -289,9 +299,9 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - ✅ Doorbell ring event detection and distinct styling
 - ✅ Multi-camera event correlation service
 - ✅ Correlated events display in dashboard (link indicators, related events section)
-
-### In Progress (Phase 2.5-2.6)
-- 🔄 xAI Grok provider integration
+- ✅ xAI Grok provider with vision capabilities
+- ✅ RTSP/USB/Protect camera coexistence
+- ✅ Comprehensive error handling and recovery
 
 ### Planned
 - 📋 Local LLM support (Ollama)
