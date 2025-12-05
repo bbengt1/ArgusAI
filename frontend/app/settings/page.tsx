@@ -19,10 +19,6 @@ import {
   Eye,
   Database,
   Loader2,
-  CheckCircle2,
-  XCircle,
-  EyeOff,
-  RotateCcw,
   Download,
   Trash2,
   Shield,
@@ -52,7 +48,6 @@ import { ControllerForm, type ControllerData, DeleteControllerDialog, Discovered
 import { useQuery } from '@tanstack/react-query';
 import type { AIProvider } from '@/types/settings';
 
-const DEFAULT_PROMPT = 'Describe what you see in this image in one concise sentence. Focus on objects, people, and actions.';
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
@@ -60,9 +55,6 @@ export default function SettingsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isTestingKey, setIsTestingKey] = useState(false);
-  const [keyTestResult, setKeyTestResult] = useState<{ valid: boolean; error?: string } | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
   const [storageStats, setStorageStats] = useState<StorageStats | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -105,10 +97,6 @@ export default function SettingsPage() {
       language: 'English',
       date_format: 'MM/DD/YYYY',
       time_format: '12h',
-      primary_model: 'gpt-4o-mini',
-      primary_api_key: '',
-      fallback_model: null,
-      description_prompt: DEFAULT_PROMPT,
       motion_sensitivity: 50,
       detection_method: 'background_subtraction',
       cooldown_period: 60,
@@ -204,71 +192,6 @@ export default function SettingsPage() {
   const handleCancel = () => {
     form.reset();
     toast.info('Changes cancelled');
-  };
-
-  const handleTestApiKey = async () => {
-    try {
-      setIsTestingKey(true);
-      setKeyTestResult(null);
-
-      const model = form.getValues('primary_model');
-      const apiKey = form.getValues('primary_api_key');
-
-      if (!apiKey) {
-        toast.error('API key is required');
-        return;
-      }
-
-      // Skip test if API key is masked (already saved and encrypted)
-      if (apiKey.startsWith('****')) {
-        toast.info('Enter a new API key to test');
-        return;
-      }
-
-      // Map model to provider
-      const providerMap: Record<string, 'openai' | 'anthropic' | 'google'> = {
-        'gpt-4o-mini': 'openai',
-        'claude-3-haiku': 'anthropic',
-        'gemini-flash': 'google',
-      };
-      const provider = providerMap[model];
-
-      if (!provider) {
-        toast.error('Unknown model provider');
-        return;
-      }
-
-      const result = await apiClient.settings.testApiKey({ provider, api_key: apiKey });
-      setKeyTestResult({ valid: result.valid, error: result.valid ? undefined : result.message });
-
-      if (result.valid) {
-        toast.success(result.message || 'API key is valid');
-      } else {
-        toast.error(result.message || 'API key validation failed');
-      }
-
-      // Clear result after 3 seconds
-      setTimeout(() => setKeyTestResult(null), 3000);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Connection failed, check your internet';
-      setKeyTestResult({ valid: false, error: errorMessage });
-      toast.error(errorMessage);
-    } finally {
-      setIsTestingKey(false);
-    }
-  };
-
-  const handleResetPrompt = () => {
-    setConfirmDialog({
-      open: true,
-      title: 'Restore default AI description prompt?',
-      description: 'This will replace your custom prompt with the default prompt.',
-      onConfirm: () => {
-        form.setValue('description_prompt', DEFAULT_PROMPT, { shouldDirty: true });
-        setConfirmDialog({ ...confirmDialog, open: false });
-        toast.success('Prompt reset to default');
-      },
-    });
   };
 
   const handleExportData = async (format: 'json' | 'csv') => {
@@ -481,112 +404,6 @@ export default function SettingsPage() {
 
             {/* AI Models Tab */}
             <TabsContent value="ai" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>AI Provider Configuration</CardTitle>
-                  <CardDescription>Configure AI models and API keys</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="primary-model">Primary Model</Label>
-                    <Select
-                      value={form.watch('primary_model')}
-                      onValueChange={(value) =>
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        form.setValue('primary_model', value as any, { shouldDirty: true })
-                      }
-                    >
-                      <SelectTrigger id="primary-model">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="gpt-4o-mini">GPT-4o mini (OpenAI)</SelectItem>
-                        <SelectItem value="claude-3-haiku">Claude 3 Haiku (Anthropic)</SelectItem>
-                        <SelectItem value="gemini-flash">Gemini Flash (Google)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="api-key">API Key</Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Input
-                          id="api-key"
-                          type={showApiKey ? 'text' : 'password'}
-                          {...form.register('primary_api_key')}
-                          placeholder={form.watch('primary_api_key') ? '••••••••' : 'Enter API key'}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                      >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={handleTestApiKey}
-                        disabled={isTestingKey || !form.watch('primary_api_key')}
-                      >
-                        {isTestingKey && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                        {keyTestResult?.valid && <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />}
-                        {keyTestResult?.valid === false && <XCircle className="h-4 w-4 mr-2 text-destructive" />}
-                        Test
-                      </Button>
-                    </div>
-                    {keyTestResult && !keyTestResult.valid && (
-                      <p className="text-sm text-destructive">{keyTestResult.error}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="fallback-model">Fallback Model</Label>
-                    <Select
-                      value={form.watch('fallback_model') || 'none'}
-                      onValueChange={(value) =>
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        form.setValue('fallback_model', value === 'none' ? null : (value as any), {
-                          shouldDirty: true,
-                        })
-                      }
-                    >
-                      <SelectTrigger id="fallback-model">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="gpt-4o-mini">GPT-4o mini (OpenAI)</SelectItem>
-                        <SelectItem value="claude-3-haiku">Claude 3 Haiku (Anthropic)</SelectItem>
-                        <SelectItem value="gemini-flash">Gemini Flash (Google)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="description-prompt">Description Prompt</Label>
-                      <Button type="button" variant="outline" size="sm" onClick={handleResetPrompt}>
-                        <RotateCcw className="h-3 w-3 mr-1" />
-                        Reset to Default
-                      </Button>
-                    </div>
-                    <Textarea
-                      id="description-prompt"
-                      {...form.register('description_prompt')}
-                      rows={4}
-                      placeholder="Enter custom AI description prompt"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      This prompt guides the AI in generating event descriptions
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* AI Providers List - Story P2-5.2, wrapped with ErrorBoundary (P2-6.3 AC17) */}
               <ErrorBoundary context="AI Providers">
                 <AIProviders
