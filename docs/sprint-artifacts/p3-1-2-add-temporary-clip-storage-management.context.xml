@@ -1,0 +1,208 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P3-1</epicId>
+    <storyId>P3-1.2</storyId>
+    <title>Add Temporary Clip Storage Management</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-05</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-1-2-add-temporary-clip-storage-management.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system administrator</asA>
+    <iWant>temporary clip storage to be automatically managed</iWant>
+    <soThat>disk space doesn't fill up with old video files</soThat>
+    <tasks>
+      <task id="1" title="Add cleanup_clip() method to ClipService" ac="1">
+        <subtask>1.1 Add method signature: def cleanup_clip(self, event_id: str) -> bool</subtask>
+        <subtask>1.2 Use _get_clip_path(event_id) to get file path</subtask>
+        <subtask>1.3 Delete file using Path.unlink() if exists</subtask>
+        <subtask>1.4 Return True on success, False if file not found</subtask>
+        <subtask>1.5 Add structured logging for cleanup actions</subtask>
+      </task>
+      <task id="2" title="Add cleanup_old_clips() method to ClipService" ac="2">
+        <subtask>2.1 Add method signature: def cleanup_old_clips(self) -> int</subtask>
+        <subtask>2.2 Scan data/clips/ directory for all .mp4 files</subtask>
+        <subtask>2.3 Check each file's mtime against MAX_CLIP_AGE_HOURS (1 hour)</subtask>
+        <subtask>2.4 Delete files older than threshold</subtask>
+        <subtask>2.5 Return count of deleted files</subtask>
+        <subtask>2.6 Add structured logging for each deletion and summary</subtask>
+      </task>
+      <task id="3" title="Add storage pressure management" ac="3">
+        <subtask>3.1 Add method: def _check_storage_pressure(self) -> None</subtask>
+        <subtask>3.2 Calculate total size of data/clips/ directory</subtask>
+        <subtask>3.3 If size > MAX_STORAGE_MB (1024MB), delete oldest files</subtask>
+        <subtask>3.4 Continue deleting until under 900MB (90% threshold)</subtask>
+        <subtask>3.5 Log warning about storage pressure with current size</subtask>
+        <subtask>3.6 Call _check_storage_pressure() from cleanup_old_clips()</subtask>
+      </task>
+      <task id="4" title="Integrate cleanup into initialization" ac="4">
+        <subtask>4.1 Modify ClipService.__init__() to call cleanup_old_clips() after _ensure_clip_dir()</subtask>
+        <subtask>4.2 Handle any exceptions gracefully (don't fail init on cleanup errors)</subtask>
+        <subtask>4.3 Log startup cleanup results</subtask>
+      </task>
+      <task id="5" title="Add background cleanup scheduler" ac="5">
+        <subtask>5.1 Use APScheduler (already in requirements) or FastAPI BackgroundTasks</subtask>
+        <subtask>5.2 Schedule cleanup_old_clips() to run every 15 minutes</subtask>
+        <subtask>5.3 Ensure scheduler starts when ClipService is initialized</subtask>
+        <subtask>5.4 Handle scheduler shutdown gracefully</subtask>
+        <subtask>5.5 Add logging for scheduler start/stop</subtask>
+      </task>
+      <task id="6" title="Write unit tests" ac="all">
+        <subtask>6.1 Add tests to backend/tests/test_services/test_clip_service.py</subtask>
+        <subtask>6.2 Test cleanup_clip() success and file-not-found cases</subtask>
+        <subtask>6.3 Test cleanup_old_clips() with mixed age files</subtask>
+        <subtask>6.4 Test storage pressure threshold enforcement</subtask>
+        <subtask>6.5 Test initialization runs cleanup</subtask>
+        <subtask>6.6 Mock time/mtime for deterministic tests</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Given a clip file exists in data/clips/, when ClipService.cleanup_clip(event_id) is called, then the file {event_id}.mp4 is deleted and method returns True on success, False if file not found</ac>
+    <ac id="2">Given clips older than 1 hour exist (NFR7), when ClipService.cleanup_old_clips() is called, then all clips with mtime > 1 hour are deleted and returns count of deleted files</ac>
+    <ac id="3">Given the clips directory, when total size exceeds 1GB (NFR9), then oldest clips are deleted until under 900MB and warning is logged about storage pressure</ac>
+    <ac id="4">Given system startup, when ClipService initializes, then data/clips/ directory is created if not exists and cleanup_old_clips() runs to clear stale files</ac>
+    <ac id="5">Background cleanup task runs every 15 minutes to enforce age and storage limits</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Phase 3 ClipService</title>
+        <section>Phase 3 Service Architecture - ClipService (NEW)</section>
+        <snippet>ClipService manages video clip download and storage for analysis. Key methods: download_clip(), cleanup_clip(), cleanup_old_clips(). Constants: TEMP_CLIP_DIR="data/clips", MAX_CLIP_AGE_HOURS=1, MAX_STORAGE_MB=1024.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase3.md</path>
+        <title>Phase 3 PRD - Video Clip Management</title>
+        <section>Functional Requirements FR2-FR3</section>
+        <snippet>FR2: System stores clips temporarily during analysis. FR3: System automatically cleans up clips after successful analysis. NFR7: Clips auto-cleanup after 1 hour. NFR9: Storage limit 1GB.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epics - Story P3-1.2</title>
+        <section>Epic P3-1: Motion Clip Download Infrastructure</section>
+        <snippet>Story P3-1.2 adds temporary clip storage management with cleanup_clip(), cleanup_old_clips(), storage pressure management, and background scheduler running every 15 minutes.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-1-1-implement-clipservice-for-protect-video-downloads.md</path>
+        <title>Previous Story P3-1.1 - ClipService Implementation</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>ClipService created with singleton pattern, structured logging with extra={} dict, constants TEMP_CLIP_DIR, MAX_CLIP_AGE_HOURS, MAX_STORAGE_MB. Helper method _get_clip_path(event_id) available for reuse.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>service</kind>
+        <symbol>ClipService</symbol>
+        <lines>31-234</lines>
+        <reason>EXISTING service to extend. Contains download_clip(), _ensure_clip_dir(), _get_clip_path() methods. Add cleanup_clip(), cleanup_old_clips(), _check_storage_pressure() methods here.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>constants</kind>
+        <symbol>TEMP_CLIP_DIR, MAX_CLIP_AGE_HOURS, MAX_STORAGE_MB</symbol>
+        <lines>23-25</lines>
+        <reason>Constants already defined for this story: TEMP_CLIP_DIR="data/clips", MAX_CLIP_AGE_HOURS=1, MAX_STORAGE_MB=1024. Use these directly.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>method</kind>
+        <symbol>_get_clip_path</symbol>
+        <lines>78-88</lines>
+        <reason>Helper method to reuse for cleanup_clip(). Returns Path(TEMP_CLIP_DIR) / f"{event_id}.mp4".</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>singleton</kind>
+        <symbol>get_clip_service, reset_clip_service</symbol>
+        <lines>240-261</lines>
+        <reason>Singleton pattern. Use get_clip_service() to access instance. Use reset_clip_service() in tests.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_clip_service.py</path>
+        <kind>test</kind>
+        <symbol>TestClipServiceConstants, TestClipServiceInit, TestClipServiceHelpers, TestDownloadClip</symbol>
+        <lines>1-455</lines>
+        <reason>Existing test file with 23 tests. Add new tests for cleanup_clip(), cleanup_old_clips(), storage pressure, and scheduler in this file.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="apscheduler" version=">=3.10.4">Background task scheduler for periodic cleanup</package>
+        <package name="pathlib" version="stdlib">Path handling for file operations (built-in)</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">Extend existing ClipService class - DO NOT create a new service class.</constraint>
+    <constraint type="pattern">Follow singleton pattern via get_clip_service(). Do not instantiate ClipService directly in application code.</constraint>
+    <constraint type="storage">Use existing constants: TEMP_CLIP_DIR, MAX_CLIP_AGE_HOURS, MAX_STORAGE_MB. Target 900MB when under pressure (90% of 1GB).</constraint>
+    <constraint type="error-handling">Cleanup methods should handle errors gracefully. cleanup_clip returns False on not-found, cleanup_old_clips returns 0 on empty dir.</constraint>
+    <constraint type="logging">Use structured logging with extra={} dict matching existing patterns in clip_service.py.</constraint>
+    <constraint type="init">Call cleanup_old_clips() during __init__ but catch exceptions - don't fail service init on cleanup errors.</constraint>
+    <constraint type="scheduler">Use APScheduler (already in requirements.txt) for background cleanup every 15 minutes.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ClipService._get_clip_path</name>
+      <kind>method</kind>
+      <signature>def _get_clip_path(self, event_id: str) -> Path</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>REUSE this existing method to get clip file path. Returns Path(TEMP_CLIP_DIR) / f"{event_id}.mp4"</notes>
+    </interface>
+    <interface>
+      <name>ClipService.cleanup_clip</name>
+      <kind>method (to implement)</kind>
+      <signature>def cleanup_clip(self, event_id: str) -> bool</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>Delete a single clip by event_id. Returns True on success, False if not found.</notes>
+    </interface>
+    <interface>
+      <name>ClipService.cleanup_old_clips</name>
+      <kind>method (to implement)</kind>
+      <signature>def cleanup_old_clips(self) -> int</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>Delete all clips older than MAX_CLIP_AGE_HOURS. Returns count of deleted files.</notes>
+    </interface>
+    <interface>
+      <name>ClipService._check_storage_pressure</name>
+      <kind>method (to implement)</kind>
+      <signature>def _check_storage_pressure(self) -> None</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>If total size > MAX_STORAGE_MB, delete oldest clips until under 900MB. Log warning on pressure.</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Follow existing test patterns in backend/tests/test_services/test_clip_service.py. Use pytest-asyncio for async tests. Mock file system operations using unittest.mock or pytest-mock. Use tempfile for test directories. Use reset_clip_service() in teardown to reset singleton state.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_clip_service.py (existing)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test cleanup_clip returns True when file exists and is deleted</idea>
+      <idea ac="1">Test cleanup_clip returns False when file does not exist</idea>
+      <idea ac="2">Test cleanup_old_clips deletes only files older than 1 hour</idea>
+      <idea ac="2">Test cleanup_old_clips returns correct count of deleted files</idea>
+      <idea ac="2">Test cleanup_old_clips returns 0 on empty directory</idea>
+      <idea ac="3">Test _check_storage_pressure deletes oldest files when over 1GB</idea>
+      <idea ac="3">Test _check_storage_pressure stops at 900MB threshold</idea>
+      <idea ac="3">Test storage pressure logs warning message</idea>
+      <idea ac="4">Test __init__ calls cleanup_old_clips on startup</idea>
+      <idea ac="4">Test __init__ handles cleanup errors gracefully</idea>
+      <idea ac="5">Test scheduler is started on ClipService init</idea>
+      <idea ac="5">Test scheduler calls cleanup_old_clips periodically</idea>
+    </ideas>
+  </tests>
+</story-context>

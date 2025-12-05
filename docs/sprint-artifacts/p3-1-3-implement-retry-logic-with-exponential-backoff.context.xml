@@ -1,0 +1,205 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P3-1</epicId>
+    <storyId>P3-1.3</storyId>
+    <title>Implement Retry Logic with Exponential Backoff</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-05</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-1-3-implement-retry-logic-with-exponential-backoff.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>failed clip downloads to retry automatically</iWant>
+    <soThat>transient network issues don't cause permanent failures</soThat>
+    <tasks>
+      <task id="1" title="Add tenacity library to requirements" ac="1">
+        <subtask>1.1 Add tenacity>=8.2.0 to backend/requirements.txt</subtask>
+        <subtask>1.2 Run pip install tenacity to update venv</subtask>
+      </task>
+      <task id="2" title="Create retry decorator for clip downloads" ac="1,4">
+        <subtask>2.1 Create constants: MAX_RETRY_ATTEMPTS=3, RETRY_MIN_WAIT=1, RETRY_MAX_WAIT=4</subtask>
+        <subtask>2.2 Define custom RetriableClipError exception class</subtask>
+        <subtask>2.3 Define NonRetriableClipError for errors that should not retry</subtask>
+        <subtask>2.4 Create retry decorator using tenacity with exponential backoff</subtask>
+        <subtask>2.5 Add before_sleep callback to log retry attempts</subtask>
+      </task>
+      <task id="3" title="Refactor download_clip to support retry" ac="1,2,3,4">
+        <subtask>3.1 Create internal _download_clip_attempt() method with retry decorator</subtask>
+        <subtask>3.2 Classify exceptions: TimeoutError, ConnectionError to RetriableClipError</subtask>
+        <subtask>3.3 Classify exceptions: NotFoundError to NonRetriableClipError</subtask>
+        <subtask>3.4 Update download_clip() to call _download_clip_attempt()</subtask>
+        <subtask>3.5 Log success with attempt number</subtask>
+        <subtask>3.6 Log final failure after all retries exhausted</subtask>
+      </task>
+      <task id="4" title="Add structured logging for retry events" ac="1,2,3">
+        <subtask>4.1 Log each retry attempt with event_type, attempt_number, wait_seconds</subtask>
+        <subtask>4.2 Log final success with total_attempts</subtask>
+        <subtask>4.3 Log final failure with attempts_made, final_error</subtask>
+      </task>
+      <task id="5" title="Write unit tests" ac="all">
+        <subtask>5.1 Test retry on first failure, success on second attempt</subtask>
+        <subtask>5.2 Test all 3 retries fail, returns None</subtask>
+        <subtask>5.3 Test exponential backoff timing</subtask>
+        <subtask>5.4 Test non-retriable error skips retries</subtask>
+        <subtask>5.5 Test success on first attempt</subtask>
+        <subtask>5.6 Test retry logging includes attempt number</subtask>
+        <subtask>5.7 Mock uiprotect exceptions</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Given a clip download fails on first attempt, when retry logic is enabled, then system retries up to 3 times (NFR5) with waits of 1s, 2s, 4s between attempts (exponential backoff) and logs each retry attempt with attempt number</ac>
+    <ac id="2">Given all 3 retry attempts fail, when final attempt completes, then method returns None and logs "Clip download failed after 3 attempts" with event_id</ac>
+    <ac id="3">Given retry attempt 2 succeeds, when download completes, then method returns the file path and logs "Clip download succeeded on attempt N"</ac>
+    <ac id="4">Given a non-retriable error (e.g., 404/not-found), when error occurs, then no retry is attempted and failure is immediate</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD-phase3.md</path>
+        <title>Phase 3 PRD - Reliability Requirements</title>
+        <section>Non-Functional Requirements - Reliability</section>
+        <snippet>NFR5: Clip download retries up to 3 times with exponential backoff. NFR6: Failed video analysis falls back to snapshot analysis. NFR8: System continues processing other events if one clip download fails.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Phase 3 ClipService</title>
+        <section>Phase 3 Service Architecture - ClipService</section>
+        <snippet>ClipService manages video clip download and storage. Key method: download_clip() with timeout handling. Retries up to 3 times with exponential backoff (1s, 2s, 4s). Constants: DOWNLOAD_TIMEOUT=10.0.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - Webhook Retry Pattern</title>
+        <section>Integration Points - Webhook Targets</section>
+        <snippet>Existing retry pattern: 3 attempts with exponential backoff (1s, 2s, 4s), 5 second timeout per attempt. Use this as reference pattern for clip download retries.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epics - Story P3-1.3</title>
+        <section>Epic P3-1: Motion Clip Download Infrastructure</section>
+        <snippet>Story P3-1.3 implements retry logic with exponential backoff. Use tenacity library. Retry on TimeoutError/ConnectionError. Don't retry on 404/not-found errors.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-1-2-add-temporary-clip-storage-management.md</path>
+        <title>Previous Story P3-1.2 - Learnings</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>ClipService extended with cleanup methods. Constants available: TEMP_CLIP_DIR, MAX_CLIP_AGE_HOURS, MAX_STORAGE_MB, DOWNLOAD_TIMEOUT. Singleton pattern via get_clip_service(). Structured logging with extra={} dict.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>service</kind>
+        <symbol>ClipService</symbol>
+        <lines>44-579</lines>
+        <reason>PRIMARY file to modify. Contains download_clip() method (lines 404-547) that needs retry logic added. Existing constants DOWNLOAD_TIMEOUT=10.0 at line 38.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>method</kind>
+        <symbol>download_clip</symbol>
+        <lines>404-547</lines>
+        <reason>Method to wrap with retry logic. Currently catches asyncio.TimeoutError and generic Exception. Needs refactoring to use tenacity decorator.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>constants</kind>
+        <symbol>DOWNLOAD_TIMEOUT, TEMP_CLIP_DIR</symbol>
+        <lines>30-41</lines>
+        <reason>Existing constants. Add new retry constants here: MAX_RETRY_ATTEMPTS, RETRY_MIN_WAIT, RETRY_MAX_WAIT.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>singleton</kind>
+        <symbol>get_clip_service, reset_clip_service</symbol>
+        <lines>554-579</lines>
+        <reason>Singleton pattern. Use reset_clip_service() in tests.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_clip_service.py</path>
+        <kind>test</kind>
+        <symbol>TestClipServiceConstants, TestDownloadClip, TestCleanupClip, TestBackgroundScheduler</symbol>
+        <lines>1-835</lines>
+        <reason>Existing test file with 44 tests. Add new retry tests in new test class (TestRetryLogic).</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="tenacity" version=">=8.2.0">Retry library with exponential backoff support. NEW - needs to be added to requirements.txt</package>
+        <package name="apscheduler" version=">=3.10.4">Background scheduler (existing)</package>
+        <package name="uiprotect" version=">=6.0.0">UniFi Protect client - exceptions need classification</package>
+        <package name="pytest" version="==7.4.3">Testing framework (existing)</package>
+        <package name="pytest-asyncio" version="==0.21.1">Async test support (existing)</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Use tenacity library for retry logic - more robust than manual implementation.</constraint>
+    <constraint type="timing">Exponential backoff: 1s, 2s, 4s between attempts (matches webhook pattern in architecture).</constraint>
+    <constraint type="retry">MAX_RETRY_ATTEMPTS = 3 (per NFR5 in PRD-phase3.md).</constraint>
+    <constraint type="exception">RetriableClipError for: asyncio.TimeoutError, ConnectionError, network failures.</constraint>
+    <constraint type="exception">NonRetriableClipError for: 404/not-found, invalid camera, authentication failures - no retry.</constraint>
+    <constraint type="logging">Use structured logging with extra={} dict - maintain consistency with existing patterns.</constraint>
+    <constraint type="async">tenacity supports async natively - use @retry decorator on async method.</constraint>
+    <constraint type="architecture">Extend existing ClipService - DO NOT create new service class.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ClipService.download_clip</name>
+      <kind>method</kind>
+      <signature>async def download_clip(self, controller_id: str, camera_id: str, event_start: datetime, event_end: datetime, event_id: str) -> Optional[Path]</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>MODIFY this method to add retry logic. Currently returns None on failure. After retry implementation, still returns None after all retries exhausted.</notes>
+    </interface>
+    <interface>
+      <name>ClipService._download_clip_attempt</name>
+      <kind>method (to implement)</kind>
+      <signature>async def _download_clip_attempt(self, controller_id: str, camera_id: str, event_start: datetime, event_end: datetime, event_id: str, output_path: Path) -> Path</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>NEW internal method with @retry decorator. Raises RetriableClipError or NonRetriableClipError. Returns Path on success.</notes>
+    </interface>
+    <interface>
+      <name>RetriableClipError</name>
+      <kind>exception (to implement)</kind>
+      <signature>class RetriableClipError(Exception)</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>NEW exception class for errors that should trigger retry (timeout, connection).</notes>
+    </interface>
+    <interface>
+      <name>NonRetriableClipError</name>
+      <kind>exception (to implement)</kind>
+      <signature>class NonRetriableClipError(Exception)</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>NEW exception class for errors that should NOT retry (404, invalid camera).</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Follow existing test patterns in backend/tests/test_services/test_clip_service.py. Use pytest-asyncio for async tests. Mock uiprotect client using unittest.mock or pytest-mock. Use AsyncMock for async method mocking. Use reset_clip_service() in teardown to reset singleton state. Patch scheduler to avoid background tasks in tests.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_clip_service.py (existing - add new TestRetryLogic class)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test that first failure triggers retry with 1 second wait</idea>
+      <idea ac="1">Test that second failure waits 2 seconds before third attempt</idea>
+      <idea ac="1">Test that each retry attempt is logged with attempt number</idea>
+      <idea ac="2">Test that after 3 failures, method returns None</idea>
+      <idea ac="2">Test that final failure logs "Clip download failed after 3 attempts"</idea>
+      <idea ac="3">Test that success on attempt 2 returns file path</idea>
+      <idea ac="3">Test that success logs include total attempts made</idea>
+      <idea ac="4">Test that 404/not-found error does not trigger retry</idea>
+      <idea ac="4">Test that NonRetriableClipError is raised immediately without retry</idea>
+      <idea ac="all">Test success on first attempt (no retries needed) returns path immediately</idea>
+    </ideas>
+  </tests>
+</story-context>

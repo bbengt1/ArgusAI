@@ -1,0 +1,179 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P3-1</epicId>
+    <storyId>P3-1.1</storyId>
+    <title>Implement ClipService for Protect Video Downloads</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-05</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-1-1-implement-clipservice-for-protect-video-downloads.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system operator</asA>
+    <iWant>the backend to download motion clips from UniFi Protect</iWant>
+    <soThat>video content is available for AI analysis</soThat>
+    <tasks>
+      <task id="1" title="Research uiprotect clip download API" ac="2">
+        <subtask>1.1 Investigate uiprotect library for video clip download method</subtask>
+        <subtask>1.2 Determine if get_camera_video() or equivalent method exists</subtask>
+        <subtask>1.3 Document required parameters (camera_id, start_time, end_time, etc.)</subtask>
+        <subtask>1.4 Note any format or duration constraints</subtask>
+      </task>
+      <task id="2" title="Create ClipService class" ac="1,8">
+        <subtask>2.1 Create backend/app/services/clip_service.py</subtask>
+        <subtask>2.2 Define ClipService class with constants: TEMP_CLIP_DIR, MAX_CLIP_AGE_HOURS, MAX_STORAGE_MB</subtask>
+        <subtask>2.3 Add __init__ method to accept ProtectService dependency</subtask>
+        <subtask>2.4 Add _ensure_clip_dir() helper method to create directory</subtask>
+      </task>
+      <task id="3" title="Implement download_clip() method" ac="2,3,4,5,6,7">
+        <subtask>3.1 Define async method signature with controller_id, camera_id, event_start, event_end, event_id parameters</subtask>
+        <subtask>3.2 Get ProtectService client for controller_id</subtask>
+        <subtask>3.3 Call uiprotect's clip download method with time range</subtask>
+        <subtask>3.4 Save MP4 to data/clips/{event_id}.mp4</subtask>
+        <subtask>3.5 Return Path on success, None on any failure</subtask>
+        <subtask>3.6 Add timeout handling (10 second limit)</subtask>
+        <subtask>3.7 Add comprehensive error logging</subtask>
+      </task>
+      <task id="4" title="Add helper method for clip path" ac="3">
+        <subtask>4.1 Implement _get_clip_path(event_id: str) -> Path</subtask>
+        <subtask>4.2 Ensure consistent path generation</subtask>
+      </task>
+      <task id="5" title="Write unit tests" ac="all">
+        <subtask>5.1 Create backend/tests/test_services/test_clip_service.py</subtask>
+        <subtask>5.2 Test successful clip download (mock uiprotect)</subtask>
+        <subtask>5.3 Test directory creation on first download</subtask>
+        <subtask>5.4 Test failure handling (controller unreachable)</subtask>
+        <subtask>5.5 Test timeout behavior</subtask>
+        <subtask>5.6 Test file path generation</subtask>
+      </task>
+      <task id="6" title="Add PyAV dependency" ac="2">
+        <subtask>6.1 Verify av>=12.0.0 is in backend/requirements.txt (already present)</subtask>
+        <subtask>6.2 Verify import works</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">ClipService class exists at backend/app/services/clip_service.py with download_clip() method</ac>
+    <ac id="2">Given a Protect smart detection event with camera_id and event timestamps, when ClipService.download_clip() is called, then the system downloads the MP4 clip via uiprotect library</ac>
+    <ac id="3">Downloaded clips are saved to data/clips/{event_id}.mp4 file path</ac>
+    <ac id="4">Method returns the file path on success or None on failure (no exceptions raised)</ac>
+    <ac id="5">Download completes within 10 seconds for typical motion events (10-30 second clips) - NFR1</ac>
+    <ac id="6">Uses existing controller credentials from ProtectService (no duplicate authentication)</ac>
+    <ac id="7">When Protect controller is unreachable, method returns None and logs failure with event_id and error details</ac>
+    <ac id="8">data/clips/ directory is created if it doesn't exist on first download</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Phase 3 ClipService</title>
+        <section>Phase 3 Service Architecture - ClipService (NEW)</section>
+        <snippet>ClipService manages video clip download and storage for analysis. Key methods: download_clip(), cleanup_clip(), cleanup_old_clips(). Uses TEMP_CLIP_DIR="data/clips", MAX_CLIP_AGE_HOURS=1, MAX_STORAGE_MB=1024.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase3.md</path>
+        <title>Phase 3 PRD - Video Clip Management</title>
+        <section>Functional Requirements FR1-FR5</section>
+        <snippet>FR1: System can download motion clips from UniFi Protect for any event. FR2: Store clips temporarily during analysis. FR3: Auto cleanup after analysis. FR4: Retry with exponential backoff. FR5: Fallback to snapshot on failure.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epics - Story P3-1.1</title>
+        <section>Epic P3-1: Motion Clip Download Infrastructure</section>
+        <snippet>Foundational story for video clip download. Creates ClipService with download_clip() method using uiprotect library. Returns Optional[Path] - None on failure, file path on success.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/protect_service.py</path>
+        <kind>service</kind>
+        <symbol>ProtectService</symbol>
+        <lines>82-1539</lines>
+        <reason>ClipService must use ProtectService to access authenticated ProtectApiClient connections. Key methods: _connections dict holds ProtectApiClient instances by controller_id. Use get_protect_service() singleton pattern.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/protect_service.py</path>
+        <kind>service</kind>
+        <symbol>get_camera_snapshot</symbol>
+        <lines>1453-1526</lines>
+        <reason>Similar pattern to implement - uses client.get_camera_snapshot(). ClipService will need similar method for video: client.get_camera_video() or equivalent.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>service</kind>
+        <symbol>ProtectEventHandler</symbol>
+        <reason>Event handler that will eventually call ClipService. Understand event structure (controller_id, camera_id, timestamps) that will be passed to download_clip().</reason>
+      </file>
+      <file>
+        <path>backend/app/models/protect_controller.py</path>
+        <kind>model</kind>
+        <symbol>ProtectController</symbol>
+        <reason>Model for controller data. ClipService will receive controller_id and look up client via ProtectService._connections.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="uiprotect" version=">=6.0.0">UniFi Protect API client - provides ProtectApiClient with video download capabilities</package>
+        <package name="av" version=">=12.0.0">PyAV for video processing - already installed</package>
+        <package name="aiofiles" version="*">For async file operations (may need to add)</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">ClipService must be a new service class, not modify ProtectService directly. Follow existing service patterns in backend/app/services/.</constraint>
+    <constraint type="dependency">Use ProtectService singleton to access authenticated clients - do NOT create new ProtectApiClient connections.</constraint>
+    <constraint type="storage">Store clips in data/clips/{event_id}.mp4. This directory must be gitignored. Create directory if not exists.</constraint>
+    <constraint type="error-handling">Never raise exceptions from download_clip() - always return None on failure and log the error.</constraint>
+    <constraint type="performance">Download must complete within 10 seconds (NFR1). Use asyncio.timeout(10) for enforcement.</constraint>
+    <constraint type="logging">Log all failures with event_id and error details. Follow existing logging patterns with extra={} dict.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ProtectService._connections</name>
+      <kind>property</kind>
+      <signature>Dict[str, ProtectApiClient]</signature>
+      <path>backend/app/services/protect_service.py</path>
+      <notes>Access authenticated clients by controller_id. Use get_protect_service()._connections.get(controller_id) to retrieve client.</notes>
+    </interface>
+    <interface>
+      <name>ProtectApiClient.get_camera_video</name>
+      <kind>method (to investigate)</kind>
+      <signature>async def get_camera_video(camera_id: str, start: datetime, end: datetime, channel: int = 0) -> bytes</signature>
+      <path>uiprotect library</path>
+      <notes>INVESTIGATE: Need to verify exact method name and parameters in uiprotect library. May be named differently or require different parameters.</notes>
+    </interface>
+    <interface>
+      <name>ClipService.download_clip</name>
+      <kind>method (to implement)</kind>
+      <signature>async def download_clip(self, controller_id: str, camera_id: str, event_start: datetime, event_end: datetime, event_id: str) -> Optional[Path]</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>Main method to implement. Returns Path to downloaded file or None on failure.</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Follow existing test patterns in backend/tests/test_services/. Use pytest-asyncio for async tests. Mock uiprotect library responses using unittest.mock or pytest-mock. Test both success and failure paths. Use fixtures for common setup. Test file should be test_clip_service.py in test_services directory.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_clip_service.py (NEW)</location>
+      <location>backend/tests/test_services/ (existing test directory)</location>
+    </locations>
+    <ideas>
+      <idea ac="1,2">Test download_clip returns Path when uiprotect returns video bytes successfully</idea>
+      <idea ac="3">Test clip is saved to correct path: data/clips/{event_id}.mp4</idea>
+      <idea ac="4">Test download_clip returns None when ProtectApiClient raises exception</idea>
+      <idea ac="5">Test download times out and returns None after 10 seconds</idea>
+      <idea ac="6">Test ClipService uses ProtectService singleton, not new connections</idea>
+      <idea ac="7">Test error logging when controller unreachable (mock logging)</idea>
+      <idea ac="8">Test directory creation when data/clips/ doesn't exist</idea>
+    </ideas>
+  </tests>
+</story-context>

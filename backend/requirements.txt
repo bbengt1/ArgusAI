@@ -6,6 +6,9 @@ python-multipart>=0.0.6
 # Task Scheduling
 apscheduler>=3.10.4
 
+# Retry Logic (Phase 3)
+tenacity>=8.2.0
+
 # Database
 sqlalchemy>=2.0.36
 alembic>=1.14.0

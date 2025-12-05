@@ -1,0 +1,247 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P3-1</epicId>
+    <storyId>P3-1.4</storyId>
+    <title>Integrate Clip Download into Event Pipeline</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-05</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-1-4-integrate-clip-download-into-event-pipeline.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>clip downloads to happen automatically for Protect events</iWant>
+    <soThat>video is available when AI analysis needs it</soThat>
+    <tasks>
+      <task id="1" title="Add fallback_reason field to Event model" ac="2">
+        <subtask>1.1 Add fallback_reason: Optional[str] field to Event model</subtask>
+        <subtask>1.2 Create Alembic migration to add fallback_reason column</subtask>
+        <subtask>1.3 Run alembic upgrade head to apply migration</subtask>
+        <subtask>1.4 Update EventResponse schema to include fallback_reason</subtask>
+      </task>
+      <task id="2" title="Extend event processing context" ac="1,2">
+        <subtask>2.1 Add clip_path: Optional[Path] to event processing context</subtask>
+        <subtask>2.2 Add fallback_reason: Optional[str] to event processing context</subtask>
+        <subtask>2.3 Ensure context is passed through processing pipeline</subtask>
+      </task>
+      <task id="3" title="Integrate clip download into Protect event handler" ac="1,2,4">
+        <subtask>3.1 Import get_clip_service() in event processor</subtask>
+        <subtask>3.2 Call ClipService.download_clip() after receiving Protect event</subtask>
+        <subtask>3.3 If download returns Path, set clip_path in context</subtask>
+        <subtask>3.4 If download returns None, set fallback_reason and use thumbnail</subtask>
+        <subtask>3.5 Ensure download is async and non-blocking</subtask>
+      </task>
+      <task id="4" title="Pass clip path to AI service" ac="1">
+        <subtask>4.1 Modify AI description generation to accept optional clip_path</subtask>
+        <subtask>4.2 For now, continue using thumbnail (future stories add frame extraction)</subtask>
+      </task>
+      <task id="5" title="Implement clip cleanup after AI analysis" ac="3">
+        <subtask>5.1 After AI description generated, check if clip_path was set</subtask>
+        <subtask>5.2 If clip exists, call ClipService.cleanup_clip(event_id)</subtask>
+        <subtask>5.3 Log cleanup success/failure with event_id</subtask>
+      </task>
+      <task id="6" title="Store fallback_reason in database" ac="2">
+        <subtask>6.1 Include fallback_reason field when creating Event record</subtask>
+        <subtask>6.2 Verify fallback_reason is persisted and queryable</subtask>
+      </task>
+      <task id="7" title="Write integration tests" ac="all">
+        <subtask>7.1 Test successful clip download → AI analysis → cleanup flow</subtask>
+        <subtask>7.2 Test clip download failure → fallback to thumbnail → event flagged</subtask>
+        <subtask>7.3 Test multiple concurrent events with independent downloads</subtask>
+        <subtask>7.4 Test event still created when clip unavailable</subtask>
+        <subtask>7.5 Test cleanup is called after processing completes</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Given a Protect smart detection event is received, when the event is processed by EventProcessor, then ClipService.download_clip() is called before AI analysis and clip path is passed to AI service if download succeeds</ac>
+    <ac id="2">Given clip download fails after retries, when fallback is triggered (FR5), then system uses existing thumbnail/snapshot for AI analysis and event is flagged with fallback_reason: "clip_download_failed" and processing continues without interruption (NFR8)</ac>
+    <ac id="3">Given clip download succeeds, when AI analysis completes, then ClipService.cleanup_clip() is called and temporary file is removed</ac>
+    <ac id="4">Given multiple events arrive simultaneously, when clips are being downloaded, then each event's clip download is independent and one failure doesn't block others (NFR8)</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD-phase3.md</path>
+        <title>Phase 3 PRD - Video Clip Management</title>
+        <section>Functional Requirements - Video Clip Management</section>
+        <snippet>FR5: System handles clip download failures gracefully with fallback to snapshot. NFR8: System continues processing other events if one clip download fails.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase3.md</path>
+        <title>Phase 3 PRD - Reliability</title>
+        <section>Non-Functional Requirements - Reliability</section>
+        <snippet>NFR6: Failed video analysis falls back to snapshot analysis. NFR7: Temporary clip storage cleaned up within 1 hour. NFR8: System continues processing other events if one clip download fails.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epics - Story P3-1.4</title>
+        <section>Epic P3-1: Motion Clip Download Infrastructure</section>
+        <snippet>Story P3-1.4: Integrate clip download into event pipeline. Prerequisites: P3-1.1, P3-1.2, P3-1.3. Modify event_processor.py, add fallback_reason to Event model.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - Event Processing Pipeline</title>
+        <section>Event Processing Pipeline</section>
+        <snippet>Motion detected → Frame captured → Event queued → Worker picks event → AI API call → Description received → Event stored → Alert rules evaluated → WebSocket broadcast</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-1-3-implement-retry-logic-with-exponential-backoff.md</path>
+        <title>Previous Story P3-1.3 - Learnings</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>ClipService API: download_clip(controller_id, camera_id, event_start, event_end, event_id) returns Optional[Path]. cleanup_clip(event_id) returns bool. Retry logic built-in (3 attempts). 66 tests in test_clip_service.py.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>service</kind>
+        <symbol>EventProcessor</symbol>
+        <lines>124-250</lines>
+        <reason>PRIMARY file to modify. Contains event processing pipeline. _process_event() method (lines 528-629) needs clip download integration before AI analysis.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>method</kind>
+        <symbol>_process_event</symbol>
+        <lines>528-629</lines>
+        <reason>Method to modify. Currently calls AI service directly. Need to add clip download step before AI call, and cleanup after.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>dataclass</kind>
+        <symbol>ProcessingEvent</symbol>
+        <lines>47-66</lines>
+        <reason>Event data structure. May need to add clip_path and fallback_reason fields.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>9-72</lines>
+        <reason>SQLAlchemy model to modify. Need to add fallback_reason: Optional[String] column. Already has source_type, protect_event_id, smart_detection_type fields.</reason>
+      </file>
+      <file>
+        <path>backend/app/schemas/event.py</path>
+        <kind>schema</kind>
+        <symbol>EventResponse, EventCreate</symbol>
+        <lines>7-52, 66-117</lines>
+        <reason>Pydantic schemas to update. Add fallback_reason field to EventResponse and EventCreate.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>service</kind>
+        <symbol>ClipService</symbol>
+        <lines>82-750</lines>
+        <reason>ClipService to use. download_clip() returns Optional[Path], cleanup_clip() returns bool. Use get_clip_service() singleton.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>method</kind>
+        <symbol>download_clip</symbol>
+        <lines>568-717</lines>
+        <reason>API: download_clip(controller_id, camera_id, event_start, event_end, event_id) -> Optional[Path]. Returns None on failure (never raises).</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>method</kind>
+        <symbol>cleanup_clip</symbol>
+        <lines>339-385</lines>
+        <reason>API: cleanup_clip(event_id) -> bool. Deletes clip file, returns True on success.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>singleton</kind>
+        <symbol>get_clip_service, reset_clip_service</symbol>
+        <lines>720-750</lines>
+        <reason>Singleton pattern. Use get_clip_service() for production, reset_clip_service() in tests.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_event_processor.py</path>
+        <kind>test</kind>
+        <symbol>TestEventProcessor</symbol>
+        <lines>1-end</lines>
+        <reason>Existing test file. Add new tests for clip integration flow.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="==0.115.0">Web framework</package>
+        <package name="sqlalchemy" version=">=2.0.36">ORM for database models</package>
+        <package name="alembic" version=">=1.14.0">Database migrations</package>
+        <package name="pydantic" version=">=2.10.0">Data validation schemas</package>
+        <package name="tenacity" version=">=8.2.0">Retry logic (used by ClipService)</package>
+        <package name="pytest" version="==7.4.3">Testing framework</package>
+        <package name="pytest-asyncio" version="==0.21.1">Async test support</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Use async/await for clip download - ClipService.download_clip() is already async.</constraint>
+    <constraint type="fallback">If clip download returns None, continue with existing thumbnail for AI analysis (FR5).</constraint>
+    <constraint type="cleanup">Always cleanup clip after processing using ClipService.cleanup_clip() in finally block.</constraint>
+    <constraint type="independence">Each event's clip download must be independent - one failure shouldn't block others (NFR8).</constraint>
+    <constraint type="logging">Use structured logging with extra={} dict pattern for consistency.</constraint>
+    <constraint type="migration">Database migration required for new fallback_reason column.</constraint>
+    <constraint type="singleton">Use get_clip_service() to get ClipService instance, reset_clip_service() in tests.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ClipService.download_clip</name>
+      <kind>async method</kind>
+      <signature>async def download_clip(self, controller_id: str, camera_id: str, event_start: datetime, event_end: datetime, event_id: str) -> Optional[Path]</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>Returns Path on success, None on failure (after retries). Never raises exceptions.</notes>
+    </interface>
+    <interface>
+      <name>ClipService.cleanup_clip</name>
+      <kind>method</kind>
+      <signature>def cleanup_clip(self, event_id: str) -> bool</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>Deletes clip file. Returns True if deleted, False if not found.</notes>
+    </interface>
+    <interface>
+      <name>get_clip_service</name>
+      <kind>singleton factory</kind>
+      <signature>def get_clip_service() -> ClipService</signature>
+      <path>backend/app/services/clip_service.py</path>
+      <notes>Returns singleton ClipService instance. Creates on first call.</notes>
+    </interface>
+    <interface>
+      <name>Event.fallback_reason</name>
+      <kind>model field (to implement)</kind>
+      <signature>fallback_reason = Column(String(100), nullable=True)</signature>
+      <path>backend/app/models/event.py</path>
+      <notes>NEW field to add. Stores reason for fallback (e.g., "clip_download_failed"). Null when no fallback used.</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Follow existing test patterns in backend/tests/test_services/. Use pytest-asyncio for async tests. Mock ClipService using unittest.mock or pytest-mock. Use AsyncMock for async method mocking. Use reset_clip_service() in teardown to reset singleton state. Test both success and failure paths.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_event_processor.py</location>
+      <location>backend/tests/test_api/test_events.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test that download_clip is called for Protect events before AI analysis</idea>
+      <idea ac="1">Test that clip_path is passed to AI service when download succeeds</idea>
+      <idea ac="2">Test that fallback_reason is set when download fails</idea>
+      <idea ac="2">Test that processing continues with thumbnail when clip unavailable</idea>
+      <idea ac="2">Test that fallback_reason is persisted in database</idea>
+      <idea ac="3">Test that cleanup_clip is called after AI analysis completes</idea>
+      <idea ac="3">Test that cleanup happens even if AI analysis fails</idea>
+      <idea ac="4">Test that multiple concurrent events download clips independently</idea>
+      <idea ac="4">Test that one download failure doesn't affect other events</idea>
+      <idea ac="all">Test end-to-end flow: Protect event → clip download → AI → cleanup → stored</idea>
+    </ideas>
+  </tests>
+</story-context>

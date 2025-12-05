@@ -25,6 +25,8 @@ class EventCreate(BaseModel):
         None, description="Protect smart detection type"
     )
     is_doorbell_ring: bool = Field(default=False, description="Whether event was triggered by doorbell ring")
+    # Story P3-1.4: Fallback reason tracking
+    fallback_reason: Optional[str] = Field(None, max_length=100, description="Reason for fallback to snapshot analysis (e.g., 'clip_download_failed')")
 
     @field_validator('objects_detected')
     @classmethod
@@ -85,6 +87,8 @@ class EventResponse(BaseModel):
     correlated_events: Optional[List["CorrelatedEventResponse"]] = Field(None, description="Related events from same correlation group")
     # Story P2-5.3: AI provider tracking
     provider_used: Optional[str] = Field(None, description="AI provider that generated description (openai/grok/claude/gemini)")
+    # Story P3-1.4: Fallback reason tracking
+    fallback_reason: Optional[str] = Field(None, description="Reason for fallback to snapshot analysis (e.g., 'clip_download_failed')")
 
     @field_validator('objects_detected', mode='before')
     @classmethod

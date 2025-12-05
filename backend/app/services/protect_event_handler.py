@@ -37,7 +37,9 @@ import io
 import json
 import logging
 import time
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 import numpy as np
@@ -48,6 +50,7 @@ from app.core.database import SessionLocal
 from app.models.camera import Camera
 from app.models.event import Event
 from app.services.snapshot_service import get_snapshot_service, SnapshotResult
+from app.services.clip_service import get_clip_service
 
 if TYPE_CHECKING:
     from app.services.ai_service import AIResult
@@ -225,6 +228,10 @@ class ProtectEventHandler:
 
                     # Event passed all filters - update tracking and proceed
                     self._last_event_times[camera.id] = datetime.now(timezone.utc)
+                    event_timestamp = datetime.now(timezone.utc)
+
+                    # Generate event ID early for clip download filename
+                    generated_event_id = str(uuid.uuid4())
 
                     logger.info(
                         f"Event passed filters for camera '{camera.name}': {event_type}",
@@ -241,7 +248,19 @@ class ProtectEventHandler:
                     # Story P2-4.1: Check if this is a doorbell ring event
                     is_doorbell_ring = (filter_type == "ring")
 
+                    # Story P3-1.4 AC1, AC2, AC4: Attempt clip download for Protect events
+                    # This is async and doesn't block other event processing
+                    clip_path, fallback_reason = await self._download_clip_for_event(
+                        controller_id=controller_id,
+                        protect_camera_id=camera.protect_camera_id,
+                        camera_id=camera.id,
+                        camera_name=camera.name,
+                        event_id=generated_event_id,
+                        event_timestamp=event_timestamp
+                    )
+
                     # Story P2-3.2: Retrieve snapshot for AI processing
+                    # (Always needed - even if clip download succeeded, we use snapshot for thumbnail)
                     snapshot_result = await self._retrieve_snapshot(
                         controller_id,
                         camera.protect_camera_id,
@@ -251,6 +270,13 @@ class ProtectEventHandler:
                     )
 
                     if not snapshot_result:
+                        # Story P3-1.4 AC3: Clean up clip if snapshot retrieval failed
+                        if clip_path:
+                            try:
+                                clip_service = get_clip_service()
+                                clip_service.cleanup_clip(generated_event_id)
+                            except Exception:
+                                pass  # Best effort cleanup
                         return False
 
                     # Story P2-3.3: Submit to AI pipeline
@@ -270,12 +296,37 @@ class ProtectEventHandler:
                     # Track total processing time (AC10, AC11)
                     pipeline_start = time.time()
 
+                    # Story P3-1.4 AC1: Pass clip_path to AI pipeline (for future multi-frame analysis)
                     ai_result = await self._submit_to_ai_pipeline(
                         snapshot_result,
                         camera,
                         filter_type,  # Use mapped type (person, vehicle, ring, etc.)
-                        is_doorbell_ring=is_doorbell_ring  # Story P2-4.1: Use doorbell prompt
+                        is_doorbell_ring=is_doorbell_ring,  # Story P2-4.1: Use doorbell prompt
+                        clip_path=clip_path  # Story P3-1.4: Video clip for future use
                     )
+
+                    # Story P3-1.4 AC3: Always cleanup clip after AI processing
+                    if clip_path:
+                        try:
+                            clip_service = get_clip_service()
+                            cleanup_success = clip_service.cleanup_clip(generated_event_id)
+                            logger.debug(
+                                f"Clip cleanup {'succeeded' if cleanup_success else 'failed'} for event {generated_event_id[:8]}...",
+                                extra={
+                                    "event_type": "clip_cleanup",
+                                    "event_id": generated_event_id,
+                                    "cleanup_success": cleanup_success
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Clip cleanup error for event {generated_event_id[:8]}...: {e}",
+                                extra={
+                                    "event_type": "clip_cleanup_error",
+                                    "event_id": generated_event_id,
+                                    "error_type": type(e).__name__
+                                }
+                            )
 
                     if not ai_result or not ai_result.success:
                         logger.warning(
@@ -289,6 +340,7 @@ class ProtectEventHandler:
                         return False
 
                     # Story P2-3.3: Store event in database
+                    # Story P3-1.4 AC2: Include fallback_reason if clip download failed
                     stored_event = await self._store_protect_event(
                         db,
                         ai_result,
@@ -296,7 +348,9 @@ class ProtectEventHandler:
                         camera,
                         filter_type,
                         protect_event_id,
-                        is_doorbell_ring=is_doorbell_ring  # Story P2-4.1 AC3, AC5
+                        is_doorbell_ring=is_doorbell_ring,  # Story P2-4.1 AC3, AC5
+                        fallback_reason=fallback_reason,  # Story P3-1.4 AC2
+                        event_id_override=generated_event_id  # Use pre-generated ID
                     )
 
                     if not stored_event:
@@ -564,6 +618,100 @@ class ProtectEventHandler:
 
         return False
 
+    async def _download_clip_for_event(
+        self,
+        controller_id: str,
+        protect_camera_id: str,
+        camera_id: str,
+        camera_name: str,
+        event_id: str,
+        event_timestamp: datetime
+    ) -> tuple[Optional[Path], Optional[str]]:
+        """
+        Download video clip for Protect event (Story P3-1.4 AC1, AC2, AC4).
+
+        Attempts to download a 30-second clip centered on the event timestamp.
+        Returns clip path if successful, or fallback_reason if failed.
+
+        Args:
+            controller_id: Controller UUID
+            protect_camera_id: Native Protect camera ID
+            camera_id: Internal camera UUID
+            camera_name: Camera name for logging
+            event_id: Unique event ID for clip filename
+            event_timestamp: Event timestamp for clip time range
+
+        Returns:
+            Tuple of (clip_path, fallback_reason):
+            - (Path, None) if download succeeded
+            - (None, "clip_download_failed") if download failed
+        """
+        try:
+            clip_service = get_clip_service()
+
+            # Calculate clip time range (15 seconds before, 15 seconds after)
+            clip_start = event_timestamp - timedelta(seconds=15)
+            clip_end = event_timestamp + timedelta(seconds=15)
+
+            logger.info(
+                f"Attempting clip download for camera '{camera_name}' event {event_id[:8]}...",
+                extra={
+                    "event_type": "clip_download_attempt",
+                    "controller_id": controller_id,
+                    "camera_id": camera_id,
+                    "event_id": event_id,
+                    "clip_start": clip_start.isoformat(),
+                    "clip_end": clip_end.isoformat()
+                }
+            )
+
+            # AC1, AC4: Download clip asynchronously (doesn't block other events)
+            clip_path = await clip_service.download_clip(
+                controller_id=controller_id,
+                camera_id=protect_camera_id,
+                event_start=clip_start,
+                event_end=clip_end,
+                event_id=event_id
+            )
+
+            if clip_path:
+                logger.info(
+                    f"Clip downloaded successfully for camera '{camera_name}': {clip_path}",
+                    extra={
+                        "event_type": "clip_download_success",
+                        "camera_id": camera_id,
+                        "event_id": event_id,
+                        "clip_path": str(clip_path)
+                    }
+                )
+                return clip_path, None
+            else:
+                # AC2: Download failed, set fallback reason
+                logger.warning(
+                    f"Clip download failed for camera '{camera_name}', falling back to snapshot",
+                    extra={
+                        "event_type": "clip_download_fallback",
+                        "camera_id": camera_id,
+                        "event_id": event_id,
+                        "fallback_reason": "clip_download_failed"
+                    }
+                )
+                return None, "clip_download_failed"
+
+        except Exception as e:
+            # AC2: Handle any unexpected errors gracefully
+            logger.error(
+                f"Clip download error for camera '{camera_name}': {e}",
+                extra={
+                    "event_type": "clip_download_error",
+                    "camera_id": camera_id,
+                    "event_id": event_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                }
+            )
+            return None, "clip_download_failed"
+
     async def _retrieve_snapshot(
         self,
         controller_id: str,
@@ -684,7 +832,8 @@ class ProtectEventHandler:
         snapshot_result: SnapshotResult,
         camera: Camera,
         event_type: str,
-        is_doorbell_ring: bool = False
+        is_doorbell_ring: bool = False,
+        clip_path: Optional[Path] = None
     ) -> Optional["AIResult"]:
         """
         Submit snapshot to AI pipeline for description generation (Story P2-3.3 AC1-3, P2-4.1 AC4).
@@ -697,9 +846,14 @@ class ProtectEventHandler:
             camera: Camera that captured the event
             event_type: Detection type (person, vehicle, ring, etc.)
             is_doorbell_ring: If True, use doorbell-specific AI prompt (Story P2-4.1)
+            clip_path: Optional path to video clip (Story P3-1.4, for future multi-frame analysis)
 
         Returns:
             AIResult with description, or None on failure
+
+        Note:
+            clip_path is currently logged but not used - future stories (P3-2) will
+            add multi-frame extraction from clip for enhanced AI analysis.
         """
         try:
             # Lazy import to avoid circular imports (same pattern as snapshot_service)
@@ -774,10 +928,12 @@ class ProtectEventHandler:
         camera: Camera,
         event_type: str,
         protect_event_id: Optional[str],
-        is_doorbell_ring: bool = False
+        is_doorbell_ring: bool = False,
+        fallback_reason: Optional[str] = None,
+        event_id_override: Optional[str] = None
     ) -> Optional[Event]:
         """
-        Store Protect event in database (Story P2-3.3 AC5-9, P2-4.1 AC3, AC5).
+        Store Protect event in database (Story P2-3.3 AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2).
 
         Creates Event record with source_type='protect' and all AI/snapshot fields.
 
@@ -789,12 +945,14 @@ class ProtectEventHandler:
             event_type: Detection type (person, vehicle, ring, etc.)
             protect_event_id: Protect's native event ID
             is_doorbell_ring: Whether this is a doorbell ring event (Story P2-4.1)
+            fallback_reason: Reason for fallback to snapshot (Story P3-1.4, e.g., "clip_download_failed")
+            event_id_override: Pre-generated event ID to use (Story P3-1.4)
 
         Returns:
             Stored Event model or None on failure
         """
         try:
-            # Create Event record (AC5-9, P2-4.1 AC3, AC5)
+            # Create Event record (AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2)
             event = Event(
                 camera_id=camera.id,
                 timestamp=snapshot_result.timestamp,
@@ -808,8 +966,13 @@ class ProtectEventHandler:
                 protect_event_id=protect_event_id,  # AC6
                 smart_detection_type=event_type,  # AC7 (will be 'ring' for doorbell events)
                 is_doorbell_ring=is_doorbell_ring,  # Story P2-4.1 AC3, AC5
-                provider_used=ai_result.provider  # Story P2-5.3: AI provider tracking
+                provider_used=ai_result.provider,  # Story P2-5.3: AI provider tracking
+                fallback_reason=fallback_reason  # Story P3-1.4 AC2: Track clip download failures
             )
+
+            # Story P3-1.4: Use pre-generated event ID if provided
+            if event_id_override:
+                event.id = event_id_override
 
             db.add(event)
             db.commit()
