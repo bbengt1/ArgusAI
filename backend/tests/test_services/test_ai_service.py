@@ -1110,3 +1110,656 @@ class TestFallbackChainBehavior:
         assert result.success is False
         assert result.provider == "none"
         assert "Failed to generate" in result.description
+
+
+# =============================================================================
+# Story P3-2.3: Multi-Image Analysis Tests
+# =============================================================================
+
+
+@pytest.fixture
+def sample_image_bytes():
+    """Generate sample JPEG image bytes for testing multi-image analysis"""
+    from PIL import Image
+    import io
+
+    # Create a simple test image
+    img = Image.new('RGB', (100, 100), color='blue')
+    buffer = io.BytesIO()
+    img.save(buffer, format='JPEG', quality=85)
+    return buffer.getvalue()
+
+
+@pytest.fixture
+def sample_image_bytes_list():
+    """Generate list of 3 sample JPEG image bytes for testing multi-image analysis"""
+    from PIL import Image
+    import io
+
+    images = []
+    colors = ['red', 'green', 'blue']
+    for color in colors:
+        img = Image.new('RGB', (100, 100), color=color)
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=85)
+        images.append(buffer.getvalue())
+    return images
+
+
+class TestMultiImagePreprocessing:
+    """Test multi-image preprocessing functionality (Story P3-2.3)"""
+
+    def test_preprocess_image_bytes_basic(self, ai_service_instance, sample_image_bytes):
+        """Test preprocessing of raw image bytes"""
+        base64_img = ai_service_instance._preprocess_image_bytes(sample_image_bytes)
+
+        assert isinstance(base64_img, str)
+        assert len(base64_img) > 0
+        # Base64 string should be valid
+        import base64
+        try:
+            decoded = base64.b64decode(base64_img)
+            assert len(decoded) > 0
+        except Exception as e:
+            pytest.fail(f"Invalid base64: {e}")
+
+    def test_preprocess_image_bytes_large_image(self, ai_service_instance):
+        """Test preprocessing resizes large image bytes to 2048x2048 max"""
+        from PIL import Image
+        import io
+        import base64
+
+        # Create a large 4000x3000 image
+        large_img = Image.new('RGB', (4000, 3000), color='red')
+        buffer = io.BytesIO()
+        large_img.save(buffer, format='JPEG', quality=95)
+        large_bytes = buffer.getvalue()
+
+        base64_img = ai_service_instance._preprocess_image_bytes(large_bytes)
+
+        # Decode and check size
+        decoded = base64.b64decode(base64_img)
+        resized_img = Image.open(io.BytesIO(decoded))
+
+        # Should be resized to max 2048 on longest side
+        assert max(resized_img.size) <= 2048
+        assert resized_img.format == 'JPEG'
+
+    def test_preprocess_image_bytes_png_converted_to_jpeg(self, ai_service_instance):
+        """Test that PNG image bytes are converted to JPEG"""
+        from PIL import Image
+        import io
+        import base64
+
+        # Create PNG image
+        png_img = Image.new('RGBA', (200, 200), color='green')
+        buffer = io.BytesIO()
+        png_img.save(buffer, format='PNG')
+        png_bytes = buffer.getvalue()
+
+        base64_img = ai_service_instance._preprocess_image_bytes(png_bytes)
+
+        # Decode and verify it's JPEG
+        decoded = base64.b64decode(base64_img)
+        result_img = Image.open(io.BytesIO(decoded))
+        assert result_img.format == 'JPEG'
+
+
+class TestMultiImagePromptBuilder:
+    """Test multi-image prompt building (Story P3-2.3)"""
+
+    def test_build_multi_image_prompt_basic(self):
+        """Test multi-image prompt includes frame count and context"""
+        provider = OpenAIProvider("sk-test-key")
+
+        prompt = provider._build_multi_image_prompt(
+            camera_name="Front Door",
+            timestamp="2025-12-06T10:00:00",
+            detected_objects=["person"],
+            num_images=5
+        )
+
+        assert "5 sequential frames" in prompt
+        assert "Camera 'Front Door'" in prompt
+        assert "2025-12-06T10:00:00" in prompt
+        assert "person" in prompt
+        assert "complete sequence" in prompt.lower() or "sequence" in prompt.lower()
+
+    def test_build_multi_image_prompt_custom(self):
+        """Test multi-image prompt with custom prompt override"""
+        provider = OpenAIProvider("sk-test-key")
+
+        custom_prompt = "Focus only on vehicle movements"
+        prompt = provider._build_multi_image_prompt(
+            camera_name="Driveway",
+            timestamp="2025-12-06T11:00:00",
+            detected_objects=[],
+            num_images=3,
+            custom_prompt=custom_prompt
+        )
+
+        assert custom_prompt in prompt
+        assert "Camera 'Driveway'" in prompt
+
+    def test_build_multi_image_prompt_no_detected_objects(self):
+        """Test multi-image prompt without detected objects"""
+        provider = ClaudeProvider("sk-ant-test-key")
+
+        prompt = provider._build_multi_image_prompt(
+            camera_name="Backyard",
+            timestamp="2025-12-06T12:00:00",
+            detected_objects=[],
+            num_images=4
+        )
+
+        assert "4 sequential frames" in prompt
+        assert "Motion detected" not in prompt
+
+
+class TestOpenAIMultiImageProvider:
+    """Test OpenAI multi-image provider (Story P3-2.3 AC2)"""
+
+    @pytest.mark.asyncio
+    async def test_openai_multi_image_success(self):
+        """Test successful multi-image description from OpenAI (AC2)"""
+        provider = OpenAIProvider("sk-test-key")
+
+        # Mock OpenAI response
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            "The sequence shows a person walking up the driveway, "
+            "approaching the front door, and ringing the doorbell."
+        )
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 200
+        mock_response.usage.prompt_tokens = 150
+        mock_response.usage.completion_tokens = 50
+
+        with patch.object(
+            provider.client.chat.completions,
+            'create',
+            new=AsyncMock(return_value=mock_response)
+        ) as mock_create:
+            result = await provider.generate_multi_image_description(
+                images_base64=["base64_img1", "base64_img2", "base64_img3"],
+                camera_name="Front Door Camera",
+                timestamp="2025-12-06T10:00:00",
+                detected_objects=["person"]
+            )
+
+            # Verify API was called with multiple images
+            call_args = mock_create.call_args
+            messages = call_args.kwargs.get('messages') or call_args[1].get('messages') or call_args[0][0]
+            user_content = messages[1]['content']
+
+            # Count image_url blocks
+            image_blocks = [c for c in user_content if c.get('type') == 'image_url']
+            assert len(image_blocks) == 3  # 3 images sent
+
+        assert result.success is True
+        assert result.provider == "openai"
+        assert "person" in result.description.lower()
+        assert result.tokens_used == 200
+        assert 'person' in result.objects_detected
+
+    @pytest.mark.asyncio
+    async def test_openai_multi_image_error_handling(self):
+        """Test OpenAI multi-image error handling"""
+        provider = OpenAIProvider("sk-test-key")
+
+        with patch.object(
+            provider.client.chat.completions,
+            'create',
+            new=AsyncMock(side_effect=Exception("API Error"))
+        ):
+            result = await provider.generate_multi_image_description(
+                images_base64=["base64_img1", "base64_img2"],
+                camera_name="Camera",
+                timestamp="2025-12-06T10:00:00",
+                detected_objects=[]
+            )
+
+        assert result.success is False
+        assert result.error is not None
+        assert "API Error" in result.error
+
+
+class TestGrokMultiImageProvider:
+    """Test Grok multi-image provider (Story P3-2.3 AC5)"""
+
+    @pytest.mark.asyncio
+    async def test_grok_multi_image_success(self):
+        """Test successful multi-image description from Grok (AC5)"""
+        provider = GrokProvider("xai-test-key")
+
+        # Mock response (OpenAI-compatible format)
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            "A delivery truck arrives, driver exits with a package, "
+            "walks to the door and leaves the package."
+        )
+        mock_response.usage = MagicMock()
+        mock_response.usage.total_tokens = 180
+        mock_response.usage.prompt_tokens = 130
+        mock_response.usage.completion_tokens = 50
+
+        with patch.object(
+            provider.client.chat.completions,
+            'create',
+            new=AsyncMock(return_value=mock_response)
+        ) as mock_create:
+            result = await provider.generate_multi_image_description(
+                images_base64=["img1", "img2", "img3", "img4"],
+                camera_name="Driveway",
+                timestamp="2025-12-06T14:00:00",
+                detected_objects=["vehicle", "person"]
+            )
+
+            # Verify uses OpenAI-compatible format
+            call_args = mock_create.call_args
+            messages = call_args.kwargs.get('messages') or call_args[1].get('messages')
+            user_content = messages[1]['content']
+
+            # Verify image blocks
+            image_blocks = [c for c in user_content if c.get('type') == 'image_url']
+            assert len(image_blocks) == 4
+
+        assert result.success is True
+        assert result.provider == "grok"
+        assert 'vehicle' in result.objects_detected or 'package' in result.objects_detected
+
+
+class TestClaudeMultiImageProvider:
+    """Test Claude multi-image provider (Story P3-2.3 AC3)"""
+
+    @pytest.mark.asyncio
+    async def test_claude_multi_image_success(self):
+        """Test successful multi-image description from Claude (AC3)"""
+        provider = ClaudeProvider("sk-ant-test-key")
+
+        # Mock Claude response
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock()]
+        mock_response.content[0].text = (
+            "The frames capture a cat crossing the yard, pausing to look around, "
+            "then continuing toward the fence."
+        )
+        mock_response.usage = MagicMock()
+        mock_response.usage.input_tokens = 140
+        mock_response.usage.output_tokens = 45
+
+        with patch.object(
+            provider.client.messages,
+            'create',
+            new=AsyncMock(return_value=mock_response)
+        ) as mock_create:
+            result = await provider.generate_multi_image_description(
+                images_base64=["img1", "img2", "img3"],
+                camera_name="Backyard",
+                timestamp="2025-12-06T08:00:00",
+                detected_objects=["animal"]
+            )
+
+            # Verify Claude-specific format with image blocks
+            call_args = mock_create.call_args
+            messages = call_args.kwargs.get('messages') or call_args[1].get('messages')
+            content = messages[0]['content']
+
+            # Verify image blocks use source.type=base64
+            image_blocks = [c for c in content if c.get('type') == 'image']
+            assert len(image_blocks) == 3
+            for block in image_blocks:
+                assert block['source']['type'] == 'base64'
+                assert block['source']['media_type'] == 'image/jpeg'
+
+        assert result.success is True
+        assert result.provider == "claude"
+        assert 'animal' in result.objects_detected
+
+
+class TestGeminiMultiImageProvider:
+    """Test Gemini multi-image provider (Story P3-2.3 AC4)"""
+
+    @pytest.mark.asyncio
+    async def test_gemini_multi_image_success(self):
+        """Test successful multi-image description from Gemini (AC4)"""
+        import base64
+        from PIL import Image
+        import io
+
+        provider = GeminiProvider("test-gemini-key")
+
+        # Create valid base64 images
+        valid_base64_images = []
+        for _ in range(3):
+            img = Image.new('RGB', (10, 10), color='yellow')
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG')
+            valid_base64_images.append(base64.b64encode(buffer.getvalue()).decode('utf-8'))
+
+        # Mock Gemini response
+        mock_response = MagicMock()
+        mock_response.text = "Multiple frames show a person jogging past the house."
+
+        with patch.object(
+            provider.model,
+            'generate_content_async',
+            new=AsyncMock(return_value=mock_response)
+        ) as mock_create:
+            result = await provider.generate_multi_image_description(
+                images_base64=valid_base64_images,
+                camera_name="Street View",
+                timestamp="2025-12-06T07:00:00",
+                detected_objects=["person"]
+            )
+
+            # Verify Gemini parts format
+            call_args = mock_create.call_args
+            parts = call_args[0][0]
+
+            # First part should be prompt text
+            assert isinstance(parts[0], str)
+            # Subsequent parts should be image dicts with inline_data
+            image_parts = [p for p in parts[1:] if isinstance(p, dict)]
+            assert len(image_parts) == 3
+            for part in image_parts:
+                assert 'mime_type' in part
+                assert 'data' in part
+                assert part['mime_type'] == 'image/jpeg'
+
+        assert result.success is True
+        assert result.provider == "gemini"
+        assert 'person' in result.objects_detected
+
+
+class TestDescribeImagesMethod:
+    """Test AIService.describe_images facade method (Story P3-2.3 AC1)"""
+
+    @pytest.mark.asyncio
+    async def test_describe_images_returns_combined_description(
+        self, ai_service_instance, sample_image_bytes_list
+    ):
+        """Test describe_images returns single combined description (AC1)"""
+        mock_result = AIResult(
+            description="A person walks across the driveway over multiple frames.",
+            confidence=85,
+            objects_detected=['person'],
+            provider="openai",
+            tokens_used=150,
+            response_time_ms=800,
+            cost_estimate=0.02,
+            success=True
+        )
+
+        with patch.object(
+            ai_service_instance.providers[AIProviderEnum.OPENAI],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=mock_result)
+        ):
+            result = await ai_service_instance.describe_images(
+                images=sample_image_bytes_list,
+                camera_name="Front Door",
+                timestamp="2025-12-06T10:00:00",
+                detected_objects=["person"]
+            )
+
+        assert result.success is True
+        assert result.provider == "openai"
+        assert "person" in result.description.lower()
+        assert result.tokens_used > 0
+
+    @pytest.mark.asyncio
+    async def test_describe_images_empty_list_returns_error(self, ai_service_instance):
+        """Test describe_images with empty image list returns error"""
+        result = await ai_service_instance.describe_images(
+            images=[],
+            camera_name="Camera",
+            timestamp="2025-12-06T10:00:00",
+            detected_objects=[]
+        )
+
+        assert result.success is False
+        assert "Empty image list" in result.error or "No images" in result.description
+
+    @pytest.mark.asyncio
+    async def test_describe_images_single_image_works(
+        self, ai_service_instance, sample_image_bytes
+    ):
+        """Test describe_images works with single image (edge case)"""
+        mock_result = AIResult(
+            description="Single frame shows a package at the door.",
+            confidence=80,
+            objects_detected=['package'],
+            provider="openai",
+            tokens_used=100,
+            response_time_ms=500,
+            cost_estimate=0.01,
+            success=True
+        )
+
+        with patch.object(
+            ai_service_instance.providers[AIProviderEnum.OPENAI],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=mock_result)
+        ):
+            result = await ai_service_instance.describe_images(
+                images=[sample_image_bytes],
+                camera_name="Porch",
+                timestamp="2025-12-06T15:00:00",
+                detected_objects=["package"]
+            )
+
+        assert result.success is True
+        assert 'package' in result.objects_detected
+
+    @pytest.mark.asyncio
+    async def test_describe_images_no_providers_configured(self, sample_image_bytes_list):
+        """Test describe_images returns error when no providers configured"""
+        service = AIService()
+        # No providers configured
+
+        result = await service.describe_images(
+            images=sample_image_bytes_list,
+            camera_name="Camera",
+            timestamp="2025-12-06T10:00:00",
+            detected_objects=[]
+        )
+
+        assert result.success is False
+        assert "No AI providers configured" in result.error or "No AI providers" in result.description
+
+
+class TestMultiImageFallbackChain:
+    """Test multi-image fallback chain behavior (Story P3-2.3)"""
+
+    @pytest.mark.asyncio
+    async def test_multi_image_fallback_when_primary_fails(
+        self, ai_service_instance, sample_image_bytes_list
+    ):
+        """Test fallback chain works for multi-image requests"""
+        # Mock OpenAI to fail
+        openai_fail = AIResult(
+            description="",
+            confidence=0,
+            objects_detected=[],
+            provider="openai",
+            tokens_used=0,
+            response_time_ms=100,
+            cost_estimate=0.0,
+            success=False,
+            error="Rate limit exceeded"
+        )
+
+        # Mock Grok to succeed
+        grok_success = AIResult(
+            description="Sequential analysis shows person arriving with package.",
+            confidence=80,
+            objects_detected=['person', 'package'],
+            provider="grok",
+            tokens_used=180,
+            response_time_ms=600,
+            cost_estimate=0.02,
+            success=True
+        )
+
+        with patch.object(
+            ai_service_instance.providers[AIProviderEnum.OPENAI],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=openai_fail)
+        ), patch.object(
+            ai_service_instance.providers[AIProviderEnum.GROK],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=grok_success)
+        ):
+            result = await ai_service_instance.describe_images(
+                images=sample_image_bytes_list,
+                camera_name="Front Door",
+                timestamp="2025-12-06T10:00:00",
+                detected_objects=["person"],
+                sla_timeout_ms=30000
+            )
+
+        assert result.success is True
+        assert result.provider == "grok"
+
+    @pytest.mark.asyncio
+    async def test_multi_image_all_providers_fail(
+        self, ai_service_instance, sample_image_bytes_list
+    ):
+        """Test graceful error when all providers fail for multi-image"""
+        fail_result = AIResult(
+            description="",
+            confidence=0,
+            objects_detected=[],
+            provider="test",
+            tokens_used=0,
+            response_time_ms=100,
+            cost_estimate=0.0,
+            success=False,
+            error="API error"
+        )
+
+        with patch.object(
+            ai_service_instance.providers[AIProviderEnum.OPENAI],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=fail_result)
+        ), patch.object(
+            ai_service_instance.providers[AIProviderEnum.GROK],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=fail_result)
+        ), patch.object(
+            ai_service_instance.providers[AIProviderEnum.CLAUDE],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=fail_result)
+        ), patch.object(
+            ai_service_instance.providers[AIProviderEnum.GEMINI],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=fail_result)
+        ):
+            result = await ai_service_instance.describe_images(
+                images=sample_image_bytes_list,
+                camera_name="Test Camera",
+                timestamp="2025-12-06T10:00:00",
+                detected_objects=[]
+            )
+
+        assert result.success is False
+        assert result.provider == "none"
+        assert "Failed to generate" in result.description
+
+
+class TestMultiImageRetryLogic:
+    """Test multi-image retry logic with backoff (Story P3-2.3)"""
+
+    @pytest.mark.asyncio
+    async def test_multi_image_retry_on_429(self, ai_service_instance):
+        """Test that multi-image requests retry on 429 errors"""
+        provider = ai_service_instance.providers[AIProviderEnum.OPENAI]
+
+        call_count = 0
+
+        async def mock_generate(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                return AIResult(
+                    description="",
+                    confidence=0,
+                    objects_detected=[],
+                    provider="openai",
+                    tokens_used=0,
+                    response_time_ms=100,
+                    cost_estimate=0.0,
+                    success=False,
+                    error="429 Rate limit"
+                )
+            return AIResult(
+                description="Success after retry",
+                confidence=80,
+                objects_detected=['person'],
+                provider="openai",
+                tokens_used=150,
+                response_time_ms=500,
+                cost_estimate=0.02,
+                success=True
+            )
+
+        with patch.object(
+            provider,
+            'generate_multi_image_description',
+            new=mock_generate
+        ):
+            result = await ai_service_instance._try_multi_image_with_backoff(
+                provider,
+                ["img1", "img2", "img3"],
+                "Camera",
+                "2025-12-06T10:00:00",
+                [],
+                provider_type=AIProviderEnum.OPENAI
+            )
+
+        assert result.success is True
+        assert call_count == 3  # 2 retries + 1 success
+
+
+class TestMultiImageUsageTracking:
+    """Test usage tracking for multi-image requests (Story P3-2.3)"""
+
+    @pytest.mark.asyncio
+    async def test_multi_image_usage_tracked(
+        self, ai_service_instance, sample_image_bytes_list
+    ):
+        """Test that usage is tracked for multi-image requests"""
+        mock_result = AIResult(
+            description="Multi-image analysis complete.",
+            confidence=85,
+            objects_detected=['person'],
+            provider="openai",
+            tokens_used=250,
+            response_time_ms=900,
+            cost_estimate=0.03,
+            success=True
+        )
+
+        # Mock database
+        mock_db = Mock()
+        ai_service_instance.db = mock_db
+
+        with patch.object(
+            ai_service_instance.providers[AIProviderEnum.OPENAI],
+            'generate_multi_image_description',
+            new=AsyncMock(return_value=mock_result)
+        ):
+            result = await ai_service_instance.describe_images(
+                images=sample_image_bytes_list,
+                camera_name="Camera",
+                timestamp="2025-12-06T10:00:00",
+                detected_objects=["person"]
+            )
+
+        assert result.success is True
+        # Verify database was called to track usage
+        assert mock_db.add.called
+        assert mock_db.commit.called
