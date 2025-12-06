@@ -4082,3 +4082,298 @@ class TestDoorbellRingDatabaseMigration:
 
         assert is_doorbell_ring_col is not None
         assert is_doorbell_ring_col['nullable'] == False
+
+
+# Story P3-1.5: Test Clip Download API Endpoint
+
+class TestClipDownloadEndpoint:
+    """Test suite for POST /api/v1/protect/test-clip-download (Story P3-1.5)"""
+
+    @pytest.fixture
+    def protect_camera(self):
+        """Create a Protect camera for testing"""
+        # First create a controller
+        db = TestingSessionLocal()
+        try:
+            controller = ProtectController(
+                name="Test Controller",
+                host="192.168.1.1",
+                port=443,
+                username="admin",
+                password="testpassword",
+                verify_ssl=False
+            )
+            db.add(controller)
+            db.commit()
+            db.refresh(controller)
+            controller_id = controller.id
+
+            # Create camera linked to controller
+            camera = Camera(
+                name="Test Protect Camera",
+                type="rtsp",
+                source_type="protect",
+                protect_controller_id=controller_id,
+                protect_camera_id="protect-cam-123",
+                is_enabled=True
+            )
+            db.add(camera)
+            db.commit()
+            db.refresh(camera)
+            return camera.id, controller_id
+        finally:
+            db.close()
+
+    @pytest.fixture
+    def rtsp_camera(self):
+        """Create an RTSP camera for testing"""
+        db = TestingSessionLocal()
+        try:
+            camera = Camera(
+                name="Test RTSP Camera",
+                type="rtsp",
+                source_type="rtsp",
+                rtsp_url="rtsp://192.168.1.100:554/stream",
+                is_enabled=True
+            )
+            db.add(camera)
+            db.commit()
+            db.refresh(camera)
+            return camera.id
+        finally:
+            db.close()
+
+    def test_clip_download_camera_not_found(self):
+        """P3-1.5 AC3: Camera not found returns appropriate error"""
+        response = client.post(
+            "/api/v1/protect/test-clip-download",
+            json={
+                "camera_id": "non-existent-camera-id",
+                "start_time": "2025-12-05T10:00:00Z",
+                "end_time": "2025-12-05T10:00:30Z"
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "not found" in data["error"].lower()
+
+    def test_clip_download_non_protect_camera(self, rtsp_camera):
+        """P3-1.5 AC3: Non-Protect camera returns appropriate error"""
+        response = client.post(
+            "/api/v1/protect/test-clip-download",
+            json={
+                "camera_id": rtsp_camera,
+                "start_time": "2025-12-05T10:00:00Z",
+                "end_time": "2025-12-05T10:00:30Z"
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert "not a Protect camera" in data["error"]
+
+    @patch('app.api.v1.protect.get_clip_service')
+    def test_clip_download_success(self, mock_get_clip_service, protect_camera):
+        """P3-1.5 AC1: Successful download returns file size and duration"""
+        from pathlib import Path
+        import tempfile
+
+        camera_id, _ = protect_camera
+
+        # Create a mock clip file
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+            f.write(b"fake video content" * 1000)  # ~18KB
+            mock_clip_path = Path(f.name)
+
+        # Mock ClipService
+        mock_clip_service = MagicMock()
+        mock_clip_service.download_clip = AsyncMock(return_value=mock_clip_path)
+        mock_clip_service.cleanup_clip = MagicMock(return_value=True)
+        mock_get_clip_service.return_value = mock_clip_service
+
+        # Mock video duration extraction
+        with patch('app.api.v1.protect._get_video_duration', return_value=10.5):
+            response = client.post(
+                "/api/v1/protect/test-clip-download",
+                json={
+                    "camera_id": camera_id,
+                    "start_time": "2025-12-05T10:00:00Z",
+                    "end_time": "2025-12-05T10:00:30Z"
+                }
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["file_size_bytes"] > 0
+        assert data["duration_seconds"] == 10.5
+        assert data["error"] is None
+
+        # Verify cleanup was called
+        mock_clip_service.cleanup_clip.assert_called_once()
+
+        # Cleanup mock file
+        try:
+            mock_clip_path.unlink()
+        except Exception:
+            pass
+
+    @patch('app.api.v1.protect.get_clip_service')
+    def test_clip_download_failure(self, mock_get_clip_service, protect_camera):
+        """P3-1.5 AC2: Download failure returns success=false with error"""
+        camera_id, _ = protect_camera
+
+        # Mock ClipService returning None (download failed)
+        mock_clip_service = MagicMock()
+        mock_clip_service.download_clip = AsyncMock(return_value=None)
+        mock_clip_service.cleanup_clip = MagicMock(return_value=False)
+        mock_get_clip_service.return_value = mock_clip_service
+
+        response = client.post(
+            "/api/v1/protect/test-clip-download",
+            json={
+                "camera_id": camera_id,
+                "start_time": "2025-12-05T10:00:00Z",
+                "end_time": "2025-12-05T10:00:30Z"
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert data["error"] is not None
+        assert "failed" in data["error"].lower()
+        assert data["file_size_bytes"] is None
+        assert data["duration_seconds"] is None
+
+    @patch('app.api.v1.protect.get_clip_service')
+    def test_clip_cleanup_after_success(self, mock_get_clip_service, protect_camera):
+        """P3-1.5 AC4: Cleanup is called after successful download"""
+        from pathlib import Path
+        import tempfile
+
+        camera_id, _ = protect_camera
+
+        # Create a mock clip file
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+            f.write(b"fake video content")
+            mock_clip_path = Path(f.name)
+
+        # Mock ClipService
+        mock_clip_service = MagicMock()
+        mock_clip_service.download_clip = AsyncMock(return_value=mock_clip_path)
+        mock_clip_service.cleanup_clip = MagicMock(return_value=True)
+        mock_get_clip_service.return_value = mock_clip_service
+
+        with patch('app.api.v1.protect._get_video_duration', return_value=5.0):
+            client.post(
+                "/api/v1/protect/test-clip-download",
+                json={
+                    "camera_id": camera_id,
+                    "start_time": "2025-12-05T10:00:00Z",
+                    "end_time": "2025-12-05T10:00:30Z"
+                }
+            )
+
+        # Verify cleanup was called with test event ID
+        mock_clip_service.cleanup_clip.assert_called_once()
+        call_args = mock_clip_service.cleanup_clip.call_args[0]
+        assert call_args[0].startswith("test-")
+
+        # Cleanup mock file
+        try:
+            mock_clip_path.unlink()
+        except Exception:
+            pass
+
+    @patch('app.api.v1.protect.get_clip_service')
+    def test_clip_cleanup_after_metadata_failure(self, mock_get_clip_service, protect_camera):
+        """P3-1.5 AC4: Cleanup is called even if duration extraction fails"""
+        from pathlib import Path
+        import tempfile
+
+        camera_id, _ = protect_camera
+
+        # Create a mock clip file
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+            f.write(b"fake video content")
+            mock_clip_path = Path(f.name)
+
+        # Mock ClipService
+        mock_clip_service = MagicMock()
+        mock_clip_service.download_clip = AsyncMock(return_value=mock_clip_path)
+        mock_clip_service.cleanup_clip = MagicMock(return_value=True)
+        mock_get_clip_service.return_value = mock_clip_service
+
+        # Mock duration extraction to fail
+        with patch('app.api.v1.protect._get_video_duration', return_value=None):
+            response = client.post(
+                "/api/v1/protect/test-clip-download",
+                json={
+                    "camera_id": camera_id,
+                    "start_time": "2025-12-05T10:00:00Z",
+                    "end_time": "2025-12-05T10:00:30Z"
+                }
+            )
+
+        # Response should still succeed (just with None duration)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["duration_seconds"] is None
+
+        # Cleanup should still be called
+        mock_clip_service.cleanup_clip.assert_called_once()
+
+        # Cleanup mock file
+        try:
+            mock_clip_path.unlink()
+        except Exception:
+            pass
+
+    def test_clip_download_invalid_time_range(self, protect_camera):
+        """P3-1.5: Invalid time range (end before start) returns validation error"""
+        camera_id, _ = protect_camera
+
+        response = client.post(
+            "/api/v1/protect/test-clip-download",
+            json={
+                "camera_id": camera_id,
+                "start_time": "2025-12-05T10:00:30Z",
+                "end_time": "2025-12-05T10:00:00Z"  # Before start
+            }
+        )
+
+        assert response.status_code == 422  # Validation error
+        assert "end_time must be after start_time" in response.text
+
+
+class TestClipDownloadResponseFormat:
+    """Test suite for response format of test-clip-download endpoint"""
+
+    def test_response_has_required_fields(self):
+        """Verify response schema has all required fields"""
+        response = client.post(
+            "/api/v1/protect/test-clip-download",
+            json={
+                "camera_id": "non-existent-id",
+                "start_time": "2025-12-05T10:00:00Z",
+                "end_time": "2025-12-05T10:00:30Z"
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        # All fields should be present
+        assert "success" in data
+        assert "file_size_bytes" in data
+        assert "duration_seconds" in data
+        assert "error" in data
+
+        # Type checks
+        assert isinstance(data["success"], bool)
+        # Other fields can be None

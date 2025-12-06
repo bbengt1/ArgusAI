@@ -41,6 +41,45 @@ from app.models.ai_usage import AIUsage
 logger = logging.getLogger(__name__)
 
 
+# Multi-frame analysis system prompt (Story P3-2.4)
+# Optimized for temporal narrative descriptions of video sequences
+MULTI_FRAME_SYSTEM_PROMPT = """You are analyzing a sequence of {num_frames} frames from a security camera video, shown in chronological order.
+
+Your task is to describe WHAT HAPPENED - focus on the narrative and action over time:
+
+1. **Actions and movements** - Use action verbs: walked, arrived, departed, placed, picked up, approached, entered, exited, turned, stopped, ran, carried, delivered, rang, opened, closed
+2. **Direction of travel** - entering frame, exiting frame, left to right, right to left, approaching camera, moving away, circling, pacing
+3. **Sequence of events** - First... then... next... finally... Describe the progression
+4. **Who or what is present** - People (appearance, clothing, items carried), vehicles, animals, packages, objects
+
+IMPORTANT - Use dynamic descriptions, NOT static ones:
+- GOOD: "A delivery person approached the front door, placed a package on the step, then departed walking left toward the street."
+- BAD: "A person is visible near the front door. There is a package on the ground."
+- GOOD: "A car pulled into the driveway and parked. The driver exited and walked toward the house."
+- BAD: "A car is parked in the driveway. A person is standing nearby."
+
+Be specific about the narrative - this is video showing motion over time, not a static photograph. Describe the complete sequence of what happened."""
+
+
+# Token estimation constants per provider (Story P3-2.5)
+# Approximate tokens per image for vision API calls
+TOKENS_PER_IMAGE = {
+    "openai": {"low_res": 85, "high_res": 765, "default": 85},
+    "grok": {"low_res": 85, "high_res": 765, "default": 85},  # OpenAI-compatible
+    "claude": {"default": 1334},  # Anthropic Claude
+    "gemini": {"default": 258},  # Google Gemini estimate
+}
+
+# Cost rates per 1K tokens by provider (Story P3-2.5)
+# Values from architecture.md CostTracker section (USD per 1K tokens)
+COST_RATES = {
+    "openai": {"input": 0.00015, "output": 0.00060},  # GPT-4o-mini
+    "grok": {"input": 0.00005, "output": 0.00010},  # xAI Grok estimate
+    "claude": {"input": 0.00025, "output": 0.00125},  # Claude 3 Haiku
+    "gemini": {"input": 0.000075, "output": 0.0003},  # Gemini Flash
+}
+
+
 class AIProvider(Enum):
     """Supported AI vision providers"""
     OPENAI = "openai"
@@ -101,6 +140,32 @@ class AIProviderBase(ABC):
         """
         pass
 
+    @abstractmethod
+    async def generate_multi_image_description(
+        self,
+        images_base64: List[str],
+        camera_name: str,
+        timestamp: str,
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
+    ) -> AIResult:
+        """Generate description from multiple base64-encoded images (Story P3-2.3)
+
+        Analyzes a sequence of frames together and returns a single combined description
+        covering all frames. Useful for multi-frame analysis of motion clips.
+
+        Args:
+            images_base64: List of base64-encoded JPEG images (3-5 frames typical)
+            camera_name: Name of the camera for context
+            timestamp: ISO 8601 timestamp of the first frame
+            detected_objects: List of detected object types
+            custom_prompt: Optional custom prompt to override default
+
+        Returns:
+            AIResult with combined description covering all frames
+        """
+        pass
+
     def _build_user_prompt(
         self,
         camera_name: str,
@@ -126,6 +191,43 @@ class AIProviderBase(ABC):
         # Use custom prompt if provided (from Settings description_prompt or doorbell ring)
         # Otherwise use the default user_prompt_template
         base_prompt = custom_prompt if custom_prompt else self.user_prompt_template
+
+        return base_prompt + context
+
+    def _build_multi_image_prompt(
+        self,
+        camera_name: str,
+        timestamp: str,
+        detected_objects: List[str],
+        num_images: int,
+        custom_prompt: Optional[str] = None
+    ) -> str:
+        """Build user prompt for multi-image analysis (Story P3-2.3, P3-2.4)
+
+        Uses MULTI_FRAME_SYSTEM_PROMPT optimized for temporal narrative descriptions.
+        Custom prompts are APPENDED after system instructions, not replacing them,
+        to ensure temporal context is always included.
+
+        Args:
+            camera_name: Name of the camera
+            timestamp: ISO 8601 timestamp of first frame
+            detected_objects: List of detected object types
+            num_images: Number of images being analyzed
+            custom_prompt: Optional custom prompt to APPEND after system instructions
+                          (from Settings → multi_frame_description_prompt or per-camera config)
+        """
+        # Build camera context suffix
+        context = f"\n\nContext: Camera '{camera_name}' at {timestamp}."
+        if detected_objects:
+            context += f" Motion detected: {', '.join(detected_objects)}."
+
+        # Use optimized multi-frame system prompt with frame count (Story P3-2.4)
+        base_prompt = MULTI_FRAME_SYSTEM_PROMPT.format(num_frames=num_images)
+
+        # APPEND custom prompt after system instructions (not replace)
+        # This ensures temporal context is always preserved (AC4)
+        if custom_prompt:
+            base_prompt += f"\n\nAdditional instructions: {custom_prompt}"
 
         return base_prompt + context
 
@@ -313,6 +415,112 @@ class OpenAIProvider(AIProviderBase):
         # Cap at 100
         return min(confidence, 100)
 
+    async def generate_multi_image_description(
+        self,
+        images_base64: List[str],
+        camera_name: str,
+        timestamp: str,
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
+    ) -> AIResult:
+        """Generate description from multiple images using OpenAI GPT-4o mini (Story P3-2.3 AC2)"""
+        start_time = time.time()
+
+        try:
+            user_prompt = self._build_multi_image_prompt(
+                camera_name, timestamp, detected_objects, len(images_base64), custom_prompt
+            )
+
+            # Build content array with text prompt and multiple images
+            content = [{"type": "text", "text": user_prompt}]
+            for img_base64 in images_base64:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_base64}"
+                    }
+                })
+
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": content}
+                ],
+                max_tokens=500,  # More tokens for multi-image
+                timeout=15.0  # Longer timeout for multi-image
+            )
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            description = response.choices[0].message.content.strip()
+
+            # Extract usage stats
+            tokens_used = response.usage.total_tokens if response.usage else 0
+            input_tokens = response.usage.prompt_tokens if response.usage else 0
+            output_tokens = response.usage.completion_tokens if response.usage else 0
+
+            # Calculate cost
+            cost = (
+                (input_tokens / 1000 * self.cost_per_1k_input_tokens) +
+                (output_tokens / 1000 * self.cost_per_1k_output_tokens)
+            )
+
+            confidence = self._calculate_confidence(description, tokens_used)
+            objects = self._extract_objects(description)
+
+            logger.info(
+                "OpenAI multi-image API call successful",
+                extra={
+                    "event_type": "ai_api_multi_image_success",
+                    "provider": "openai",
+                    "model": self.model,
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "tokens_used": tokens_used,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cost_usd": cost,
+                    "confidence": confidence,
+                }
+            )
+
+            return AIResult(
+                description=description,
+                confidence=confidence,
+                objects_detected=objects,
+                provider=AIProvider.OPENAI.value,
+                tokens_used=tokens_used,
+                response_time_ms=elapsed_ms,
+                cost_estimate=cost,
+                success=True
+            )
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "OpenAI multi-image API call failed",
+                extra={
+                    "event_type": "ai_api_multi_image_error",
+                    "provider": "openai",
+                    "model": self.model,
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                }
+            )
+            return AIResult(
+                description="",
+                confidence=0,
+                objects_detected=[],
+                provider=AIProvider.OPENAI.value,
+                tokens_used=0,
+                response_time_ms=elapsed_ms,
+                cost_estimate=0.0,
+                success=False,
+                error=str(e)
+            )
+
 
 class ClaudeProvider(AIProviderBase):
     """Anthropic Claude 3 Haiku vision provider"""
@@ -412,6 +620,115 @@ class ClaudeProvider(AIProviderBase):
                 error=str(e)
             )
 
+    async def generate_multi_image_description(
+        self,
+        images_base64: List[str],
+        camera_name: str,
+        timestamp: str,
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
+    ) -> AIResult:
+        """Generate description from multiple images using Claude 3 Haiku (Story P3-2.3 AC3)"""
+        start_time = time.time()
+
+        try:
+            user_prompt = self._build_multi_image_prompt(
+                camera_name, timestamp, detected_objects, len(images_base64), custom_prompt
+            )
+
+            # Build content array with multiple image blocks followed by text
+            content = []
+            for img_base64 in images_base64:
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": img_base64
+                    }
+                })
+            content.append({
+                "type": "text",
+                "text": f"{self.system_prompt}\n\n{user_prompt}"
+            })
+
+            response = await self.client.messages.create(
+                model=self.model,
+                max_tokens=500,  # More tokens for multi-image
+                messages=[{"role": "user", "content": content}],
+                timeout=15.0  # Longer timeout for multi-image
+            )
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            description = response.content[0].text.strip()
+
+            # Extract usage stats
+            input_tokens = response.usage.input_tokens
+            output_tokens = response.usage.output_tokens
+            tokens_used = input_tokens + output_tokens
+
+            # Calculate cost
+            cost = (
+                (input_tokens / 1000 * self.cost_per_1k_input_tokens) +
+                (output_tokens / 1000 * self.cost_per_1k_output_tokens)
+            )
+
+            confidence = 75
+            objects = self._extract_objects(description)
+
+            logger.info(
+                "Claude multi-image API call successful",
+                extra={
+                    "event_type": "ai_api_multi_image_success",
+                    "provider": "claude",
+                    "model": self.model,
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "tokens_used": tokens_used,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cost_usd": cost,
+                    "confidence": confidence,
+                }
+            )
+
+            return AIResult(
+                description=description,
+                confidence=confidence,
+                objects_detected=objects,
+                provider=AIProvider.CLAUDE.value,
+                tokens_used=tokens_used,
+                response_time_ms=elapsed_ms,
+                cost_estimate=cost,
+                success=True
+            )
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "Claude multi-image API call failed",
+                extra={
+                    "event_type": "ai_api_multi_image_error",
+                    "provider": "claude",
+                    "model": self.model,
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                }
+            )
+            return AIResult(
+                description="",
+                confidence=0,
+                objects_detected=[],
+                provider=AIProvider.CLAUDE.value,
+                tokens_used=0,
+                response_time_ms=elapsed_ms,
+                cost_estimate=0.0,
+                success=False,
+                error=str(e)
+            )
+
 
 class GeminiProvider(AIProviderBase):
     """Google Gemini Flash vision provider"""
@@ -490,6 +807,100 @@ class GeminiProvider(AIProviderBase):
                 error=str(e)
             )
 
+    async def generate_multi_image_description(
+        self,
+        images_base64: List[str],
+        camera_name: str,
+        timestamp: str,
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
+    ) -> AIResult:
+        """Generate description from multiple images using Gemini Flash (Story P3-2.3 AC4)"""
+        start_time = time.time()
+
+        try:
+            user_prompt = self._build_multi_image_prompt(
+                camera_name, timestamp, detected_objects, len(images_base64), custom_prompt
+            )
+            full_prompt = f"{self.system_prompt}\n\n{user_prompt}"
+
+            # Build parts array with prompt and multiple images
+            parts = [full_prompt]
+            for img_base64 in images_base64:
+                # Decode base64 to bytes for Gemini
+                image_bytes = base64.b64decode(img_base64)
+                parts.append({"mime_type": "image/jpeg", "data": image_bytes})
+
+            response = await self.model.generate_content_async(
+                parts,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=500,  # More tokens for multi-image
+                    temperature=0.4
+                )
+            )
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            description = response.text.strip()
+
+            # Gemini doesn't provide detailed usage stats in all cases
+            # Estimate based on number of images (more images = more tokens)
+            tokens_used = 150 + (len(images_base64) * 50)  # Estimate
+            cost = tokens_used / 1000 * self.cost_per_1k_tokens
+
+            confidence = 70
+            objects = self._extract_objects(description)
+
+            logger.info(
+                "Gemini multi-image API call successful",
+                extra={
+                    "event_type": "ai_api_multi_image_success",
+                    "provider": "gemini",
+                    "model": "gemini-1.5-flash",
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "tokens_used": tokens_used,
+                    "cost_usd": cost,
+                    "confidence": confidence,
+                }
+            )
+
+            return AIResult(
+                description=description,
+                confidence=confidence,
+                objects_detected=objects,
+                provider=AIProvider.GEMINI.value,
+                tokens_used=tokens_used,
+                response_time_ms=elapsed_ms,
+                cost_estimate=cost,
+                success=True
+            )
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "Gemini multi-image API call failed",
+                extra={
+                    "event_type": "ai_api_multi_image_error",
+                    "provider": "gemini",
+                    "model": "gemini-1.5-flash",
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                }
+            )
+            return AIResult(
+                description="",
+                confidence=0,
+                objects_detected=[],
+                provider=AIProvider.GEMINI.value,
+                tokens_used=0,
+                response_time_ms=elapsed_ms,
+                cost_estimate=0.0,
+                success=False,
+                error=str(e)
+            )
+
 
 class GrokProvider(AIProviderBase):
     """xAI Grok vision provider (OpenAI-compatible API)"""
@@ -504,6 +915,115 @@ class GrokProvider(AIProviderBase):
         self.model = "grok-2-vision-1212"
         self.cost_per_1k_input_tokens = 0.00010  # Approximate (similar to GPT-4o mini)
         self.cost_per_1k_output_tokens = 0.00040
+
+    async def generate_multi_image_description(
+        self,
+        images_base64: List[str],
+        camera_name: str,
+        timestamp: str,
+        detected_objects: List[str],
+        custom_prompt: Optional[str] = None
+    ) -> AIResult:
+        """Generate description from multiple images using Grok Vision (Story P3-2.3 AC5)
+
+        Uses OpenAI-compatible format with multiple image_url blocks.
+        """
+        start_time = time.time()
+
+        try:
+            user_prompt = self._build_multi_image_prompt(
+                camera_name, timestamp, detected_objects, len(images_base64), custom_prompt
+            )
+
+            # Build content array with text prompt and multiple images (OpenAI-compatible format)
+            content = [{"type": "text", "text": user_prompt}]
+            for img_base64 in images_base64:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_base64}"
+                    }
+                })
+
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": content}
+                ],
+                max_tokens=500,  # More tokens for multi-image
+                timeout=30.0  # Longer timeout for Grok multi-image
+            )
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            description = response.choices[0].message.content.strip()
+
+            # Extract usage stats
+            tokens_used = response.usage.total_tokens if response.usage else 0
+            input_tokens = response.usage.prompt_tokens if response.usage else 0
+            output_tokens = response.usage.completion_tokens if response.usage else 0
+
+            # Calculate cost
+            cost = (
+                (input_tokens / 1000 * self.cost_per_1k_input_tokens) +
+                (output_tokens / 1000 * self.cost_per_1k_output_tokens)
+            )
+
+            confidence = self._calculate_confidence(description, tokens_used)
+            objects = self._extract_objects(description)
+
+            logger.info(
+                "Grok multi-image API call successful",
+                extra={
+                    "event_type": "ai_api_multi_image_success",
+                    "provider": "grok",
+                    "model": self.model,
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "tokens_used": tokens_used,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cost_usd": cost,
+                    "confidence": confidence,
+                }
+            )
+
+            return AIResult(
+                description=description,
+                confidence=confidence,
+                objects_detected=objects,
+                provider=AIProvider.GROK.value,
+                tokens_used=tokens_used,
+                response_time_ms=elapsed_ms,
+                cost_estimate=cost,
+                success=True
+            )
+
+        except Exception as e:
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.error(
+                "Grok multi-image API call failed",
+                extra={
+                    "event_type": "ai_api_multi_image_error",
+                    "provider": "grok",
+                    "model": self.model,
+                    "num_images": len(images_base64),
+                    "response_time_ms": elapsed_ms,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                }
+            )
+            return AIResult(
+                description="",
+                confidence=0,
+                objects_detected=[],
+                provider=AIProvider.GROK.value,
+                tokens_used=0,
+                response_time_ms=elapsed_ms,
+                cost_estimate=0.0,
+                success=False,
+                error=str(e)
+            )
 
     async def generate_description(
         self,
@@ -664,6 +1184,90 @@ class AIService:
         self.providers: Dict[AIProvider, Optional[AIProviderBase]] = {}
         self.db: Optional[Session] = None  # Database session for usage tracking
         self.description_prompt: Optional[str] = None  # Custom description prompt from settings
+
+    def _estimate_image_tokens(self, provider: str, num_images: int, resolution: str = "default") -> int:
+        """
+        Estimate token usage for multi-image requests when provider doesn't return counts.
+
+        Uses provider-specific token estimates from TOKENS_PER_IMAGE constants.
+        This is used when providers like Gemini don't return token usage in responses.
+
+        Args:
+            provider: Provider name (openai, grok, claude, gemini)
+            num_images: Number of images in the request
+            resolution: Image resolution hint ("low_res", "high_res", "default")
+
+        Returns:
+            Estimated token count for the images
+
+        Story: P3-2.5
+        """
+        provider_tokens = TOKENS_PER_IMAGE.get(provider, {"default": 100})
+
+        # Get tokens per image for the resolution
+        if resolution in provider_tokens:
+            tokens_per_image = provider_tokens[resolution]
+        else:
+            tokens_per_image = provider_tokens.get("default", 100)
+
+        # Base prompt tokens (approximate)
+        base_prompt_tokens = 200
+
+        # Estimate: base prompt + (tokens per image * num images) + expected response (~100 tokens)
+        estimated_tokens = base_prompt_tokens + (tokens_per_image * num_images) + 100
+
+        logger.debug(
+            f"Estimated {estimated_tokens} tokens for {num_images} images with {provider}",
+            extra={
+                "provider": provider,
+                "num_images": num_images,
+                "tokens_per_image": tokens_per_image,
+                "estimated_total": estimated_tokens,
+            }
+        )
+
+        return estimated_tokens
+
+    def _calculate_cost(self, provider: str, tokens: int, input_ratio: float = 0.9) -> float:
+        """
+        Calculate estimated cost for token usage using provider-specific rates.
+
+        Uses COST_RATES constants with provider-specific input/output pricing.
+        Default assumes 90% input tokens, 10% output tokens (typical for vision analysis).
+
+        Args:
+            provider: Provider name (openai, grok, claude, gemini)
+            tokens: Total token count
+            input_ratio: Ratio of tokens that are input vs output (default 0.9)
+
+        Returns:
+            Estimated cost in USD
+
+        Story: P3-2.5
+        """
+        rates = COST_RATES.get(provider, {"input": 0.0001, "output": 0.0003})
+
+        input_tokens = int(tokens * input_ratio)
+        output_tokens = tokens - input_tokens
+
+        # Cost = (input_tokens / 1000 * input_rate) + (output_tokens / 1000 * output_rate)
+        input_cost = (input_tokens / 1000) * rates["input"]
+        output_cost = (output_tokens / 1000) * rates["output"]
+
+        total_cost = input_cost + output_cost
+
+        logger.debug(
+            f"Calculated cost ${total_cost:.6f} for {tokens} tokens with {provider}",
+            extra={
+                "provider": provider,
+                "total_tokens": tokens,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_usd": total_cost,
+            }
+        )
+
+        return total_cost
 
     async def load_api_keys_from_db(self, db: Session):
         """
@@ -927,8 +1531,8 @@ class AIService:
                 provider_type=provider_enum
             )
 
-            # Track usage
-            self._track_usage(result)
+            # Track usage with analysis mode (Story P3-2.5)
+            self._track_usage(result, analysis_mode="single_image")
 
             if result.success:
                 total_elapsed_ms = int((time.time() - start_time) * 1000)
@@ -955,6 +1559,271 @@ class AIService:
         # All providers failed
         total_elapsed_ms = int((time.time() - start_time) * 1000)
         logger.error(f"All AI providers failed after {total_elapsed_ms}ms")
+        return AIResult(
+            description="Failed to generate description - all AI providers unavailable",
+            confidence=0,
+            objects_detected=detected_objects or ['unknown'],
+            provider="none",
+            tokens_used=0,
+            response_time_ms=total_elapsed_ms,
+            cost_estimate=0.0,
+            success=False,
+            error=f"All providers failed. Last error: {last_error}"
+        )
+
+    async def describe_images(
+        self,
+        images: List[bytes],
+        camera_name: str,
+        timestamp: Optional[str] = None,
+        detected_objects: Optional[List[str]] = None,
+        sla_timeout_ms: int = 10000,
+        custom_prompt: Optional[str] = None
+    ) -> AIResult:
+        """
+        Generate natural language description from multiple camera frames (Story P3-2.3 AC1).
+
+        Analyzes a sequence of frames together and returns a single combined description
+        covering all frames. Useful for multi-frame analysis of motion clips.
+
+        Enforces SLA timeout by tracking total elapsed time across provider attempts
+        and aborting fallback chain if approaching the timeout limit.
+
+        Args:
+            images: List of raw image bytes (from FrameExtractor, 3-5 frames typical)
+            camera_name: Name of camera for context
+            timestamp: ISO 8601 timestamp of first frame (default: now)
+            detected_objects: Objects detected by motion detection
+            sla_timeout_ms: Maximum time allowed in milliseconds (default: 10000ms = 10s)
+            custom_prompt: Optional custom prompt to use instead of default
+
+        Returns:
+            AIResult with combined description, confidence, objects, and usage stats
+        """
+        start_time = time.time()
+
+        if timestamp is None:
+            timestamp = datetime.utcnow().isoformat()
+        if detected_objects is None:
+            detected_objects = []
+
+        # Validate input
+        if not images:
+            logger.error(
+                "describe_images called with empty image list",
+                extra={"event_type": "ai_multi_image_error", "error": "empty_image_list"}
+            )
+            return AIResult(
+                description="No images provided for analysis",
+                confidence=0,
+                objects_detected=['unknown'],
+                provider="none",
+                tokens_used=0,
+                response_time_ms=0,
+                cost_estimate=0.0,
+                success=False,
+                error="Empty image list provided"
+            )
+
+        # Use custom prompt from settings if no explicit custom_prompt provided
+        effective_prompt = custom_prompt
+        if effective_prompt is None and self.description_prompt:
+            effective_prompt = self.description_prompt
+            logger.debug(
+                "Using description prompt from settings for multi-image",
+                extra={"prompt_preview": effective_prompt[:50]}
+            )
+
+        # Preprocess all images to base64
+        images_base64 = []
+        for i, img_bytes in enumerate(images):
+            try:
+                base64_img = self._preprocess_image_bytes(img_bytes)
+                images_base64.append(base64_img)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to preprocess image {i + 1}/{len(images)}: {e}",
+                    extra={
+                        "event_type": "ai_multi_image_preprocess_error",
+                        "image_index": i,
+                        "error": str(e)
+                    }
+                )
+                # Skip failed images but continue with others
+                continue
+
+        if not images_base64:
+            logger.error(
+                "All images failed preprocessing",
+                extra={"event_type": "ai_multi_image_error", "num_images": len(images)}
+            )
+            return AIResult(
+                description="Failed to preprocess images for analysis",
+                confidence=0,
+                objects_detected=detected_objects or ['unknown'],
+                provider="none",
+                tokens_used=0,
+                response_time_ms=int((time.time() - start_time) * 1000),
+                cost_estimate=0.0,
+                success=False,
+                error="All images failed preprocessing"
+            )
+
+        logger.info(
+            "Starting multi-image analysis",
+            extra={
+                "event_type": "ai_multi_image_start",
+                "num_images": len(images_base64),
+                "camera_name": camera_name,
+            }
+        )
+
+        # Get provider order from database settings or use default (Story P2-5.2)
+        provider_order = self._get_provider_order()
+        last_error = None
+
+        # Check if any providers are actually configured
+        configured_providers = [p for p in provider_order if self.providers.get(p) is not None]
+        if not configured_providers:
+            logger.error("No AI providers configured - cannot generate multi-image description")
+            return AIResult(
+                description="No AI providers configured",
+                confidence=0,
+                objects_detected=detected_objects or ['unknown'],
+                provider="none",
+                tokens_used=0,
+                response_time_ms=0,
+                cost_estimate=0.0,
+                success=False,
+                error="No AI providers configured. Please add an API key in Settings."
+            )
+
+        for provider_enum in provider_order:
+            # Check SLA timeout before trying next provider
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            if elapsed_ms >= sla_timeout_ms:
+                logger.warning(
+                    f"Multi-image SLA timeout ({sla_timeout_ms}ms) exceeded after {elapsed_ms}ms. "
+                    f"Aborting fallback chain.",
+                    extra={
+                        "event_type": "ai_multi_image_sla_timeout",
+                        "elapsed_ms": elapsed_ms,
+                        "sla_timeout_ms": sla_timeout_ms,
+                    }
+                )
+                return AIResult(
+                    description=f"Failed to generate description - SLA timeout exceeded ({elapsed_ms}ms)",
+                    confidence=0,
+                    objects_detected=detected_objects or ['unknown'],
+                    provider="timeout",
+                    tokens_used=0,
+                    response_time_ms=elapsed_ms,
+                    cost_estimate=0.0,
+                    success=False,
+                    error=f"SLA timeout: {elapsed_ms}ms > {sla_timeout_ms}ms"
+                )
+
+            provider = self.providers.get(provider_enum)
+            if provider is None:
+                logger.debug(
+                    f"{provider_enum.value} not configured, skipping for multi-image",
+                    extra={"provider": provider_enum.value}
+                )
+                continue
+
+            logger.info(
+                f"Attempting multi-image analysis with {provider_enum.value}...",
+                extra={
+                    "event_type": "ai_multi_image_attempt",
+                    "provider": provider_enum.value,
+                    "elapsed_ms": elapsed_ms,
+                    "num_images": len(images_base64),
+                }
+            )
+
+            # Try with provider-specific backoff for rate limits
+            result = await self._try_multi_image_with_backoff(
+                provider,
+                images_base64,
+                camera_name,
+                timestamp,
+                detected_objects,
+                custom_prompt=effective_prompt,
+                provider_type=provider_enum
+            )
+
+            # Track usage with multi_frame analysis mode (Story P3-2.5)
+            # Check if tokens need estimation (e.g., Gemini may not return counts)
+            is_estimated = result.tokens_used == 0 and result.success
+            if is_estimated:
+                # Estimate tokens if provider didn't return counts
+                estimated_tokens = self._estimate_image_tokens(
+                    result.provider, len(images_base64)
+                )
+                # Create new result with estimated tokens
+                result = AIResult(
+                    description=result.description,
+                    confidence=result.confidence,
+                    objects_detected=result.objects_detected,
+                    provider=result.provider,
+                    tokens_used=estimated_tokens,
+                    response_time_ms=result.response_time_ms,
+                    cost_estimate=self._calculate_cost(result.provider, estimated_tokens),
+                    success=result.success,
+                    error=result.error
+                )
+            self._track_usage(result, analysis_mode="multi_frame", is_estimated=is_estimated)
+
+            if result.success:
+                total_elapsed_ms = int((time.time() - start_time) * 1000)
+                logger.info(
+                    f"Multi-image analysis success with {result.provider}",
+                    extra={
+                        "event_type": "ai_multi_image_success",
+                        "provider": result.provider,
+                        "num_images": len(images_base64),
+                        "total_elapsed_ms": total_elapsed_ms,
+                        "tokens_used": result.tokens_used,
+                        "cost_usd": result.cost_estimate,
+                        "description_preview": result.description[:50],
+                        "is_estimated": is_estimated,
+                    }
+                )
+
+                # Log SLA violations
+                if total_elapsed_ms > sla_timeout_ms:
+                    logger.warning(
+                        f"Multi-image SLA violation: {total_elapsed_ms}ms > {sla_timeout_ms}ms target",
+                        extra={
+                            "event_type": "ai_multi_image_sla_violation",
+                            "elapsed_ms": total_elapsed_ms,
+                            "sla_timeout_ms": sla_timeout_ms,
+                        }
+                    )
+
+                return result
+            else:
+                last_error = result.error
+                logger.warning(
+                    f"{provider_enum.value} multi-image failed: {result.error}. Trying next provider...",
+                    extra={
+                        "event_type": "ai_multi_image_provider_failed",
+                        "provider": provider_enum.value,
+                        "error": result.error,
+                    }
+                )
+
+        # All providers failed
+        total_elapsed_ms = int((time.time() - start_time) * 1000)
+        logger.error(
+            f"All AI providers failed for multi-image analysis after {total_elapsed_ms}ms",
+            extra={
+                "event_type": "ai_multi_image_all_failed",
+                "elapsed_ms": total_elapsed_ms,
+                "num_images": len(images_base64),
+                "last_error": last_error,
+            }
+        )
         return AIResult(
             description="Failed to generate description - all AI providers unavailable",
             confidence=0,
@@ -1011,6 +1880,64 @@ class AIService:
         image_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
 
         logger.debug(f"Preprocessed image: {len(image_base64)} chars base64, {size_mb:.2f}MB")
+        return image_base64
+
+    def _preprocess_image_bytes(self, image_bytes: bytes) -> str:
+        """
+        Preprocess raw image bytes for AI API transmission (Story P3-2.3).
+
+        Similar to _preprocess_image but accepts raw bytes instead of numpy array.
+        Used for multi-image analysis with frames from FrameExtractor.
+
+        - Resize to max 2048x2048
+        - Convert to JPEG (85% quality)
+        - Base64 encode
+        - Ensure <5MB payload
+
+        Args:
+            image_bytes: Raw image bytes (JPEG or PNG from FrameExtractor)
+
+        Returns:
+            Base64-encoded JPEG string
+        """
+        # Load image from bytes
+        image = Image.open(io.BytesIO(image_bytes))
+
+        # Resize if necessary
+        max_dim = 2048
+        if max(image.size) > max_dim:
+            ratio = max_dim / max(image.size)
+            new_size = tuple(int(dim * ratio) for dim in image.size)
+            image = image.resize(new_size, Image.Resampling.LANCZOS)
+            logger.debug(
+                f"Resized image from bytes to {new_size}",
+                extra={"new_size": new_size}
+            )
+
+        # Convert to JPEG with 85% quality
+        buffer = io.BytesIO()
+        image.convert('RGB').save(buffer, format='JPEG', quality=85)
+        jpeg_bytes = buffer.getvalue()
+
+        # Check size
+        size_mb = len(jpeg_bytes) / (1024 * 1024)
+        if size_mb > 5:
+            # Re-encode with lower quality
+            buffer = io.BytesIO()
+            image.convert('RGB').save(buffer, format='JPEG', quality=70)
+            jpeg_bytes = buffer.getvalue()
+            logger.warning(
+                f"Image bytes too large ({size_mb:.2f}MB), re-encoded at 70% quality",
+                extra={"original_size_mb": size_mb}
+            )
+
+        # Base64 encode
+        image_base64 = base64.b64encode(jpeg_bytes).decode('utf-8')
+
+        logger.debug(
+            f"Preprocessed image bytes: {len(image_base64)} chars base64",
+            extra={"base64_len": len(image_base64), "size_mb": size_mb}
+        )
         return image_base64
 
     async def _try_with_backoff(
@@ -1070,7 +1997,89 @@ class AIService:
         # Max retries exhausted
         return result
 
-    def _track_usage(self, result: AIResult):
+    async def _try_multi_image_with_backoff(
+        self,
+        provider: AIProviderBase,
+        images_base64: List[str],
+        camera_name: str,
+        timestamp: str,
+        detected_objects: List[str],
+        max_retries: int = 3,
+        custom_prompt: Optional[str] = None,
+        provider_type: Optional[AIProvider] = None
+    ) -> AIResult:
+        """Try multi-image API call with backoff for rate limits (Story P3-2.3).
+
+        Uses provider-specific retry configuration:
+        - Grok: 2 retries with 0.5s delay (per Story P2-5.1 AC6)
+        - Others: 3 retries with 2/4/8s exponential backoff
+
+        Args:
+            provider: The AI provider to use
+            images_base64: List of base64-encoded JPEG images
+            camera_name: Name of the camera
+            timestamp: ISO 8601 timestamp
+            detected_objects: List of detected object types
+            max_retries: Maximum number of retry attempts
+            custom_prompt: Optional custom prompt
+            provider_type: AIProvider enum for provider-specific logic
+
+        Returns:
+            AIResult from the provider
+        """
+        # Provider-specific retry configuration
+        if provider_type == AIProvider.GROK:
+            delays = [0.5, 0.5]  # 2 retries, 500ms each (AC6)
+            max_retries = 2
+        else:
+            delays = [2, 4, 8]  # Exponential backoff delays (seconds)
+
+        for attempt in range(max_retries):
+            result = await provider.generate_multi_image_description(
+                images_base64,
+                camera_name,
+                timestamp,
+                detected_objects,
+                custom_prompt=custom_prompt
+            )
+
+            # Check if rate limited (429) or transient error (500/503)
+            is_retryable = (
+                result.error and
+                (
+                    '429' in str(result.error) or
+                    '500' in str(result.error) or
+                    '503' in str(result.error)
+                )
+            )
+            if is_retryable:
+                if attempt < max_retries - 1:
+                    delay = delays[attempt] if attempt < len(delays) else delays[-1]
+                    logger.warning(
+                        f"Multi-image retryable error, waiting {delay}s before retry {attempt + 2}/{max_retries}",
+                        extra={
+                            "event_type": "ai_multi_image_retry",
+                            "provider": provider_type.value if provider_type else "unknown",
+                            "attempt": attempt + 1,
+                            "max_retries": max_retries,
+                            "delay_seconds": delay,
+                        }
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+
+            # Return result (success or non-retryable failure)
+            return result
+
+        # Max retries exhausted
+        return result
+
+    def _track_usage(
+        self,
+        result: AIResult,
+        analysis_mode: Optional[str] = None,
+        is_estimated: bool = False
+    ):
         """
         Track API usage by persisting to database.
 
@@ -1079,6 +2088,8 @@ class AIService:
 
         Args:
             result: AIResult from provider with usage metadata
+            analysis_mode: Type of analysis - "single_image" or "multi_frame" (Story P3-2.5)
+            is_estimated: True if token count is estimated rather than from provider (Story P3-2.5)
         """
         if self.db is None:
             logger.warning("Database not configured, usage tracking disabled")
@@ -1092,7 +2103,9 @@ class AIService:
                 tokens_used=result.tokens_used,
                 response_time_ms=result.response_time_ms,
                 cost_estimate=result.cost_estimate,
-                error=result.error
+                error=result.error,
+                analysis_mode=analysis_mode,
+                is_estimated=is_estimated
             )
 
             self.db.add(usage_record)
@@ -1102,7 +2115,15 @@ class AIService:
                 f"Tracked usage: {result.provider} - "
                 f"{'success' if result.success else 'failed'} - "
                 f"{result.tokens_used} tokens - "
-                f"${result.cost_estimate:.6f}"
+                f"${result.cost_estimate:.6f} - "
+                f"mode={analysis_mode or 'unknown'} - "
+                f"estimated={is_estimated}",
+                extra={
+                    "provider": result.provider,
+                    "tokens": result.tokens_used,
+                    "analysis_mode": analysis_mode,
+                    "is_estimated": is_estimated
+                }
             )
 
         except Exception as e:

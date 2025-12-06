@@ -847,6 +847,10 @@ def get_event(
             "created_at": event.created_at,
             "correlation_group_id": event.correlation_group_id,
             "correlated_events": correlated_events,
+            # Story P2-5.3: AI provider tracking
+            "provider_used": event.provider_used,
+            # Story P3-1.4: Fallback reason tracking
+            "fallback_reason": event.fallback_reason,
         }
 
         return EventResponse(**event_dict)

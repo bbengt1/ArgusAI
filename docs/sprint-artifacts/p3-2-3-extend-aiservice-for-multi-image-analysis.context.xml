@@ -1,0 +1,209 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P3-2</epicId>
+    <storyId>3</storyId>
+    <title>Extend AIService for Multi-Image Analysis</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-06</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-2-3-extend-aiservice-for-multi-image-analysis.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>AIService to accept multiple images in one request</iWant>
+    <soThat>AI can analyze frame sequences together for richer descriptions</soThat>
+    <tasks>
+      <task id="1" ac="1">Add describe_images method to AIProviderBase
+        <subtask id="1.1">Add abstract method generate_multi_image_description(images: List[str], ...) to AIProviderBase</subtask>
+        <subtask id="1.2">Define method signature matching existing generate_description pattern</subtask>
+        <subtask id="1.3">Add docstring explaining multi-image usage and expected format</subtask>
+      </task>
+      <task id="2" ac="2">Implement multi-image for OpenAI provider
+        <subtask id="2.1">Add generate_multi_image_description to OpenAIProvider class</subtask>
+        <subtask id="2.2">Build message content array with multiple image_url objects</subtask>
+        <subtask id="2.3">Each image as {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,{base64}"}}</subtask>
+        <subtask id="2.4">Handle response and extract description</subtask>
+        <subtask id="2.5">Track token usage for multi-image requests</subtask>
+      </task>
+      <task id="3" ac="5">Implement multi-image for Grok provider
+        <subtask id="3.1">Add generate_multi_image_description to GrokProvider class</subtask>
+        <subtask id="3.2">Use OpenAI-compatible format (same as Task 2)</subtask>
+        <subtask id="3.3">Verify Grok supports multiple images in single request</subtask>
+        <subtask id="3.4">Handle grok-2-vision-1212 model specifics</subtask>
+      </task>
+      <task id="4" ac="3">Implement multi-image for Claude provider
+        <subtask id="4.1">Add generate_multi_image_description to ClaudeProvider class</subtask>
+        <subtask id="4.2">Build content array with multiple image blocks using Anthropic format</subtask>
+        <subtask id="4.3">Each image as {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64}}</subtask>
+        <subtask id="4.4">Handle Claude-specific response format</subtask>
+        <subtask id="4.5">Track token usage</subtask>
+      </task>
+      <task id="5" ac="4">Implement multi-image for Gemini provider
+        <subtask id="5.1">Add generate_multi_image_description to GeminiProvider class</subtask>
+        <subtask id="5.2">Build contents array with inline_data parts for each image</subtask>
+        <subtask id="5.3">Each image as {"inline_data": {"mime_type": "image/jpeg", "data": base64}}</subtask>
+        <subtask id="5.4">Handle Gemini's multi-part response format</subtask>
+        <subtask id="5.5">Track token usage (estimate if not provided)</subtask>
+      </task>
+      <task id="6" ac="1">Add describe_images to AIService facade
+        <subtask id="6.1">Add describe_images(images: List[bytes], camera_name, timestamp, detected_objects, custom_prompt) -> AIResult method</subtask>
+        <subtask id="6.2">Preprocess all images (resize, JPEG encode, base64)</subtask>
+        <subtask id="6.3">Call provider's generate_multi_image_description with fallback chain</subtask>
+        <subtask id="6.4">Return AIResult with combined description</subtask>
+      </task>
+      <task id="7" ac="All">Write unit tests
+        <subtask id="7.1">Test describe_images with mocked OpenAI returning combined description</subtask>
+        <subtask id="7.2">Test describe_images with mocked Claude returning combined description</subtask>
+        <subtask id="7.3">Test describe_images with mocked Gemini returning combined description</subtask>
+        <subtask id="7.4">Test describe_images with mocked Grok returning combined description</subtask>
+        <subtask id="7.5">Test fallback chain works for multi-image requests</subtask>
+        <subtask id="7.6">Test image preprocessing for multiple images</subtask>
+        <subtask id="7.7">Test token usage tracking for multi-image</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Given a list of 3-5 image bytes, when AIService.describe_images(images: List[bytes], prompt: str) is called, then all images are sent to the AI provider in a single request and returns a single description covering all frames</ac>
+    <ac id="2">Given multi-image request to OpenAI, when API is called, then images are sent as multiple image_url content blocks and each image is base64 encoded with proper MIME type</ac>
+    <ac id="3">Given multi-image request to Claude, when API is called, then images are sent as multiple image content blocks and uses claude-3-haiku or configured model</ac>
+    <ac id="4">Given multi-image request to Gemini, when API is called, then images are sent using Gemini's multi-part format and handles Gemini's specific image requirements</ac>
+    <ac id="5">Given multi-image request to Grok, when API is called, then images are sent using Grok's vision API format (OpenAI-compatible)</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture - AIService</title>
+        <section>Phase 3 Service Architecture - Multi-Frame Analysis</section>
+        <snippet>AIService extended with describe_images() method for multi-frame analysis. Uses existing provider fallback chain (OpenAI → Grok → Claude → Gemini). Each provider implements generate_multi_image_description().</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epics - Story P3-2.3</title>
+        <section>Epic P3-2: Multi-Frame Analysis Mode (MVP)</section>
+        <snippet>Story P3-2.3 extends AIService for multi-image analysis. All 4 providers must support multiple images in single request. Returns combined description covering frame sequence.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-2-2-add-blur-detection-for-frame-filtering.md</path>
+        <title>Previous Story - P3-2.2</title>
+        <section>Dev Agent Record - Completion Notes</section>
+        <snippet>FrameExtractor now provides quality-filtered frames via extract_frames(). Frames already filtered for blur (Laplacian variance ≥ 100). Use structured logging with extra={} dict pattern.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>AIService, AIProviderBase, OpenAIProvider, GrokProvider, ClaudeProvider, GeminiProvider, AIResult, AIProvider</symbol>
+        <lines>1-1210</lines>
+        <reason>Main service file to extend. Add generate_multi_image_description() abstract method to AIProviderBase and implement in each provider. Add describe_images() facade method to AIService class.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/frame_extractor.py</path>
+        <kind>service</kind>
+        <symbol>FrameExtractor, extract_frames</symbol>
+        <lines>1-520</lines>
+        <reason>Provides quality-filtered frames as bytes. Output from extract_frames() feeds into describe_images(). Already handles blur filtering.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_ai_service.py</path>
+        <kind>test</kind>
+        <symbol>TestAIService</symbol>
+        <lines>all</lines>
+        <reason>Existing test file to extend. Add new test classes for multi-image functionality. Follow existing mock patterns for provider API calls.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="openai" version=">=1.0.0">OpenAI Python SDK for GPT-4o vision API - already installed</package>
+        <package name="anthropic" version=">=0.25.0">Anthropic Python SDK for Claude 3 Haiku vision API - already installed</package>
+        <package name="google-generativeai" version=">=0.5.0">Google Generative AI SDK for Gemini Flash vision API - already installed</package>
+        <package name="pillow" version=">=10.0.0">PIL for image preprocessing (resize, JPEG encode) - already installed</package>
+        <package name="numpy" version=">=1.24.0">NumPy for frame array handling - already installed</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Extend existing AIService and AIProviderBase classes - DO NOT create new service</constraint>
+    <constraint type="pattern">Add generate_multi_image_description as abstract method to AIProviderBase</constraint>
+    <constraint type="pattern">Each provider implements generate_multi_image_description following existing generate_description patterns</constraint>
+    <constraint type="pattern">Use existing _preprocess_image() for each image in the list</constraint>
+    <constraint type="pattern">Use existing fallback chain logic (OpenAI → Grok → Claude → Gemini)</constraint>
+    <constraint type="pattern">Use structured logging with extra={} dict pattern for all log calls</constraint>
+    <constraint type="pattern">Return AIResult with combined description from all frames</constraint>
+    <constraint type="architecture">Add tests to existing backend/tests/test_services/test_ai_service.py</constraint>
+    <constraint type="api">OpenAI: Multiple image_url blocks in content array</constraint>
+    <constraint type="api">Claude: Multiple image blocks with source.type=base64</constraint>
+    <constraint type="api">Gemini: Multiple inline_data parts in contents array</constraint>
+    <constraint type="api">Grok: OpenAI-compatible format with multiple image_url blocks</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>AIProviderBase.generate_multi_image_description</name>
+      <kind>abstract method</kind>
+      <signature>async def generate_multi_image_description(self, images_base64: List[str], camera_name: str, timestamp: str, detected_objects: List[str], custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py</path>
+    </interface>
+    <interface>
+      <name>AIService.describe_images</name>
+      <kind>async method</kind>
+      <signature>async def describe_images(self, images: List[bytes], camera_name: str, timestamp: Optional[str] = None, detected_objects: Optional[List[str]] = None, sla_timeout_ms: int = 10000, custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py</path>
+    </interface>
+    <interface>
+      <name>OpenAIProvider.generate_multi_image_description</name>
+      <kind>async method</kind>
+      <signature>async def generate_multi_image_description(self, images_base64: List[str], camera_name: str, timestamp: str, detected_objects: List[str], custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py</path>
+    </interface>
+    <interface>
+      <name>GrokProvider.generate_multi_image_description</name>
+      <kind>async method</kind>
+      <signature>async def generate_multi_image_description(self, images_base64: List[str], camera_name: str, timestamp: str, detected_objects: List[str], custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py</path>
+    </interface>
+    <interface>
+      <name>ClaudeProvider.generate_multi_image_description</name>
+      <kind>async method</kind>
+      <signature>async def generate_multi_image_description(self, images_base64: List[str], camera_name: str, timestamp: str, detected_objects: List[str], custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py</path>
+    </interface>
+    <interface>
+      <name>GeminiProvider.generate_multi_image_description</name>
+      <kind>async method</kind>
+      <signature>async def generate_multi_image_description(self, images_base64: List[str], camera_name: str, timestamp: str, detected_objects: List[str], custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests follow pytest patterns with pytest-asyncio for async methods. Use MagicMock/AsyncMock for mocking AI provider API calls. Test files located in backend/tests/test_services/. Mock all external API calls - no real AI API calls in tests. Use fixtures with autouse for setup/teardown. Test both success and error paths. Follow existing test patterns in test_ai_service.py.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_ai_service.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test describe_images returns single combined description for 3-5 images</idea>
+      <idea ac="1">Test describe_images with empty image list returns error</idea>
+      <idea ac="1">Test describe_images with single image works (edge case)</idea>
+      <idea ac="2">Test OpenAI multi-image format builds correct content array with multiple image_url blocks</idea>
+      <idea ac="2">Test OpenAI multi-image properly base64 encodes each image</idea>
+      <idea ac="3">Test Claude multi-image format builds correct content array with multiple image blocks</idea>
+      <idea ac="3">Test Claude multi-image uses correct source.type and media_type</idea>
+      <idea ac="4">Test Gemini multi-image format builds correct parts array with inline_data</idea>
+      <idea ac="4">Test Gemini multi-image handles image bytes correctly</idea>
+      <idea ac="5">Test Grok multi-image uses OpenAI-compatible format</idea>
+      <idea ac="all">Test fallback chain works when primary provider fails for multi-image</idea>
+      <idea ac="all">Test token usage is tracked for multi-image requests</idea>
+      <idea ac="all">Test image preprocessing applied to each image</idea>
+    </ideas>
+  </tests>
+</story-context>

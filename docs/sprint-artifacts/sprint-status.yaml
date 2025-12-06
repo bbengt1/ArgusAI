@@ -145,3 +145,71 @@ development_status:
   p2-6-3-implement-phase-2-error-handling-and-edge-cases: done
   p2-6-4-phase-2-integration-testing-and-documentation: done
   epic-p2-6-retrospective: optional
+
+  # ============================================================================
+  # PHASE 3: Video Clip Analysis & Multi-Frame AI
+  # ============================================================================
+  # Source: docs/epics-phase3.md
+  # PRD: docs/PRD-phase3.md
+  # Architecture: docs/architecture.md (Phase 3 Additions)
+
+  # Epic P3-1: Motion Clip Download Infrastructure (MVP)
+  epic-p3-1: backlog
+  p3-1-1-implement-clipservice-for-protect-video-downloads: done
+  p3-1-2-add-temporary-clip-storage-management: done
+  p3-1-3-implement-retry-logic-with-exponential-backoff: done
+  p3-1-4-integrate-clip-download-into-event-pipeline: done
+  p3-1-5-add-clip-download-api-endpoint-for-testing: done
+  epic-p3-1-retrospective: optional
+
+  # Epic P3-2: Multi-Frame Analysis Mode (MVP)
+  epic-p3-2: backlog
+  p3-2-1-implement-frameextractor-service: done
+  p3-2-2-add-blur-detection-for-frame-filtering: done
+  p3-2-3-extend-aiservice-for-multi-image-analysis: done
+  p3-2-4-create-multi-frame-prompts-optimized-for-sequences: done
+  p3-2-5-track-token-usage-for-multi-image-requests: done
+  p3-2-6-integrate-multi-frame-analysis-into-event-pipeline: backlog
+  epic-p3-2-retrospective: optional
+
+  # Epic P3-3: Analysis Mode Configuration (MVP)
+  epic-p3-3: backlog
+  p3-3-1-add-analysis-mode-field-to-camera-model: backlog
+  p3-3-2-add-analysis-mode-to-camera-api: backlog
+  p3-3-3-build-analysis-mode-selector-ui-component: backlog
+  p3-3-4-display-analysis-mode-on-event-cards: backlog
+  p3-3-5-implement-automatic-fallback-chain: backlog
+  epic-p3-3-retrospective: optional
+
+  # Epic P3-4: Native Video Analysis (Growth)
+  epic-p3-4: backlog
+  p3-4-1-add-provider-video-capability-detection: backlog
+  p3-4-2-implement-video-upload-to-openai: backlog
+  p3-4-3-implement-video-upload-to-gemini: backlog
+  p3-4-4-integrate-video-native-mode-into-pipeline: backlog
+  epic-p3-4-retrospective: optional
+
+  # Epic P3-5: Audio Analysis for Doorbells (Growth)
+  epic-p3-5: backlog
+  p3-5-1-implement-audio-extraction-from-video-clips: backlog
+  p3-5-2-integrate-speech-to-text-transcription: backlog
+  p3-5-3-include-audio-context-in-ai-descriptions: backlog
+  epic-p3-5-retrospective: optional
+
+  # Epic P3-6: Confidence Scoring & Quality Indicators (Growth)
+  epic-p3-6: backlog
+  p3-6-1-extract-confidence-score-from-ai-responses: backlog
+  p3-6-2-detect-vague-descriptions: backlog
+  p3-6-3-display-confidence-indicator-on-event-cards: backlog
+  p3-6-4-add-re-analyze-action-for-low-confidence-events: backlog
+  epic-p3-6-retrospective: optional
+
+  # Epic P3-7: Cost Monitoring Dashboard (Growth)
+  epic-p3-7: backlog
+  p3-7-1-implement-cost-tracking-service: backlog
+  p3-7-2-build-cost-dashboard-ui: backlog
+  p3-7-3-implement-daily-monthly-cost-caps: backlog
+  p3-7-4-add-cost-alerts-and-notifications: backlog
+  p3-7-5-display-key-frames-gallery-on-event-detail: backlog
+  p3-7-6-add-analysis-mode-filter-to-timeline: backlog
+  epic-p3-7-retrospective: optional

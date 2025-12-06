@@ -1,0 +1,170 @@
+<story-context id="p3-1-5" v="1.0">
+  <metadata>
+    <epicId>P3-1</epicId>
+    <storyId>5</storyId>
+    <title>Add Clip Download API Endpoint for Testing</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-05</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-1-5-add-clip-download-api-endpoint-for-testing.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>an API endpoint to test clip downloads</iWant>
+    <soThat>I can verify Protect clip retrieval works correctly</soThat>
+    <tasks>
+      <task id="1">Create API endpoint schemas (TestClipDownloadRequest, TestClipDownloadResponse)</task>
+      <task id="2">Implement POST /api/v1/protect/test-clip-download endpoint</task>
+      <task id="3">Add video metadata extraction (duration via PyAV)</task>
+      <task id="4">Write unit tests covering success, failure, and cleanup paths</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Given valid camera_id and timestamps, when POST /api/v1/protect/test-clip-download called, then returns {success: true, file_size_bytes, duration_seconds}</ac>
+    <ac id="2">Given clip download fails, when endpoint called, then returns {success: false, error: "description"} with HTTP 200</ac>
+    <ac id="3">Given camera_id not in any controller, when endpoint called, then returns {success: false, error: "Camera not found..."}</ac>
+    <ac id="4">Given successful download, when response returned, then test clip is cleaned up automatically</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epic Breakdown</title>
+        <section>Story P3-1.5</section>
+        <snippet>API endpoint for dev/testing. Returns file_size_bytes, duration_seconds. Clean up test clip after response. Return video metadata if available.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Phase 3 Service Architecture</section>
+        <snippet>ClipService singleton pattern with download_clip() and cleanup_clip() methods. Uses ProtectService for authenticated API client access.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-1-4-integrate-clip-download-into-event-pipeline.md</path>
+        <title>Story P3-1.4 - Completed</title>
+        <section>Implementation Learnings</section>
+        <snippet>ClipService API: download_clip(controller_id, camera_id, event_start, event_end, event_id) returns Optional[Path]. cleanup_clip(event_id) returns bool.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>backend/app/api/v1/protect.py</path>
+        <kind>router</kind>
+        <symbol>router (APIRouter)</symbol>
+        <lines>1-1133</lines>
+        <reason>Target file for new endpoint. Contains existing Protect controller and camera endpoints with consistent patterns.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>service</kind>
+        <symbol>ClipService, get_clip_service</symbol>
+        <lines>1-100</lines>
+        <reason>Provides download_clip() and cleanup_clip() methods to be used by test endpoint.</reason>
+      </file>
+      <file>
+        <path>backend/app/schemas/protect.py</path>
+        <kind>schema</kind>
+        <symbol>Pydantic schemas</symbol>
+        <lines>1-421</lines>
+        <reason>Target file for new request/response schemas. Contains existing patterns like MetaResponse, ProtectTestResultData.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <reason>Camera model with protect_controller_id and protect_camera_id fields for lookup.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_api/test_protect.py</path>
+        <kind>test</kind>
+        <symbol>test_protect.py</symbol>
+        <reason>Target file for new endpoint tests. Contains existing test patterns for Protect API endpoints.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package>fastapi</package>
+        <version>0.115.0</version>
+      </python>
+      <python>
+        <package>pydantic</package>
+        <version>>=2.10.0</version>
+      </python>
+      <python>
+        <package>av (PyAV)</package>
+        <version>>=12.0.0</version>
+        <note>Used for video duration extraction</note>
+      </python>
+      <python>
+        <package>sqlalchemy</package>
+        <version>>=2.0.36</version>
+      </python>
+      <python>
+        <package>pytest</package>
+        <version>7.4.3</version>
+      </python>
+      <python>
+        <package>pytest-asyncio</package>
+        <version>0.21.1</version>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Use singleton pattern get_clip_service() - do not instantiate ClipService directly</constraint>
+    <constraint>Follow existing endpoint patterns in protect.py (async def, ProtectXxxResponse format)</constraint>
+    <constraint>Always clean up test clips in finally block to prevent disk space leaks</constraint>
+    <constraint>Use HTTP 200 for all test results (success=true/false), not error codes for failures</constraint>
+    <constraint>Generate unique test event_id (uuid4) to avoid conflicts with real events</constraint>
+    <constraint>Use camera.protect_controller_id and camera.protect_camera_id for ClipService calls</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ClipService.download_clip</name>
+      <kind>async method</kind>
+      <signature>async def download_clip(controller_id: str, camera_id: str, event_start: datetime, event_end: datetime, event_id: str) -> Optional[Path]</signature>
+      <path>backend/app/services/clip_service.py</path>
+    </interface>
+    <interface>
+      <name>ClipService.cleanup_clip</name>
+      <kind>method</kind>
+      <signature>def cleanup_clip(event_id: str) -> bool</signature>
+      <path>backend/app/services/clip_service.py</path>
+    </interface>
+    <interface>
+      <name>get_clip_service</name>
+      <kind>singleton getter</kind>
+      <signature>def get_clip_service() -> ClipService</signature>
+      <path>backend/app/services/clip_service.py</path>
+    </interface>
+    <interface>
+      <name>POST /api/v1/protect/test-clip-download</name>
+      <kind>REST endpoint</kind>
+      <signature>POST body: {camera_id, start_time, end_time} -> {success, file_size_bytes?, duration_seconds?, error?}</signature>
+      <path>backend/app/api/v1/protect.py (to be added)</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use pytest with pytest-asyncio for async endpoint testing. Use httpx TestClient for API tests.
+      Mock ClipService methods using unittest.mock.patch and AsyncMock. Follow existing patterns in test_protect.py.
+      All tests should verify cleanup is called regardless of success/failure path.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_protect.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">test_clip_download_success - Mock download returns path, verify response format with file_size and duration</idea>
+      <idea ac="2">test_clip_download_failure - Mock download returns None, verify success=false with error message</idea>
+      <idea ac="3">test_clip_download_camera_not_found - Use non-existent camera_id, verify error message</idea>
+      <idea ac="3">test_clip_download_non_protect_camera - Use RTSP camera, verify error message</idea>
+      <idea ac="4">test_clip_cleanup_after_success - Verify cleanup_clip called after successful download</idea>
+      <idea ac="4">test_clip_cleanup_after_metadata_failure - Verify cleanup called even if duration extraction fails</idea>
+    </ideas>
+  </tests>
+</story-context>

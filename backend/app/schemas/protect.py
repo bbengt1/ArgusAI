@@ -418,3 +418,66 @@ class ProtectCameraFiltersResponse(BaseModel):
 
     data: ProtectCameraFiltersData
     meta: MetaResponse
+
+
+# Story P3-1.5: Test Clip Download Schemas
+
+class TestClipDownloadRequest(BaseModel):
+    """Request body for testing clip download (Story P3-1.5)"""
+
+    camera_id: str = Field(..., description="Internal camera UUID (from cameras table)")
+    start_time: datetime = Field(..., description="Clip start time (ISO 8601 with timezone)")
+    end_time: datetime = Field(..., description="Clip end time (ISO 8601 with timezone)")
+
+    @field_validator('end_time')
+    @classmethod
+    def validate_end_after_start(cls, v: datetime, info) -> datetime:
+        """Ensure end_time is after start_time"""
+        start_time = info.data.get('start_time')
+        if start_time and v <= start_time:
+            raise ValueError("end_time must be after start_time")
+        return v
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "camera_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "start_time": "2025-12-05T10:00:00Z",
+                    "end_time": "2025-12-05T10:00:30Z"
+                }
+            ]
+        }
+    }
+
+
+class TestClipDownloadResponse(BaseModel):
+    """Response for test clip download endpoint (Story P3-1.5)
+
+    Returns HTTP 200 for all outcomes - check 'success' field for result.
+    This is a test endpoint, so failures are reported as data, not HTTP errors.
+    """
+
+    success: bool = Field(..., description="Whether clip download succeeded")
+    file_size_bytes: Optional[int] = Field(None, description="Size of downloaded clip in bytes (on success)")
+    duration_seconds: Optional[float] = Field(None, description="Duration of video clip in seconds (on success)")
+    error: Optional[str] = Field(None, description="Error message describing failure (on failure)")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "success": True,
+                    "file_size_bytes": 2457600,
+                    "duration_seconds": 10.5,
+                    "error": None
+                },
+                {
+                    "success": False,
+                    "file_size_bytes": None,
+                    "duration_seconds": None,
+                    "error": "Camera not found in any Protect controller"
+                }
+            ]
+        }
+    }

@@ -1,5 +1,4 @@
-# Workflow Status Template
-
+# BMM Workflow Status
 # This tracks progress through BMM methodology Analysis, Planning, and Solutioning phases.
 # Implementation phase is tracked separately in sprint-status.yaml
 
@@ -15,27 +14,47 @@
 #   - {file-path}: File created/found (e.g., "docs/product-brief.md")
 #   - skipped: Optional/conditional workflow that was skipped
 
-generated: "2025-11-15"
-project: "Live Object AI Classifier"
+generated: "2025-12-05"
+project: "live-object-ai-classifier"
 project_type: "software"
-selected_track: "method"
-field_type: "greenfield"
-workflow_path: "method-greenfield.yaml"
+selected_track: "bmad-method"
+field_type: "brownfield"
+workflow_path: "method-brownfield.yaml"
+
 workflow_status:
   # Phase 0: Discovery (Optional)
-  brainstorm-project: docs/brainstorming-session-results-2025-11-30.md  # agent: analyst
-  product-brief: docs/product-brief-phase2-2025-11-30.md  # agent: analyst
+  brainstorm-project: docs/brainstorming-session-results-2025-12-05.md  # agent: analyst
+  research: skipped  # agent: analyst
+  product-brief: docs/product-brief.md  # agent: analyst
 
   # Phase 1: Planning
-  prd: docs/PRD-phase2.md  # agent: pm
-  validate-prd: optional  # agent: pm
+  prd: docs/prd.md  # agent: pm
+  validate-prd: skipped  # agent: pm
   create-design: docs/ux-design-specification.md  # agent: ux-designer
 
   # Phase 2: Solutioning
-  create-architecture: docs/architecture.md  # agent: architect (Phase 2 additions: 2025-11-30)
+  create-architecture: docs/architecture.md  # agent: architect
   test-design: docs/test-design-system.md  # agent: tea
-  validate-architecture: optional  # agent: architect
-  solutioning-gate-check: docs/bmm-readiness-assessment-phase2-2025-11-30.md  # agent: architect
+  validate-architecture: docs/validation-report-architecture-2025-11-30.md  # agent: architect
+  solutioning-gate-check: skipped  # agent: architect
 
   # Phase 3: Implementation
   sprint-planning: docs/sprint-artifacts/sprint-status.yaml  # agent: sm
+
+# Phase 3 Artifacts (in progress)
+phase3_artifacts:
+  brainstorm: docs/brainstorming-session-results-2025-12-05.md
+  prd: docs/PRD-phase3.md
+  epics: docs/epics-phase3.md
+
+# Phase 2 Artifacts (completed iteration)
+phase2_artifacts:
+  product-brief: docs/product-brief-phase2-2025-11-30.md
+  prd: docs/PRD-phase2.md
+  epics: docs/epics-phase2.md
+  brainstorm: docs/brainstorming-session-results-2025-11-30.md
+
+# Phase 1 Artifacts (completed iteration)
+phase1_artifacts:
+  epics: docs/epics.md
+  brainstorm: docs/bmm-brainstorming-session-2025-11-15.md

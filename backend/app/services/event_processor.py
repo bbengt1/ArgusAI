@@ -29,6 +29,7 @@ import httpx
 import numpy as np
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional, Set
 from contextlib import asynccontextmanager
 import os
@@ -56,6 +57,8 @@ class ProcessingEvent:
         timestamp: When motion was detected (UTC)
         detected_objects: List of detected object types (from motion detection)
         metadata: Additional context (motion confidence, zone, etc.)
+        clip_path: Path to downloaded video clip (Story P3-1.4, None if not available)
+        fallback_reason: Reason for fallback to snapshot analysis (Story P3-1.4)
     """
     camera_id: str
     camera_name: str
@@ -63,6 +66,9 @@ class ProcessingEvent:
     timestamp: datetime
     detected_objects: List[str] = field(default_factory=lambda: ["unknown"])
     metadata: Dict = field(default_factory=dict)
+    # Story P3-1.4: Video clip context for Protect events
+    clip_path: Optional[Path] = None
+    fallback_reason: Optional[str] = None
 
 
 @dataclass

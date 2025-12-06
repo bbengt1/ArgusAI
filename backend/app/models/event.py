@@ -29,6 +29,7 @@ class Event(Base):
         correlation_group_id: UUID linking correlated multi-camera events (Story P2-4.3)
         correlated_event_ids: JSON array of related event UUIDs (Story P2-4.3)
         provider_used: AI provider that generated the description - openai/grok/claude/gemini (Story P2-5.3)
+        fallback_reason: Reason for fallback to snapshot analysis (Story P3-1.4) - e.g., "clip_download_failed"
         created_at: Record creation timestamp (UTC with timezone)
     """
 
@@ -56,6 +57,8 @@ class Event(Base):
     provider_used = Column(String(20), nullable=True)  # openai/grok/claude/gemini (null for legacy events)
     # Story P2-6.3: Flag for events that need AI description retry
     description_retry_needed = Column(Boolean, nullable=False, default=False)  # True if all AI providers failed (AC13)
+    # Story P3-1.4: Fallback reason tracking for video clip failures
+    fallback_reason = Column(String(100), nullable=True)  # e.g., "clip_download_failed" (null = no fallback)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

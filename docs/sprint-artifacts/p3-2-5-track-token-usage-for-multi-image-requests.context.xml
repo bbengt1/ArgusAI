@@ -1,0 +1,184 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P3-2</epicId>
+    <storyId>5</storyId>
+    <title>Track Token Usage for Multi-Image Requests</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-06</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-2-5-track-token-usage-for-multi-image-requests.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system administrator</asA>
+    <iWant>accurate token tracking for multi-image requests</iWant>
+    <soThat>cost estimates remain accurate and I can monitor AI usage effectively</soThat>
+    <tasks>
+      <task id="1" title="Add analysis_mode field to AIUsage model" acs="2">
+        <subtask id="1.1">Add analysis_mode column to AIUsage model (String, nullable, values: "single_image", "multi_frame")</subtask>
+        <subtask id="1.2">Add is_estimated column to track estimated vs actual token counts (Boolean, default False)</subtask>
+        <subtask id="1.3">Create Alembic migration for new columns</subtask>
+        <subtask id="1.4">Apply migration and verify schema update</subtask>
+      </task>
+      <task id="2" title="Update AIService to track multi-image tokens" acs="1,2">
+        <subtask id="2.1">Modify _track_usage() method to accept analysis_mode parameter</subtask>
+        <subtask id="2.2">Update all provider generate_multi_image_description() methods to pass analysis_mode="multi_frame"</subtask>
+        <subtask id="2.3">Ensure single-image calls pass analysis_mode="single_image"</subtask>
+        <subtask id="2.4">Verify token counts from OpenAI/Claude/Grok responses are captured correctly</subtask>
+      </task>
+      <task id="3" title="Implement token estimation for providers without counts" acs="3">
+        <subtask id="3.1">Add token estimation constants (OpenAI: 85/765, Claude: 1334, Gemini: 258)</subtask>
+        <subtask id="3.2">Implement _estimate_image_tokens() method in AIService</subtask>
+        <subtask id="3.3">Apply estimation when provider response lacks token counts (Gemini)</subtask>
+        <subtask id="3.4">Set is_estimated=True when using estimates</subtask>
+      </task>
+      <task id="4" title="Implement cost calculation for multi-image" acs="4">
+        <subtask id="4.1">Define cost rates per provider from architecture.md CostTracker</subtask>
+        <subtask id="4.2">Update _calculate_cost() method to use provider-specific rates</subtask>
+        <subtask id="4.3">Ensure cost is stored with AIUsage record</subtask>
+      </task>
+      <task id="5" title="Write unit tests" acs="1,2,3,4">
+        <subtask id="5.1">Test AIUsage model includes new fields</subtask>
+        <subtask id="5.2">Test multi-image tracking sets analysis_mode="multi_frame"</subtask>
+        <subtask id="5.3">Test single-image tracking sets analysis_mode="single_image"</subtask>
+        <subtask id="5.4">Test token estimation when provider returns no counts</subtask>
+        <subtask id="5.5">Test is_estimated flag is set correctly</subtask>
+        <subtask id="5.6">Test cost calculation for each provider</subtask>
+        <subtask id="5.7">Test usage stats aggregation includes new fields</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Given a multi-image AI request completes, when usage is tracked, then AIUsage record includes total tokens (input + output) and token count reflects all images sent</criterion>
+    <criterion id="AC2">Given OpenAI vision request with 5 images, when response is received, then usage.prompt_tokens and usage.completion_tokens are recorded and stored in ai_usage table with analysis_mode="multi_frame"</criterion>
+    <criterion id="AC3">Given provider doesn't return token counts (some Gemini responses), when usage is tracked, then estimate tokens based on image count and response length and flag estimate with is_estimated: true</criterion>
+    <criterion id="AC4">Given cost tracking is enabled, when multi-image request completes, then estimated cost is calculated using provider's per-token rates and cost is stored with the AIUsage record</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epics</title>
+        <section>Story P3-2.5</section>
+        <snippet>Defines story requirements including token tracking for multi-image requests, estimation for providers without counts, and cost calculation with provider-specific rates.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>CostTracker, AIService</section>
+        <snippet>Contains per-token pricing for OpenAI, Claude, Gemini providers. AIService handles multi-provider fallback with usage tracking.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-2-4-create-multi-frame-prompts-optimized-for-sequences.md</path>
+        <title>Previous Story P3-2.4</title>
+        <section>Dev Agent Record, Completion Notes</section>
+        <snippet>Multi-image infrastructure complete. describe_images() and provider implementations ready. AIResult includes tokens_used. _track_usage() at line 1954 logs to ai_usage table.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>backend/app/models/ai_usage.py</path>
+        <kind>model</kind>
+        <symbol>AIUsage</symbol>
+        <lines>1-29</lines>
+        <reason>Current schema lacks analysis_mode and is_estimated columns - need to add both</reason>
+      </file>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>_track_usage</symbol>
+        <lines>1954-1992</lines>
+        <reason>Current method creates AIUsage record but lacks analysis_mode parameter - modify to accept and store analysis_mode</reason>
+      </file>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>describe_images</symbol>
+        <lines>1471-1695</lines>
+        <reason>Multi-image entry point - calls _track_usage() after provider returns. Need to pass analysis_mode="multi_frame"</reason>
+      </file>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>AIResult</symbol>
+        <lines>72-84</lines>
+        <reason>Dataclass with tokens_used and cost_estimate fields - used by all providers and tracking</reason>
+      </file>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>OpenAIProvider, GrokProvider, ClaudeProvider, GeminiProvider</symbol>
+        <lines>237-1450</lines>
+        <reason>All 4 providers implement generate_multi_image_description() - return AIResult with tokens_used</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_ai_service.py</path>
+        <kind>test</kind>
+        <symbol>TestMultiImageUsageTracking</symbol>
+        <lines>1585-1605</lines>
+        <reason>Existing test class for multi-image usage - extend with analysis_mode and is_estimated tests</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0" />
+        <package name="sqlalchemy" version=">=2.0.36" />
+        <package name="alembic" version=">=1.14.0" />
+        <package name="openai" version=">=1.54.0" />
+        <package name="anthropic" version=">=0.39.0" />
+        <package name="google-generativeai" version=">=0.8.0" />
+        <package name="pytest" version="7.4.3" />
+        <package name="pytest-asyncio" version="0.21.1" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Use existing AIProviderBase inheritance pattern for all providers</constraint>
+    <constraint>Add columns via Alembic migration - do not modify database directly</constraint>
+    <constraint>Use structured logging with extra={} dict pattern</constraint>
+    <constraint>Maintain backward compatibility - single-image calls should still work</constraint>
+    <constraint>Provider-specific cost rates from architecture.md CostTracker section</constraint>
+    <constraint>Pre-existing deprecation: datetime.utcnow() at lines 1970 - do not fix in this story</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>_track_usage</name>
+      <kind>method</kind>
+      <signature>def _track_usage(self, result: AIResult, analysis_mode: Optional[str] = None, is_estimated: bool = False) -> None</signature>
+      <path>backend/app/services/ai_service.py:1954</path>
+    </interface>
+    <interface>
+      <name>AIUsage</name>
+      <kind>SQLAlchemy model</kind>
+      <signature>AIUsage(timestamp, provider, success, tokens_used, response_time_ms, cost_estimate, error, analysis_mode, is_estimated)</signature>
+      <path>backend/app/models/ai_usage.py</path>
+    </interface>
+    <interface>
+      <name>describe_images</name>
+      <kind>async method</kind>
+      <signature>async def describe_images(self, images: List[bytes], camera_name: str, timestamp: Optional[str] = None, detected_objects: Optional[List[str]] = None, custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py:1471</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use pytest with pytest-asyncio for async tests. Mock external API calls. Use SQLAlchemy test session for database model tests. Follow existing TestMultiImage* class patterns in test_ai_service.py. 61 tests currently passing.</standards>
+    <locations>
+      <location>backend/tests/test_services/test_ai_service.py</location>
+      <location>backend/tests/test_models/</location>
+    </locations>
+    <ideas>
+      <idea ac="1,2">Test multi-image tracking creates AIUsage with analysis_mode="multi_frame" and correct token count</idea>
+      <idea ac="2">Test OpenAI response with 5 images records prompt_tokens and completion_tokens correctly</idea>
+      <idea ac="3">Test Gemini response without token counts triggers estimation and sets is_estimated=True</idea>
+      <idea ac="3">Test _estimate_image_tokens() returns correct estimates per provider</idea>
+      <idea ac="4">Test cost calculation uses correct provider-specific rates</idea>
+      <idea ac="1">Test single-image tracking sets analysis_mode="single_image"</idea>
+      <idea ac="1,2,3,4">Test get_usage_stats() aggregates by analysis_mode</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -50,8 +50,13 @@ from app.schemas.protect import (
     ProtectCameraFiltersData,
     ProtectCameraFiltersResponse,
     MetaResponse,
+    TestClipDownloadRequest,
+    TestClipDownloadResponse,
 )
 from app.services.protect_service import get_protect_service
+from app.services.clip_service import get_clip_service
+from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -1130,3 +1135,181 @@ async def update_camera_filters(
         ),
         meta=create_meta()
     )
+
+
+# Story P3-1.5: Test Clip Download Endpoint
+
+def _get_video_duration(clip_path: Path) -> Optional[float]:
+    """
+    Extract video duration from a clip file using PyAV.
+
+    Args:
+        clip_path: Path to the video file
+
+    Returns:
+        Duration in seconds, or None if extraction fails
+    """
+    try:
+        import av
+        with av.open(str(clip_path)) as container:
+            # Get duration from container (in AV_TIME_BASE units)
+            if container.duration is not None:
+                # container.duration is in microseconds (AV_TIME_BASE = 1,000,000)
+                return container.duration / 1_000_000.0
+            # Fallback: try to get from first video stream
+            if container.streams.video:
+                stream = container.streams.video[0]
+                if stream.duration is not None and stream.time_base is not None:
+                    return float(stream.duration * stream.time_base)
+        return None
+    except Exception as e:
+        logger.warning(
+            f"Failed to extract video duration from {clip_path}: {e}",
+            extra={
+                "event_type": "protect_test_clip_duration_error",
+                "clip_path": str(clip_path),
+                "error": str(e)
+            }
+        )
+        return None
+
+
+@router.post("/test-clip-download", response_model=TestClipDownloadResponse)
+async def test_clip_download(
+    request: TestClipDownloadRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Test clip download from a UniFi Protect camera (Story P3-1.5).
+
+    This endpoint is for development/testing purposes only. It:
+    1. Validates the camera exists and is a Protect camera
+    2. Attempts to download a clip for the specified time range
+    3. Returns file size and duration on success
+    4. Always cleans up the test clip after returning
+
+    Note: Returns HTTP 200 for all outcomes - check 'success' field for result.
+    This allows testing without triggering error handlers.
+
+    Args:
+        request: Camera ID and time range for clip download
+        db: Database session
+
+    Returns:
+        TestClipDownloadResponse with success status and metadata or error
+    """
+    logger.info(
+        f"Test clip download requested for camera {request.camera_id}",
+        extra={
+            "event_type": "protect_test_clip_download_start",
+            "camera_id": request.camera_id,
+            "start_time": request.start_time.isoformat(),
+            "end_time": request.end_time.isoformat()
+        }
+    )
+
+    # Step 1: Look up camera and validate it's a Protect camera (AC3)
+    camera = db.query(Camera).filter(Camera.id == request.camera_id).first()
+
+    if not camera:
+        logger.warning(
+            f"Test clip download failed: camera not found",
+            extra={
+                "event_type": "protect_test_clip_download_camera_not_found",
+                "camera_id": request.camera_id
+            }
+        )
+        return TestClipDownloadResponse(
+            success=False,
+            error="Camera not found in any Protect controller"
+        )
+
+    if camera.source_type != 'protect':
+        logger.warning(
+            f"Test clip download failed: camera is not a Protect camera",
+            extra={
+                "event_type": "protect_test_clip_download_wrong_source",
+                "camera_id": request.camera_id,
+                "source_type": camera.source_type
+            }
+        )
+        return TestClipDownloadResponse(
+            success=False,
+            error=f"Camera is not a Protect camera (source_type: {camera.source_type})"
+        )
+
+    if not camera.protect_controller_id or not camera.protect_camera_id:
+        logger.warning(
+            f"Test clip download failed: camera missing Protect identifiers",
+            extra={
+                "event_type": "protect_test_clip_download_missing_ids",
+                "camera_id": request.camera_id
+            }
+        )
+        return TestClipDownloadResponse(
+            success=False,
+            error="Camera not found in any Protect controller"
+        )
+
+    # Step 2: Generate test event ID and attempt download (AC1, AC2)
+    test_event_id = f"test-{uuid.uuid4()}"
+    clip_service = get_clip_service()
+    clip_path: Optional[Path] = None
+
+    try:
+        # Download clip using ClipService
+        clip_path = await clip_service.download_clip(
+            controller_id=camera.protect_controller_id,
+            camera_id=camera.protect_camera_id,
+            event_start=request.start_time,
+            event_end=request.end_time,
+            event_id=test_event_id
+        )
+
+        if not clip_path:
+            logger.warning(
+                f"Test clip download failed: ClipService returned None",
+                extra={
+                    "event_type": "protect_test_clip_download_failed",
+                    "camera_id": request.camera_id,
+                    "test_event_id": test_event_id
+                }
+            )
+            return TestClipDownloadResponse(
+                success=False,
+                error="Clip download failed - controller may be unreachable or clip unavailable"
+            )
+
+        # Step 3: Get file size and duration (AC1)
+        file_size = clip_path.stat().st_size
+        duration = _get_video_duration(clip_path)
+
+        logger.info(
+            f"Test clip download succeeded",
+            extra={
+                "event_type": "protect_test_clip_download_success",
+                "camera_id": request.camera_id,
+                "test_event_id": test_event_id,
+                "file_size_bytes": file_size,
+                "duration_seconds": duration
+            }
+        )
+
+        return TestClipDownloadResponse(
+            success=True,
+            file_size_bytes=file_size,
+            duration_seconds=duration
+        )
+
+    finally:
+        # Step 4: Always clean up test clip (AC4)
+        if test_event_id:
+            cleanup_success = clip_service.cleanup_clip(test_event_id)
+            logger.debug(
+                f"Test clip cleanup: {'success' if cleanup_success else 'file not found'}",
+                extra={
+                    "event_type": "protect_test_clip_cleanup",
+                    "test_event_id": test_event_id,
+                    "cleanup_success": cleanup_success
+                }
+            )
