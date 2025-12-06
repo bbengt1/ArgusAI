@@ -36,6 +36,10 @@ class Camera(Base):
         protect_camera_type: Protect camera type - 'camera' or 'doorbell' (Phase 2)
         smart_detection_types: JSON array of smart detection types (Phase 2)
         is_doorbell: Whether camera is a doorbell (Phase 2)
+        analysis_mode: AI analysis mode - 'single_frame', 'multi_frame', or 'video_native' (Phase 3)
+            - single_frame: Fast, low cost - uses single snapshot
+            - multi_frame: Balanced - extracts multiple frames from video clip
+            - video_native: Best quality, highest cost - sends video directly to AI
         created_at: Record creation timestamp (UTC)
         updated_at: Last modification timestamp (UTC)
     """
@@ -64,6 +68,8 @@ class Camera(Base):
     protect_camera_type = Column(String(20), nullable=True)  # 'camera', 'doorbell'
     smart_detection_types = Column(Text, nullable=True)  # JSON array: ["person", "vehicle", "package", "animal"]
     is_doorbell = Column(Boolean, default=False, nullable=False)
+    # Phase 3: Analysis mode for AI processing
+    analysis_mode = Column(String(20), default='single_frame', nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -77,6 +83,7 @@ class Camera(Base):
         CheckConstraint("frame_rate >= 1 AND frame_rate <= 30", name='check_frame_rate'),
         CheckConstraint("motion_sensitivity IN ('low', 'medium', 'high')", name='check_sensitivity'),
         CheckConstraint("motion_cooldown >= 0 AND motion_cooldown <= 300", name='check_cooldown'),
+        CheckConstraint("analysis_mode IN ('single_frame', 'multi_frame', 'video_native')", name='check_analysis_mode'),
     )
     
     @validates('password')

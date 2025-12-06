@@ -1,0 +1,138 @@
+<story-context id="p3-3-1-add-analysis-mode-field-to-camera-model" v="1.0">
+  <metadata>
+    <epicId>P3-3</epicId>
+    <storyId>P3-3.1</storyId>
+    <title>Add Analysis Mode Field to Camera Model</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-06</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-3-1-add-analysis-mode-field-to-camera-model.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system administrator</asA>
+    <iWant>each camera to store an analysis mode preference</iWant>
+    <soThat>cameras can be configured independently for different quality/cost trade-offs in AI analysis</soThat>
+    <tasks>
+      <task id="1" ac="1">Add analysis_mode column to Camera model (String(20), nullable=False, default='single_frame'), add CheckConstraint for valid values, add index, update docstring</task>
+      <task id="2" ac="1,2">Create Alembic migration with default 'single_frame' for existing records, CHECK constraint, test rollback</task>
+      <task id="3" ac="2">Update Pydantic schemas - add analysis_mode to CameraBase (Literal type), CameraUpdate (optional), CameraResponse</task>
+      <task id="4" ac="3">Update Protect camera discovery to set analysis_mode='multi_frame' as default for auto-discovered Protect cameras</task>
+      <task id="5" ac="4">Implement video_native fallback for non-Protect cameras in ProtectEventHandler multi-frame logic</task>
+      <task id="6" ac="all">Write unit tests for model, schema, discovery defaults, and fallback behavior</task>
+      <task id="7" ac="4">Integration test with existing multi-frame pipeline - verify getattr() logic works with actual field</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Given the Camera database model, when schema is updated, then `analysis_mode` field exists with type VARCHAR(20), valid values: 'single_frame', 'multi_frame', 'video_native', and default value is 'single_frame' for existing cameras</ac>
+    <ac id="2">Given a new camera is created, when no analysis_mode is specified, then defaults to 'single_frame'</ac>
+    <ac id="3">Given a Protect camera is discovered via auto-discovery, when auto-added to system, then defaults to 'multi_frame' (balanced choice per UX principles)</ac>
+    <ac id="4">Given camera.analysis_mode is 'video_native', when camera is non-Protect (RTSP/USB), then system treats as 'single_frame' (no clip source available)</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/architecture.md" title="Architecture" section="Database Schema" snippet="Camera model with RTSP/USB/Protect config, encrypted passwords, source_type field. Part of SQLAlchemy 2.0 ORM layer." />
+      <doc path="docs/epics-phase3.md" title="Phase 3 Epics" section="P3-3: Analysis Mode Configuration" snippet="Story P3-3.1 adds analysis_mode field to Camera model. Valid values: single_frame, multi_frame, video_native. Protect cameras default to multi_frame." />
+      <doc path="docs/sprint-artifacts/p3-2-6-integrate-multi-frame-analysis-into-event-pipeline.md" title="Story P3-2.6" section="Dev Agent Record" snippet="Multi-frame pipeline ready. Uses getattr(camera, 'analysis_mode', None) pattern. Integration point is ProtectEventHandler._submit_to_ai_pipeline(). Test patterns: TestEventAnalysisModeFields, TestMultiFrameIntegration." />
+      <doc path="CLAUDE.md" title="Claude Instructions" section="Database Models" snippet="Camera model: RTSP/USB/Protect config with encrypted passwords, source_type field. Alembic for migrations. pytest for testing." />
+    </docs>
+    <code>
+      <file path="backend/app/models/camera.py" kind="model" symbol="Camera" reason="Primary modification target - add analysis_mode column alongside existing Phase 2 fields (source_type, protect_camera_id, etc.)" />
+      <file path="backend/app/schemas/camera.py" kind="schema" symbol="CameraBase, CameraCreate, CameraUpdate, CameraResponse" reason="Update Pydantic schemas to include analysis_mode field with Literal type validation" />
+      <file path="backend/app/services/protect_service.py" kind="service" symbol="ProtectService.discover_cameras" lines="1103-1347" reason="Camera discovery flow where Protect cameras are created - set analysis_mode='multi_frame' default" />
+      <file path="backend/app/services/protect_event_handler.py" kind="service" symbol="ProtectEventHandler._submit_to_ai_pipeline, _try_multi_frame_analysis" lines="831-1061" reason="Multi-frame logic that uses getattr(camera, 'analysis_mode', None) - will use actual field. Fallback logic for video_native on non-Protect cameras." />
+      <file path="backend/tests/test_models/test_camera.py" kind="test" symbol="TestCameraModel" reason="Existing Camera model tests - add tests for analysis_mode field, defaults, and constraints" />
+      <file path="backend/alembic/versions/012_add_protect_controllers_and_camera_extensions.py" kind="migration" reason="Reference for migration pattern - added source_type, protect_camera_id to Camera model" />
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0" />
+        <package name="sqlalchemy" version=">=2.0.36" />
+        <package name="alembic" version=">=1.14.0" />
+        <package name="pydantic" version=">=2.10.0" />
+        <package name="pytest" version="7.4.3" />
+        <package name="pytest-asyncio" version="0.21.1" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">Camera model uses SQLAlchemy 2.0 declarative style with Column definitions. All Phase 2 Protect fields follow same pattern.</constraint>
+    <constraint type="architecture">Pydantic schemas use Field() with defaults and descriptions. Literal types for enum-like fields.</constraint>
+    <constraint type="database">Alembic migrations must include upgrade() and downgrade() functions. CHECK constraints for enum validation.</constraint>
+    <constraint type="security">No credentials in logs or migrations. Use ENCRYPTION_KEY for sensitive data.</constraint>
+    <constraint type="pattern">Use getattr(model, 'field', default) pattern for optional backward-compatible field access during migration rollout.</constraint>
+    <constraint type="testing">pytest with db_session fixture. Test model creation, defaults, constraints, and encryption.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Camera model" kind="SQLAlchemy model" path="backend/app/models/camera.py">
+      <signature>
+class Camera(Base):
+    __tablename__ = "cameras"
+    id = Column(String(36), primary_key=True)
+    name = Column(String(100), nullable=False)
+    type = Column(String(10))  # rtsp, usb
+    source_type = Column(String(20))  # rtsp, usb, protect
+    # ... existing fields ...
+    # NEW:
+    analysis_mode = Column(String(20), default='single_frame', nullable=False, index=True)
+      </signature>
+    </interface>
+    <interface name="CameraBase schema" kind="Pydantic BaseModel" path="backend/app/schemas/camera.py">
+      <signature>
+class CameraBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    # ... existing fields ...
+    # NEW:
+    analysis_mode: Literal['single_frame', 'multi_frame', 'video_native'] = Field(
+        default='single_frame',
+        description="AI analysis mode: single_frame (fast, low cost), multi_frame (balanced), video_native (best quality, highest cost)"
+    )
+      </signature>
+    </interface>
+    <interface name="ProtectEventHandler._submit_to_ai_pipeline" kind="async method" path="backend/app/services/protect_event_handler.py" lines="831-914">
+      <signature>
+async def _submit_to_ai_pipeline(
+    self,
+    snapshot_result: SnapshotResult,
+    camera: Camera,
+    event_type: str,
+    is_doorbell_ring: bool = False,
+    clip_path: Optional[Path] = None
+) -> Optional["AIResult"]:
+    # Line 880: camera_analysis_mode = getattr(camera, 'analysis_mode', None) or 'single_frame'
+    # This getattr() will now access the real field after this story
+      </signature>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      pytest with pytest-asyncio for async tests. Use db_session fixture from conftest.py for database tests.
+      Test model creation, default values, CHECK constraints, encryption. Follow existing TestCameraModel patterns.
+      For integration tests, use TestClient with test database. Mock external services (AI, Protect).
+    </standards>
+    <locations>
+      <location>backend/tests/test_models/test_camera.py</location>
+      <location>backend/tests/test_api/test_cameras.py</location>
+      <location>backend/tests/test_services/test_camera_service.py</location>
+      <location>backend/tests/test_integration/test_protect_cameras.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test Camera model has analysis_mode field with correct type (String(20))</idea>
+      <idea ac="1">Test Camera model default for analysis_mode is 'single_frame'</idea>
+      <idea ac="1">Test CHECK constraint rejects invalid values (e.g., 'invalid_mode')</idea>
+      <idea ac="2">Test CameraCreate schema defaults to 'single_frame' when not specified</idea>
+      <idea ac="2">Test CameraUpdate schema accepts valid analysis_mode values</idea>
+      <idea ac="2">Test CameraResponse includes analysis_mode in output</idea>
+      <idea ac="3">Test Protect camera discovery sets analysis_mode='multi_frame' for auto-discovered cameras</idea>
+      <idea ac="4">Test video_native treated as single_frame for RTSP/USB cameras in ProtectEventHandler</idea>
+      <idea ac="4">Test video_native fallback logs info message explaining reason</idea>
+      <idea ac="all">Test migration upgrade/downgrade works correctly</idea>
+      <idea ac="all">Test existing multi-frame tests still pass after field is added</idea>
+    </ideas>
+  </tests>
+</story-context>

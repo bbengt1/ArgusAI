@@ -879,6 +879,22 @@ class ProtectEventHandler:
             # camera.analysis_mode may not exist yet (added in P3-3.1), so use getattr with default
             camera_analysis_mode = getattr(camera, 'analysis_mode', None) or 'single_frame'
 
+            # Story P3-3.1 AC4: Treat video_native as single_frame for non-Protect cameras
+            # (RTSP/USB cameras don't have native clip sources, only Protect does)
+            if camera_analysis_mode == 'video_native' and camera.source_type != 'protect':
+                logger.info(
+                    f"Camera '{camera.name}' has video_native mode but source_type='{camera.source_type}', "
+                    "falling back to single_frame (no native clip source available)",
+                    extra={
+                        "event_type": "video_native_fallback",
+                        "camera_id": camera.id,
+                        "source_type": camera.source_type,
+                        "original_mode": camera_analysis_mode,
+                        "effective_mode": "single_frame"
+                    }
+                )
+                camera_analysis_mode = 'single_frame'
+
             # Story P3-2.6 AC1: Attempt multi-frame analysis if enabled and clip available
             if camera_analysis_mode == 'multi_frame' and clip_path and clip_path.exists():
                 result = await self._try_multi_frame_analysis(
