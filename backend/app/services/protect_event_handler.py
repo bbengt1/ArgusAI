@@ -908,22 +908,40 @@ class ProtectEventHandler:
             # camera.analysis_mode may not exist yet (added in P3-3.1), so use getattr with default
             configured_mode = getattr(camera, 'analysis_mode', None) or 'single_frame'
 
-            # Story P3-3.5: Non-Protect cameras (RTSP/USB) always use single_frame regardless of config
+            # Story P3-3.5, P3-4.4 AC5: Non-Protect cameras (RTSP/USB) always use single_frame regardless of config
             # They have no clip source, so video_native and multi_frame are not applicable
             if camera.source_type != 'protect':
-                if configured_mode in ('video_native', 'multi_frame'):
+                if configured_mode == 'video_native':
+                    # Story P3-4.4 AC5: Set fallback_reason for non-Protect cameras with video_native mode
+                    self._fallback_chain.append("video_native:no_clip_source")
                     logger.info(
-                        f"Camera '{camera.name}' has {configured_mode} mode but source_type='{camera.source_type}', "
+                        f"Camera '{camera.name}' has video_native mode but source_type='{camera.source_type}', "
                         "using single_frame (no clip source available for non-Protect cameras)",
                         extra={
-                            "event_type": "non_protect_single_frame",
+                            "event_type": "non_protect_video_native_fallback",
                             "camera_id": camera.id,
                             "source_type": camera.source_type,
                             "configured_mode": configured_mode,
-                            "effective_mode": "single_frame"
+                            "effective_mode": "single_frame",
+                            "fallback_reason": "video_native:no_clip_source"
                         }
                     )
-                # For non-Protect cameras, go directly to single-frame (no fallback chain needed)
+                elif configured_mode == 'multi_frame':
+                    # Track multi_frame fallback for non-Protect cameras
+                    self._fallback_chain.append("multi_frame:no_clip_source")
+                    logger.info(
+                        f"Camera '{camera.name}' has multi_frame mode but source_type='{camera.source_type}', "
+                        "using single_frame (no clip source available for non-Protect cameras)",
+                        extra={
+                            "event_type": "non_protect_multi_frame_fallback",
+                            "camera_id": camera.id,
+                            "source_type": camera.source_type,
+                            "configured_mode": configured_mode,
+                            "effective_mode": "single_frame",
+                            "fallback_reason": "multi_frame:no_clip_source"
+                        }
+                    )
+                # For non-Protect cameras, go directly to single-frame
                 return await self._single_frame_analysis(
                     snapshot_result=snapshot_result,
                     camera=camera,
@@ -1226,6 +1244,9 @@ class ProtectEventHandler:
                     "their appearance, what they might want, and any packages or items visible."
                 )
 
+            # Story P3-4.4 AC3: 30 second timeout for video analysis
+            VIDEO_ANALYSIS_TIMEOUT_SECONDS = 30
+
             logger.info(
                 f"Calling describe_video for camera '{camera.name}'",
                 extra={
@@ -1234,21 +1255,29 @@ class ProtectEventHandler:
                     "provider": provider_name,
                     "clip_path": str(clip_path),
                     "include_audio": include_audio,
-                    "is_doorbell_ring": is_doorbell_ring
+                    "is_doorbell_ring": is_doorbell_ring,
+                    "timeout_seconds": VIDEO_ANALYSIS_TIMEOUT_SECONDS
                 }
             )
 
-            # Call describe_video
-            result = await provider.describe_video(
-                video_path=clip_path,
-                camera_name=camera.name,
-                timestamp=datetime.now().isoformat(),
-                detected_objects=[event_type] if event_type else [],
-                include_audio=include_audio,
-                custom_prompt=custom_prompt
+            # Call describe_video with timeout (Story P3-4.4 Task 5)
+            result = await asyncio.wait_for(
+                provider.describe_video(
+                    video_path=clip_path,
+                    camera_name=camera.name,
+                    timestamp=datetime.now().isoformat(),
+                    detected_objects=[event_type] if event_type else [],
+                    include_audio=include_audio,
+                    custom_prompt=custom_prompt
+                ),
+                timeout=VIDEO_ANALYSIS_TIMEOUT_SECONDS
             )
 
             if result.success:
+                # Story P3-4.4 AC2: Set analysis_mode = 'video_native' and frame_count_used = None on success
+                self._last_analysis_mode = "video_native"
+                self._last_frame_count = None  # Video native uses full video, not frames
+
                 logger.info(
                     f"video_native analysis (frame_extraction) succeeded for camera '{camera.name}'",
                     extra={
@@ -1258,7 +1287,8 @@ class ProtectEventHandler:
                         "video_method": "frame_extraction",
                         "tokens_used": result.tokens_used,
                         "response_time_ms": result.response_time_ms,
-                        "audio_included": include_audio
+                        "audio_included": include_audio,
+                        "analysis_mode": "video_native"
                     }
                 )
                 return result
@@ -1276,6 +1306,22 @@ class ProtectEventHandler:
                     }
                 )
                 return None
+
+        except asyncio.TimeoutError:
+            # Story P3-4.4 AC3: Handle timeout with proper fallback reason
+            reason = "timeout"
+            self._fallback_chain.append(f"video_native:{reason}")
+            logger.warning(
+                f"Video frame extraction timed out for camera '{camera.name}' after 30s",
+                extra={
+                    "event_type": "video_native_timeout",
+                    "camera_id": camera.id,
+                    "provider": provider_name,
+                    "reason": reason,
+                    "timeout_seconds": 30
+                }
+            )
+            return None
 
         except Exception as e:
             reason = f"exception:{type(e).__name__}"
@@ -1346,6 +1392,9 @@ class ProtectEventHandler:
                     "their appearance, what they might want, and any packages or items visible."
                 )
 
+            # Story P3-4.4 AC3: 30 second timeout for video analysis
+            VIDEO_ANALYSIS_TIMEOUT_SECONDS = 30
+
             logger.info(
                 f"Calling describe_video (native upload) for camera '{camera.name}'",
                 extra={
@@ -1353,20 +1402,28 @@ class ProtectEventHandler:
                     "camera_id": camera.id,
                     "provider": provider_name,
                     "clip_path": str(clip_path),
-                    "is_doorbell_ring": is_doorbell_ring
+                    "is_doorbell_ring": is_doorbell_ring,
+                    "timeout_seconds": VIDEO_ANALYSIS_TIMEOUT_SECONDS
                 }
             )
 
-            # Call describe_video
-            result = await provider.describe_video(
-                video_path=clip_path,
-                camera_name=camera.name,
-                timestamp=datetime.now().isoformat(),
-                detected_objects=[event_type] if event_type else [],
-                custom_prompt=custom_prompt
+            # Call describe_video with timeout (Story P3-4.4 Task 5)
+            result = await asyncio.wait_for(
+                provider.describe_video(
+                    video_path=clip_path,
+                    camera_name=camera.name,
+                    timestamp=datetime.now().isoformat(),
+                    detected_objects=[event_type] if event_type else [],
+                    custom_prompt=custom_prompt
+                ),
+                timeout=VIDEO_ANALYSIS_TIMEOUT_SECONDS
             )
 
             if result.success:
+                # Story P3-4.4 AC2: Set analysis_mode = 'video_native' and frame_count_used = None on success
+                self._last_analysis_mode = "video_native"
+                self._last_frame_count = None  # Video native uses full video, not frames
+
                 logger.info(
                     f"video_native analysis (native_upload) succeeded for camera '{camera.name}'",
                     extra={
@@ -1375,7 +1432,8 @@ class ProtectEventHandler:
                         "provider": provider_name,
                         "video_method": "native_upload",
                         "tokens_used": result.tokens_used,
-                        "response_time_ms": result.response_time_ms
+                        "response_time_ms": result.response_time_ms,
+                        "analysis_mode": "video_native"
                     }
                 )
                 return result
@@ -1393,6 +1451,22 @@ class ProtectEventHandler:
                     }
                 )
                 return None
+
+        except asyncio.TimeoutError:
+            # Story P3-4.4 AC3: Handle timeout with proper fallback reason
+            reason = "timeout"
+            self._fallback_chain.append(f"video_native:{reason}")
+            logger.warning(
+                f"Video native upload timed out for camera '{camera.name}' after 30s",
+                extra={
+                    "event_type": "video_native_timeout",
+                    "camera_id": camera.id,
+                    "provider": provider_name,
+                    "reason": reason,
+                    "timeout_seconds": 30
+                }
+            )
+            return None
 
         except Exception as e:
             reason = f"exception:{type(e).__name__}"

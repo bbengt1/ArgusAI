@@ -32,6 +32,7 @@ class MockAIResult:
     confidence: int = 85
     response_time_ms: int = 500
     objects_detected: list = None
+    tokens_used: int = 100  # Story P3-4.4: Added for video analysis tests
 
     def __post_init__(self):
         if self.objects_detected is None:
@@ -534,3 +535,316 @@ class TestStoreEventWithoutAI:
 
             mock_db.add.assert_called_once()
             mock_db.commit.assert_called_once()
+
+
+# =============================================================================
+# Story P3-4.4: Integrate Video Native Mode into Pipeline Tests
+# =============================================================================
+
+class TestVideoNativeSuccessMetadata:
+    """Test video_native success path sets correct metadata (P3-4.4 AC1, AC2)"""
+
+    @pytest.mark.asyncio
+    async def test_video_native_upload_success_sets_analysis_mode(
+        self, handler, mock_camera_protect, temp_clip_file
+    ):
+        """AC2: Successful video_native sets analysis_mode = 'video_native'"""
+        handler._fallback_chain = []
+        mock_camera_protect.analysis_mode = "video_native"
+
+        # Create a mock AI result
+        mock_result = MockAIResult(
+            success=True,
+            description="Native video analysis complete",
+            provider="gemini",
+            tokens_used=500,
+            response_time_ms=2500
+        )
+
+        # Create a mock provider class that has describe_video method
+        mock_provider = MagicMock()
+        mock_provider.describe_video = AsyncMock(return_value=mock_result)
+
+        # Mock AIProvider enum
+        mock_provider_enum = MagicMock()
+
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
+            mock_ai_service.providers = {mock_provider_enum: mock_provider}
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
+                mock_enum.return_value = mock_provider_enum
+
+                result = await handler._try_video_native_upload(
+                    clip_path=temp_clip_file,
+                    camera=mock_camera_protect,
+                    event_type="person",
+                    is_doorbell_ring=False,
+                    provider_name="gemini"
+                )
+
+                assert result is not None
+                assert result.success is True
+                assert handler._last_analysis_mode == "video_native"
+                assert handler._last_frame_count is None  # AC2: frame_count = null for video
+
+    @pytest.mark.asyncio
+    async def test_video_frame_extraction_success_sets_analysis_mode(
+        self, handler, mock_camera_protect, temp_clip_file
+    ):
+        """AC2: Successful frame extraction also sets analysis_mode = 'video_native'"""
+        handler._fallback_chain = []
+
+        mock_result = MockAIResult(
+            success=True,
+            description="Frame extraction analysis complete",
+            provider="openai",
+            tokens_used=300,
+            response_time_ms=1500
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.describe_video = AsyncMock(return_value=mock_result)
+
+        mock_provider_enum = MagicMock()
+
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
+            mock_ai_service.providers = {mock_provider_enum: mock_provider}
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
+                mock_enum.return_value = mock_provider_enum
+
+                with patch('app.services.ai_service.PROVIDER_CAPABILITIES', {
+                    'openai': {'video_method': 'frame_extraction', 'supports_audio_transcription': True}
+                }):
+                    result = await handler._try_video_frame_extraction(
+                        clip_path=temp_clip_file,
+                        camera=mock_camera_protect,
+                        event_type="person",
+                        is_doorbell_ring=False,
+                        provider_name="openai"
+                    )
+
+                    assert result is not None
+                    assert result.success is True
+                    assert handler._last_analysis_mode == "video_native"
+                    assert handler._last_frame_count is None
+
+
+class TestVideoNativeTimeoutHandling:
+    """Test timeout handling for video analysis (P3-4.4 AC3, Task 5)"""
+
+    @pytest.mark.asyncio
+    async def test_video_native_upload_timeout_triggers_fallback(
+        self, handler, mock_camera_protect, temp_clip_file
+    ):
+        """AC3: Timeout triggers fallback with proper reason"""
+        handler._fallback_chain = []
+
+        # Mock provider with describe_video that times out
+        # We need to raise TimeoutError when called
+        async def slow_describe_video(*args, **kwargs):
+            raise asyncio.TimeoutError()
+
+        mock_provider = MagicMock()
+        mock_provider.describe_video = slow_describe_video
+
+        mock_provider_enum = MagicMock()
+
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
+            mock_ai_service.providers = {mock_provider_enum: mock_provider}
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
+                mock_enum.return_value = mock_provider_enum
+
+                result = await handler._try_video_native_upload(
+                    clip_path=temp_clip_file,
+                    camera=mock_camera_protect,
+                    event_type="person",
+                    is_doorbell_ring=False,
+                    provider_name="gemini"
+                )
+
+                assert result is None  # Should trigger fallback
+                assert "video_native:timeout" in handler._fallback_chain
+
+    @pytest.mark.asyncio
+    async def test_video_frame_extraction_timeout_triggers_fallback(
+        self, handler, mock_camera_protect, temp_clip_file
+    ):
+        """AC3: Frame extraction timeout also triggers fallback"""
+        handler._fallback_chain = []
+
+        async def slow_describe_video(*args, **kwargs):
+            raise asyncio.TimeoutError()
+
+        mock_provider = MagicMock()
+        mock_provider.describe_video = slow_describe_video
+
+        mock_provider_enum = MagicMock()
+
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
+            mock_ai_service.providers = {mock_provider_enum: mock_provider}
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
+                mock_enum.return_value = mock_provider_enum
+
+                with patch('app.services.ai_service.PROVIDER_CAPABILITIES', {
+                    'openai': {'supports_audio_transcription': False}
+                }):
+                    result = await handler._try_video_frame_extraction(
+                        clip_path=temp_clip_file,
+                        camera=mock_camera_protect,
+                        event_type="person",
+                        is_doorbell_ring=False,
+                        provider_name="openai"
+                    )
+
+                    assert result is None
+                    assert "video_native:timeout" in handler._fallback_chain
+
+
+class TestNonProtectCameraFallbackReason:
+    """Test non-Protect camera fallback reason (P3-4.4 AC5)"""
+
+    @pytest.mark.asyncio
+    async def test_rtsp_camera_video_native_sets_no_clip_source_reason(
+        self, handler, mock_camera_rtsp, mock_snapshot_result
+    ):
+        """AC5: RTSP camera with video_native sets fallback_reason = 'video_native:no_clip_source'"""
+        mock_camera_rtsp.analysis_mode = "video_native"
+        success_result = MockAIResult(success=True, description="RTSP single frame")
+
+        with patch.object(
+            handler, '_single_frame_analysis',
+            new_callable=AsyncMock,
+            return_value=success_result
+        ):
+            with patch('app.services.ai_service.ai_service') as mock_ai:
+                mock_ai.load_api_keys_from_db = AsyncMock()
+                with patch('app.services.protect_event_handler.SessionLocal'):
+                    await handler._submit_to_ai_pipeline(
+                        snapshot_result=mock_snapshot_result,
+                        camera=mock_camera_rtsp,
+                        event_type="motion"
+                    )
+
+                    # Verify the correct fallback reason was set
+                    assert "video_native:no_clip_source" in handler._fallback_chain
+
+    @pytest.mark.asyncio
+    async def test_usb_camera_video_native_sets_no_clip_source_reason(self, handler, mock_snapshot_result):
+        """AC5: USB camera with video_native also sets 'video_native:no_clip_source'"""
+        mock_camera_usb = Mock()
+        mock_camera_usb.id = "camera-usb-456"
+        mock_camera_usb.name = "USB Camera"
+        mock_camera_usb.source_type = "usb"
+        mock_camera_usb.analysis_mode = "video_native"
+
+        success_result = MockAIResult(success=True)
+
+        with patch.object(
+            handler, '_single_frame_analysis',
+            new_callable=AsyncMock,
+            return_value=success_result
+        ):
+            with patch('app.services.ai_service.ai_service') as mock_ai:
+                mock_ai.load_api_keys_from_db = AsyncMock()
+                with patch('app.services.protect_event_handler.SessionLocal'):
+                    await handler._submit_to_ai_pipeline(
+                        snapshot_result=mock_snapshot_result,
+                        camera=mock_camera_usb,
+                        event_type="motion"
+                    )
+
+                    assert "video_native:no_clip_source" in handler._fallback_chain
+
+    @pytest.mark.asyncio
+    async def test_rtsp_camera_multi_frame_sets_no_clip_source_reason(self, handler, mock_snapshot_result):
+        """Multi-frame on RTSP camera sets 'multi_frame:no_clip_source'"""
+        mock_camera_rtsp = Mock()
+        mock_camera_rtsp.id = "camera-rtsp-789"
+        mock_camera_rtsp.name = "RTSP Camera"
+        mock_camera_rtsp.source_type = "rtsp"
+        mock_camera_rtsp.analysis_mode = "multi_frame"  # Not video_native
+
+        success_result = MockAIResult(success=True)
+
+        with patch.object(
+            handler, '_single_frame_analysis',
+            new_callable=AsyncMock,
+            return_value=success_result
+        ):
+            with patch('app.services.ai_service.ai_service') as mock_ai:
+                mock_ai.load_api_keys_from_db = AsyncMock()
+                with patch('app.services.protect_event_handler.SessionLocal'):
+                    await handler._submit_to_ai_pipeline(
+                        snapshot_result=mock_snapshot_result,
+                        camera=mock_camera_rtsp,
+                        event_type="motion"
+                    )
+
+                    assert "multi_frame:no_clip_source" in handler._fallback_chain
+
+
+class TestVideoNativeProviderFailure:
+    """Test provider failure and fallback (P3-4.4 AC3, AC4)"""
+
+    @pytest.mark.asyncio
+    async def test_provider_exception_triggers_fallback(
+        self, handler, mock_camera_protect, temp_clip_file
+    ):
+        """AC3: Provider exception triggers fallback with exception type in reason"""
+        handler._fallback_chain = []
+
+        async def raise_error(*args, **kwargs):
+            raise ValueError("API key invalid")
+
+        mock_provider = MagicMock()
+        mock_provider.describe_video = raise_error
+
+        mock_provider_enum = MagicMock()
+
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
+            mock_ai_service.providers = {mock_provider_enum: mock_provider}
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
+                mock_enum.return_value = mock_provider_enum
+
+                result = await handler._try_video_native_upload(
+                    clip_path=temp_clip_file,
+                    camera=mock_camera_protect,
+                    event_type="person",
+                    is_doorbell_ring=False,
+                    provider_name="gemini"
+                )
+
+                assert result is None
+                assert "video_native:exception:ValueError" in handler._fallback_chain
+
+    @pytest.mark.asyncio
+    async def test_describe_video_failure_result_triggers_fallback(
+        self, handler, mock_camera_protect, temp_clip_file
+    ):
+        """AC3: describe_video returning success=False triggers fallback"""
+        handler._fallback_chain = []
+
+        mock_result = MockAIResult(
+            success=False,
+            error="Rate limit exceeded"
+        )
+
+        mock_provider = MagicMock()
+        mock_provider.describe_video = AsyncMock(return_value=mock_result)
+
+        mock_provider_enum = MagicMock()
+
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
+            mock_ai_service.providers = {mock_provider_enum: mock_provider}
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
+                mock_enum.return_value = mock_provider_enum
+
+                result = await handler._try_video_native_upload(
+                    clip_path=temp_clip_file,
+                    camera=mock_camera_protect,
+                    event_type="person",
+                    is_doorbell_ring=False,
+                    provider_name="gemini"
+                )
+
+                assert result is None
+                assert any("describe_video_failed" in r for r in handler._fallback_chain)

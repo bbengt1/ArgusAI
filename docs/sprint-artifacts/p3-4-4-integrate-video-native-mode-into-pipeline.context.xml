@@ -1,0 +1,226 @@
+<story-context id="p3-4-4-integrate-video-native-mode-into-pipeline" v="1.0">
+  <metadata>
+    <epicId>P3-4</epicId>
+    <storyId>P3-4.4</storyId>
+    <title>Integrate Video Native Mode into Pipeline</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-07</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-4-4-integrate-video-native-mode-into-pipeline.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>video_native mode to work end-to-end with proper fallback handling</iWant>
+    <soThat>cameras configured for video_native analysis receive full video analysis with automatic fallback to multi_frame when needed</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Update protect_event_handler video_native routing
+        <subtask>1.1 Modify _try_video_native_analysis() to call _try_video_native_upload() for Gemini</subtask>
+        <subtask>1.2 Ensure clip download happens before video analysis</subtask>
+        <subtask>1.3 Set event.analysis_mode = 'video_native' on success</subtask>
+        <subtask>1.4 Set event.frame_count_used = None for video mode</subtask>
+      </task>
+      <task id="2" ac="3">Implement provider fallback for video analysis
+        <subtask>2.1 Create video-capable provider iteration list from PROVIDER_CAPABILITIES</subtask>
+        <subtask>2.2 Try each video-capable provider with video_method='native_upload' in order</subtask>
+        <subtask>2.3 On provider failure, log and continue to next provider</subtask>
+        <subtask>2.4 Track which providers were tried in fallback_reason</subtask>
+      </task>
+      <task id="3" ac="4">Implement fallback to multi_frame when video fails
+        <subtask>3.1 After all video providers fail, call _try_multi_frame_analysis()</subtask>
+        <subtask>3.2 Use existing clip for frame extraction (don't re-download)</subtask>
+        <subtask>3.3 Set fallback_reason with proper chain tracking</subtask>
+        <subtask>3.4 If multi_frame also fails, continue to single_frame fallback</subtask>
+      </task>
+      <task id="4" ac="5">Handle non-Protect cameras for video_native
+        <subtask>4.1 Check camera.source_type before attempting video download</subtask>
+        <subtask>4.2 For RTSP/USB cameras, skip video_native immediately</subtask>
+        <subtask>4.3 Set fallback_reason = "video_native:no_clip_source" for non-Protect</subtask>
+        <subtask>4.4 Route directly to multi_frame for non-Protect cameras</subtask>
+      </task>
+      <task id="5" ac="3">Add video analysis timeout handling
+        <subtask>5.1 Set 30-second timeout for video analysis requests</subtask>
+        <subtask>5.2 Handle timeout gracefully with fallback trigger</subtask>
+        <subtask>5.3 Log timeout events with provider and duration</subtask>
+      </task>
+      <task id="6" ac="all">Write tests
+        <subtask>6.1 Test video_native success path with Gemini mock</subtask>
+        <subtask>6.2 Test provider fallback when first provider fails</subtask>
+        <subtask>6.3 Test multi_frame fallback when all video providers fail</subtask>
+        <subtask>6.4 Test non-Protect camera fallback behavior</subtask>
+        <subtask>6.5 Test timeout handling and fallback trigger</subtask>
+        <subtask>6.6 Test event metadata is set correctly</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Given camera with analysis_mode='video_native', when Protect event is processed, then clip is downloaded, sent directly to video-capable provider (Gemini), and description captures full video narrative.</criterion>
+    <criterion id="AC2">Given video_native analysis succeeds, when event is saved, then event.analysis_mode = 'video_native' and event.frame_count_used = null (video, not frames).</criterion>
+    <criterion id="AC3">Given video_native provider fails (Gemini error, timeout, etc.), when fallback triggers, then system tries next video-capable provider, and if none available, falls back to multi_frame mode.</criterion>
+    <criterion id="AC4">Given all video providers exhausted, when fallback continues, then system extracts frames using FrameExtractor, uses multi_frame analysis, and event.fallback_reason includes "video_native:all_providers_failed".</criterion>
+    <criterion id="AC5">Given video_native mode for non-Protect camera (RTSP/USB), when analysis is attempted, then system immediately falls back to multi_frame (no clip source), and event.fallback_reason = "video_native:no_clip_source".</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epic Breakdown</title>
+        <section>Story P3-4.4</section>
+        <snippet>Story P3-4.4 defines video_native end-to-end integration with acceptance criteria for success path, event metadata, provider fallback, multi_frame fallback, and non-Protect camera handling.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document - Phase 3</title>
+        <section>Phase 3 Event Processing Flow, Phase 3 Fallback Chain</section>
+        <snippet>Documents the fallback chain: video_native -> multi_frame -> single_frame. Video-capable providers: Gemini (native_upload), OpenAI/Grok (frame_extraction). Gemini has true native video upload.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-4-3-implement-video-upload-to-gemini.md</path>
+        <title>Previous Story - Gemini Video Upload</title>
+        <section>Dev Agent Record</section>
+        <snippet>GeminiProvider.describe_video() and AIService.describe_video() already implemented. _try_video_native_upload() added to protect_event_handler.py. 16 new tests covering video analysis.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>service</kind>
+        <symbol>ProtectEventHandler</symbol>
+        <lines>90-1213</lines>
+        <reason>Main class handling Protect events. Contains _submit_to_ai_pipeline() (line 854), _try_video_native_analysis() (line 1014), _try_video_frame_extraction() (line 1171), _try_video_native_upload() methods to modify for end-to-end video_native flow.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>AIService.describe_video</symbol>
+        <lines>2708-2860</lines>
+        <reason>AIService orchestration method for video analysis. Routes to video-capable providers, handles fallback, tracks usage with video_native analysis mode.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>constant</kind>
+        <symbol>PROVIDER_CAPABILITIES</symbol>
+        <lines>95-137</lines>
+        <reason>Defines video capabilities for each provider: openai/grok use frame_extraction, gemini uses native_upload with 2GB/5min limits.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>GeminiProvider.describe_video</symbol>
+        <lines>1220-1400</lines>
+        <reason>Gemini native video upload implementation. Uses inline_data for &lt;20MB or File API for larger videos. Implemented in P3-4.3.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/frame_extractor.py</path>
+        <kind>service</kind>
+        <symbol>FrameExtractor</symbol>
+        <reason>Extracts frames from video clips for multi_frame analysis. Used in fallback path when video_native fails.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <lines>13-67</lines>
+        <reason>Camera model with source_type ('rtsp', 'usb', 'protect') and analysis_mode ('single_frame', 'multi_frame', 'video_native') fields.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>61-67</lines>
+        <reason>Event model with fallback_reason, analysis_mode, and frame_count_used fields that must be set correctly.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/tests/test_services/test_ai_service.py</path>
+        <kind>test</kind>
+        <symbol>TestGeminiDescribeVideo, TestAIServiceDescribeVideo</symbol>
+        <reason>Existing video analysis tests from P3-4.3. Follow patterns for new integration tests.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package version=">=0.115.0">fastapi</package>
+        <package version=">=2.0.36">sqlalchemy</package>
+        <package version=">=4.12.0">opencv-python</package>
+        <package version=">=12.0.0">av</package>
+        <package version=">=0.8.0">google-generativeai</package>
+        <package version=">=1.54.0">openai</package>
+        <package version=">=8.2.0">tenacity</package>
+        <package version="==7.4.3">pytest</package>
+        <package version="==0.21.1">pytest-asyncio</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">Fallback chain must be: video_native -> multi_frame -> single_frame</constraint>
+    <constraint type="architecture">Only Gemini supports native video upload (video_method='native_upload')</constraint>
+    <constraint type="architecture">OpenAI and Grok use frame extraction (video_method='frame_extraction'), not true video upload</constraint>
+    <constraint type="architecture">Non-Protect cameras (RTSP/USB) have no clip source - skip directly to multi_frame/single_frame</constraint>
+    <constraint type="data">Event.analysis_mode must reflect actual mode used, not configured mode</constraint>
+    <constraint type="data">Event.frame_count_used = null for video_native mode (no frames, full video)</constraint>
+    <constraint type="data">Event.fallback_reason tracks each failure in comma-separated format</constraint>
+    <constraint type="performance">Video analysis timeout: 30 seconds before fallback triggers</constraint>
+    <constraint type="testing">Mock all external API calls (Gemini, OpenAI)</constraint>
+    <constraint type="testing">Test both success and failure paths for each analysis mode</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>AIService.describe_video</name>
+      <kind>async method</kind>
+      <signature>async def describe_video(self, video_path: Path, prompt: str, provider: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py:2708</path>
+    </interface>
+    <interface>
+      <name>GeminiProvider.describe_video</name>
+      <kind>async method</kind>
+      <signature>async def describe_video(self, video_path: Path, prompt: str) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py:1220</path>
+    </interface>
+    <interface>
+      <name>ai_service.get_video_capable_providers</name>
+      <kind>method</kind>
+      <signature>def get_video_capable_providers(self) -> List[str]</signature>
+      <path>backend/app/services/ai_service.py:3369</path>
+    </interface>
+    <interface>
+      <name>ProtectEventHandler._try_video_native_analysis</name>
+      <kind>async method</kind>
+      <signature>async def _try_video_native_analysis(self, clip_path: Optional[Path], snapshot_result: SnapshotResult, camera: Camera, event_type: str, is_doorbell_ring: bool = False) -> Optional[AIResult]</signature>
+      <path>backend/app/services/protect_event_handler.py:1014</path>
+    </interface>
+    <interface>
+      <name>ProtectEventHandler._try_video_native_upload</name>
+      <kind>async method</kind>
+      <signature>async def _try_video_native_upload(self, clip_path: Path, camera: Camera, event_type: str, is_doorbell_ring: bool, provider_name: str) -> Optional[AIResult]</signature>
+      <path>backend/app/services/protect_event_handler.py</path>
+    </interface>
+    <interface>
+      <name>FrameExtractor.extract_frames</name>
+      <kind>async method</kind>
+      <signature>async def extract_frames(self, clip_path: Path, frame_count: int = 5, strategy: str = "evenly_spaced") -> List[bytes]</signature>
+      <path>backend/app/services/frame_extractor.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use pytest with pytest-asyncio for async tests. Mock external AI providers (Gemini, OpenAI) using unittest.mock or pytest-mock. Follow existing patterns in test_ai_service.py for video analysis tests. Test both success and failure paths. Verify event metadata is set correctly after each analysis mode. Use fixtures for common setup (Camera, Event, mock providers).</standards>
+    <locations>
+      <location>backend/tests/test_services/</location>
+      <location>backend/tests/test_api/</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test video_native success path: mock Gemini describe_video to return success, verify event.analysis_mode='video_native' and description set</idea>
+      <idea ac="2">Test event metadata on success: verify frame_count_used=None for video_native mode</idea>
+      <idea ac="3">Test provider fallback: mock Gemini to fail, verify fallback triggers with proper reason tracking</idea>
+      <idea ac="3">Test timeout handling: mock slow response, verify 30s timeout triggers fallback</idea>
+      <idea ac="4">Test multi_frame fallback: mock all video providers to fail, verify frame extraction and multi_frame analysis runs</idea>
+      <idea ac="4">Test fallback_reason format: verify comma-separated chain like "video_native:provider_error,multi_frame:success"</idea>
+      <idea ac="5">Test non-Protect camera: create RTSP camera with video_native mode, verify immediate skip to multi_frame with "no_clip_source" reason</idea>
+      <idea ac="5">Test USB camera: same as RTSP, verify source_type check works</idea>
+    </ideas>
+  </tests>
+</story-context>

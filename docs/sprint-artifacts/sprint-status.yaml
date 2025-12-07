@@ -185,8 +185,8 @@ development_status:
   epic-p3-4: backlog
   p3-4-1-add-provider-video-capability-detection: done
   p3-4-2-implement-video-upload-to-openai: done
-  p3-4-3-implement-video-upload-to-gemini: review
-  p3-4-4-integrate-video-native-mode-into-pipeline: backlog
+  p3-4-3-implement-video-upload-to-gemini: done
+  p3-4-4-integrate-video-native-mode-into-pipeline: review
   epic-p3-4-retrospective: optional
 
   # Epic P3-5: Audio Analysis for Doorbells (Growth)
