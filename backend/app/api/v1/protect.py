@@ -919,6 +919,7 @@ async def enable_camera(
         )
     else:
         # Create new camera record (AC6)
+        # Phase 3: Protect cameras default to 'multi_frame' analysis mode for balanced quality/cost
         camera_name = request.name or discovered_camera.name
         camera_record = Camera(
             name=camera_name,
@@ -931,6 +932,7 @@ async def enable_camera(
             smart_detection_types=json.dumps(request.smart_detection_types),
             is_enabled=True,
             motion_enabled=True,  # Default to motion enabled
+            analysis_mode='multi_frame',  # Phase 3: Balanced default for Protect cameras
         )
         db.add(camera_record)
         db.commit()

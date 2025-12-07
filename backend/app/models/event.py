@@ -30,6 +30,8 @@ class Event(Base):
         correlated_event_ids: JSON array of related event UUIDs (Story P2-4.3)
         provider_used: AI provider that generated the description - openai/grok/claude/gemini (Story P2-5.3)
         fallback_reason: Reason for fallback to snapshot analysis (Story P3-1.4) - e.g., "clip_download_failed"
+        analysis_mode: Analysis mode used - "single_frame", "multi_frame", "video_native" (Story P3-2.6)
+        frame_count_used: Number of frames sent to AI for multi-frame analysis (Story P3-2.6)
         created_at: Record creation timestamp (UTC with timezone)
     """
 
@@ -59,6 +61,9 @@ class Event(Base):
     description_retry_needed = Column(Boolean, nullable=False, default=False)  # True if all AI providers failed (AC13)
     # Story P3-1.4: Fallback reason tracking for video clip failures
     fallback_reason = Column(String(100), nullable=True)  # e.g., "clip_download_failed" (null = no fallback)
+    # Story P3-2.6: Multi-frame analysis tracking
+    analysis_mode = Column(String(20), nullable=True, index=True)  # "single_frame", "multi_frame", "video_native"
+    frame_count_used = Column(Integer, nullable=True)  # Number of frames sent to AI (null for single-frame)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

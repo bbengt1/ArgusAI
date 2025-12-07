@@ -83,7 +83,8 @@ def create_camera(
             frame_rate=camera_data.frame_rate,
             is_enabled=camera_data.is_enabled,
             motion_sensitivity=camera_data.motion_sensitivity,
-            motion_cooldown=camera_data.motion_cooldown
+            motion_cooldown=camera_data.motion_cooldown,
+            analysis_mode=camera_data.analysis_mode,  # Phase 3: Analysis mode
         )
 
         # Save to database
@@ -220,6 +221,19 @@ def update_camera(
 
         # Update fields
         update_data = camera_data.model_dump(exclude_unset=True)
+
+        # Phase 3: Warn if setting video_native on non-Protect camera
+        if 'analysis_mode' in update_data and update_data['analysis_mode'] == 'video_native':
+            if camera.source_type != 'protect':
+                logger.warning(
+                    f"Camera '{camera.name}' set to video_native but source_type='{camera.source_type}'. "
+                    "Will be treated as single_frame at runtime (no native clip source).",
+                    extra={
+                        "event_type": "video_native_on_non_protect",
+                        "camera_id": camera_id,
+                        "source_type": camera.source_type
+                    }
+                )
 
         for field, value in update_data.items():
             setattr(camera, field, value)

@@ -27,6 +27,11 @@ class CameraBase(BaseModel):
         default='mog2',
         description="Motion detection algorithm"
     )
+    # Phase 3: Analysis mode for AI processing
+    analysis_mode: Literal['single_frame', 'multi_frame', 'video_native'] = Field(
+        default='single_frame',
+        description="AI analysis mode: single_frame (fast, low cost), multi_frame (balanced), video_native (best quality, highest cost)"
+    )
 
 
 class CameraCreate(CameraBase):
@@ -93,6 +98,11 @@ class CameraUpdate(BaseModel):
     motion_algorithm: Optional[Literal['mog2', 'knn', 'frame_diff']] = None
     detection_zones: Optional[Any] = Field(None, description="JSON array of DetectionZone objects (accepts object or string)")
     detection_schedule: Optional[Any] = Field(None, description="JSON object: DetectionSchedule schema (accepts object or string)")
+    # Phase 3: Analysis mode for AI processing
+    analysis_mode: Optional[Literal['single_frame', 'multi_frame', 'video_native']] = Field(
+        None,
+        description="AI analysis mode: single_frame (fast, low cost), multi_frame (balanced), video_native (best quality, highest cost)"
+    )
 
     @field_validator('detection_zones', mode='before')
     @classmethod
@@ -136,6 +146,7 @@ class CameraResponse(CameraBase):
     is_doorbell: Optional[bool] = Field(None, description="Whether camera is a doorbell")
 
     # Note: password field is intentionally omitted (write-only field)
+    # Note: analysis_mode is inherited from CameraBase
 
     @field_validator('detection_zones', mode='before')
     @classmethod

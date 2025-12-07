@@ -51,6 +51,7 @@ from app.models.camera import Camera
 from app.models.event import Event
 from app.services.snapshot_service import get_snapshot_service, SnapshotResult
 from app.services.clip_service import get_clip_service
+from app.services.frame_extractor import get_frame_extractor
 
 if TYPE_CHECKING:
     from app.services.ai_service import AIResult
@@ -836,25 +837,31 @@ class ProtectEventHandler:
         clip_path: Optional[Path] = None
     ) -> Optional["AIResult"]:
         """
-        Submit snapshot to AI pipeline for description generation (Story P2-3.3 AC1-3, P2-4.1 AC4).
+        Submit snapshot to AI pipeline for description generation (Story P2-3.3 AC1-3, P2-4.1 AC4, P3-2.6).
 
         Converts base64 image to numpy array and calls AIService.generate_description().
         Uses doorbell-specific prompt for ring events (Story P2-4.1).
+
+        Story P3-2.6: When camera.analysis_mode == "multi_frame" and clip is available,
+        extracts frames from clip and uses AIService.describe_images() for richer descriptions.
+        Falls back to single-frame on any failure.
 
         Args:
             snapshot_result: Snapshot with base64-encoded image
             camera: Camera that captured the event
             event_type: Detection type (person, vehicle, ring, etc.)
             is_doorbell_ring: If True, use doorbell-specific AI prompt (Story P2-4.1)
-            clip_path: Optional path to video clip (Story P3-1.4, for future multi-frame analysis)
+            clip_path: Optional path to video clip for multi-frame analysis (Story P3-1.4, P3-2.6)
 
         Returns:
             AIResult with description, or None on failure
-
-        Note:
-            clip_path is currently logged but not used - future stories (P3-2) will
-            add multi-frame extraction from clip for enhanced AI analysis.
+            Also sets self._last_analysis_mode and self._last_frame_count for event storage
         """
+        # Story P3-2.6: Track analysis mode and frame count for event storage
+        self._last_analysis_mode: Optional[str] = None
+        self._last_frame_count: Optional[int] = None
+        self._last_fallback_reason: Optional[str] = None
+
         try:
             # Lazy import to avoid circular imports (same pattern as snapshot_service)
             from app.services.ai_service import ai_service
@@ -868,45 +875,47 @@ class ProtectEventHandler:
             finally:
                 db.close()
 
-            # Convert base64 to numpy array (BGR format for OpenCV/AI)
-            # (AC2: Use existing AIService.generate_description with image)
-            image_bytes = base64.b64decode(snapshot_result.image_base64)
-            image = Image.open(io.BytesIO(image_bytes))
+            # Story P3-2.6 AC1: Check if multi-frame analysis should be used
+            # camera.analysis_mode may not exist yet (added in P3-3.1), so use getattr with default
+            camera_analysis_mode = getattr(camera, 'analysis_mode', None) or 'single_frame'
 
-            # Convert PIL to numpy array and then RGB->BGR for OpenCV convention
-            frame_rgb = np.array(image)
-            if len(frame_rgb.shape) == 3 and frame_rgb.shape[2] == 3:
-                frame_bgr = frame_rgb[:, :, ::-1]  # RGB to BGR
-            else:
-                frame_bgr = frame_rgb
+            # Story P3-3.1 AC4: Treat video_native as single_frame for non-Protect cameras
+            # (RTSP/USB cameras don't have native clip sources, only Protect does)
+            if camera_analysis_mode == 'video_native' and camera.source_type != 'protect':
+                logger.info(
+                    f"Camera '{camera.name}' has video_native mode but source_type='{camera.source_type}', "
+                    "falling back to single_frame (no native clip source available)",
+                    extra={
+                        "event_type": "video_native_fallback",
+                        "camera_id": camera.id,
+                        "source_type": camera.source_type,
+                        "original_mode": camera_analysis_mode,
+                        "effective_mode": "single_frame"
+                    }
+                )
+                camera_analysis_mode = 'single_frame'
 
-            # Story P2-4.1: Use doorbell-specific prompt for ring events (AC4)
-            custom_prompt = DOORBELL_RING_PROMPT if is_doorbell_ring else None
+            # Story P3-2.6 AC1: Attempt multi-frame analysis if enabled and clip available
+            if camera_analysis_mode == 'multi_frame' and clip_path and clip_path.exists():
+                result = await self._try_multi_frame_analysis(
+                    clip_path=clip_path,
+                    snapshot_result=snapshot_result,
+                    camera=camera,
+                    event_type=event_type,
+                    is_doorbell_ring=is_doorbell_ring
+                )
+                if result:
+                    return result
+                # If multi-frame failed, _try_multi_frame_analysis already set fallback_reason
+                # and we fall through to single-frame analysis below
 
-            # Call AI service (AC1, AC2, AC3)
-            # detected_objects provides context about what was detected
-            result = await ai_service.generate_description(
-                frame=frame_bgr,
-                camera_name=camera.name,
-                timestamp=snapshot_result.timestamp.isoformat(),
-                detected_objects=[event_type],  # AC3: Include event type
-                sla_timeout_ms=5000,  # 5s SLA target
-                custom_prompt=custom_prompt  # Story P2-4.1: Doorbell prompt
+            # Single-frame analysis (existing behavior or fallback)
+            return await self._single_frame_analysis(
+                snapshot_result=snapshot_result,
+                camera=camera,
+                event_type=event_type,
+                is_doorbell_ring=is_doorbell_ring
             )
-
-            logger.info(
-                f"AI description generated for camera '{camera.name}': {result.description[:50]}...",
-                extra={
-                    "event_type": "protect_ai_success",
-                    "camera_id": camera.id,
-                    "ai_provider": result.provider,
-                    "confidence": result.confidence,
-                    "response_time_ms": result.response_time_ms,
-                    "is_doorbell_ring": is_doorbell_ring
-                }
-            )
-
-            return result
 
         except Exception as e:
             logger.error(
@@ -919,6 +928,219 @@ class ProtectEventHandler:
                 }
             )
             return None
+
+    async def _try_multi_frame_analysis(
+        self,
+        clip_path: Path,
+        snapshot_result: SnapshotResult,
+        camera: Camera,
+        event_type: str,
+        is_doorbell_ring: bool = False
+    ) -> Optional["AIResult"]:
+        """
+        Attempt multi-frame analysis from video clip (Story P3-2.6 AC1, AC2, AC3).
+
+        Extracts frames from clip and uses AIService.describe_images() for richer descriptions.
+        Falls back to single-frame on any failure, setting appropriate fallback_reason.
+
+        Args:
+            clip_path: Path to video clip file
+            snapshot_result: Snapshot with base64-encoded image (for fallback)
+            camera: Camera that captured the event
+            event_type: Detection type (person, vehicle, ring, etc.)
+            is_doorbell_ring: If True, use doorbell-specific AI prompt
+
+        Returns:
+            AIResult if multi-frame succeeded, None if should fallback to single-frame
+        """
+        from app.services.ai_service import ai_service
+
+        try:
+            # Story P3-2.6 AC1: Extract frames from clip
+            frame_extractor = get_frame_extractor()
+
+            logger.info(
+                f"Attempting multi-frame analysis for camera '{camera.name}' from clip: {clip_path}",
+                extra={
+                    "event_type": "multi_frame_attempt",
+                    "camera_id": camera.id,
+                    "clip_path": str(clip_path)
+                }
+            )
+
+            frames = await frame_extractor.extract_frames(
+                clip_path=clip_path,
+                frame_count=5,  # Default frame count
+                strategy="evenly_spaced",
+                filter_blur=True
+            )
+
+            # Story P3-2.6 AC2: Check if frame extraction succeeded
+            if not frames or len(frames) == 0:
+                logger.warning(
+                    f"Frame extraction returned no frames for camera '{camera.name}', falling back to single-frame",
+                    extra={
+                        "event_type": "multi_frame_extraction_failed",
+                        "camera_id": camera.id,
+                        "clip_path": str(clip_path),
+                        "fallback_reason": "frame_extraction_failed"
+                    }
+                )
+                self._last_fallback_reason = "frame_extraction_failed"
+                return None
+
+            logger.info(
+                f"Extracted {len(frames)} frames from clip for camera '{camera.name}'",
+                extra={
+                    "event_type": "multi_frame_extracted",
+                    "camera_id": camera.id,
+                    "frame_count": len(frames),
+                    "total_bytes": sum(len(f) for f in frames)
+                }
+            )
+
+            # Story P3-2.6 AC1: Call AIService.describe_images() with extracted frames
+            try:
+                # Story P2-4.1: Use doorbell-specific prompt for ring events
+                custom_prompt = DOORBELL_RING_PROMPT if is_doorbell_ring else None
+
+                result = await ai_service.describe_images(
+                    images=frames,
+                    camera_name=camera.name,
+                    timestamp=snapshot_result.timestamp.isoformat(),
+                    detected_objects=[event_type],
+                    sla_timeout_ms=10000,  # 10s SLA for multi-frame (higher than single-frame)
+                    custom_prompt=custom_prompt
+                )
+
+                if result and result.success:
+                    # Story P3-2.6 AC4: Record analysis mode and frame count
+                    self._last_analysis_mode = "multi_frame"
+                    self._last_frame_count = len(frames)
+
+                    logger.info(
+                        f"Multi-frame AI description generated for camera '{camera.name}': {result.description[:50]}...",
+                        extra={
+                            "event_type": "multi_frame_ai_success",
+                            "camera_id": camera.id,
+                            "ai_provider": result.provider,
+                            "confidence": result.confidence,
+                            "response_time_ms": result.response_time_ms,
+                            "frame_count": len(frames),
+                            "analysis_mode": "multi_frame",
+                            "is_doorbell_ring": is_doorbell_ring
+                        }
+                    )
+                    return result
+                else:
+                    # Story P3-2.6 AC3: Multi-frame AI request failed
+                    logger.warning(
+                        f"Multi-frame AI request failed for camera '{camera.name}', falling back to single-frame",
+                        extra={
+                            "event_type": "multi_frame_ai_failed",
+                            "camera_id": camera.id,
+                            "error": result.error if result else "No result",
+                            "fallback_reason": "multi_frame_ai_failed"
+                        }
+                    )
+                    self._last_fallback_reason = "multi_frame_ai_failed"
+                    return None
+
+            except Exception as e:
+                # Story P3-2.6 AC3: Multi-frame AI exception
+                logger.warning(
+                    f"Multi-frame AI exception for camera '{camera.name}': {e}, falling back to single-frame",
+                    extra={
+                        "event_type": "multi_frame_ai_exception",
+                        "camera_id": camera.id,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "fallback_reason": "multi_frame_ai_failed"
+                    }
+                )
+                self._last_fallback_reason = "multi_frame_ai_failed"
+                return None
+
+        except Exception as e:
+            # Story P3-2.6 AC2: Frame extraction exception
+            logger.warning(
+                f"Frame extraction exception for camera '{camera.name}': {e}, falling back to single-frame",
+                extra={
+                    "event_type": "multi_frame_extraction_exception",
+                    "camera_id": camera.id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "fallback_reason": "frame_extraction_failed"
+                }
+            )
+            self._last_fallback_reason = "frame_extraction_failed"
+            return None
+
+    async def _single_frame_analysis(
+        self,
+        snapshot_result: SnapshotResult,
+        camera: Camera,
+        event_type: str,
+        is_doorbell_ring: bool = False
+    ) -> Optional["AIResult"]:
+        """
+        Perform single-frame analysis using snapshot (existing behavior).
+
+        Story P3-2.6 AC4: Records analysis_mode as "single_frame".
+
+        Args:
+            snapshot_result: Snapshot with base64-encoded image
+            camera: Camera that captured the event
+            event_type: Detection type (person, vehicle, ring, etc.)
+            is_doorbell_ring: If True, use doorbell-specific AI prompt
+
+        Returns:
+            AIResult with description, or None on failure
+        """
+        from app.services.ai_service import ai_service
+
+        # Convert base64 to numpy array (BGR format for OpenCV/AI)
+        image_bytes = base64.b64decode(snapshot_result.image_base64)
+        image = Image.open(io.BytesIO(image_bytes))
+
+        # Convert PIL to numpy array and then RGB->BGR for OpenCV convention
+        frame_rgb = np.array(image)
+        if len(frame_rgb.shape) == 3 and frame_rgb.shape[2] == 3:
+            frame_bgr = frame_rgb[:, :, ::-1]  # RGB to BGR
+        else:
+            frame_bgr = frame_rgb
+
+        # Story P2-4.1: Use doorbell-specific prompt for ring events (AC4)
+        custom_prompt = DOORBELL_RING_PROMPT if is_doorbell_ring else None
+
+        # Call AI service (AC1, AC2, AC3)
+        result = await ai_service.generate_description(
+            frame=frame_bgr,
+            camera_name=camera.name,
+            timestamp=snapshot_result.timestamp.isoformat(),
+            detected_objects=[event_type],
+            sla_timeout_ms=5000,  # 5s SLA target
+            custom_prompt=custom_prompt
+        )
+
+        # Story P3-2.6 AC4: Record analysis mode (single_frame)
+        self._last_analysis_mode = "single_frame"
+        self._last_frame_count = 1
+
+        logger.info(
+            f"AI description generated for camera '{camera.name}': {result.description[:50]}...",
+            extra={
+                "event_type": "protect_ai_success",
+                "camera_id": camera.id,
+                "ai_provider": result.provider,
+                "confidence": result.confidence,
+                "response_time_ms": result.response_time_ms,
+                "analysis_mode": "single_frame",
+                "is_doorbell_ring": is_doorbell_ring
+            }
+        )
+
+        return result
 
     async def _store_protect_event(
         self,
@@ -933,7 +1155,7 @@ class ProtectEventHandler:
         event_id_override: Optional[str] = None
     ) -> Optional[Event]:
         """
-        Store Protect event in database (Story P2-3.3 AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2).
+        Store Protect event in database (Story P2-3.3 AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2, P3-2.6 AC4).
 
         Creates Event record with source_type='protect' and all AI/snapshot fields.
 
@@ -952,7 +1174,11 @@ class ProtectEventHandler:
             Stored Event model or None on failure
         """
         try:
-            # Create Event record (AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2)
+            # Story P3-2.6 AC4: Combine clip download fallback with multi-frame fallback
+            # Use existing fallback_reason if provided (from clip download), otherwise use AI fallback
+            effective_fallback_reason = fallback_reason or getattr(self, '_last_fallback_reason', None)
+
+            # Create Event record (AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2, P3-2.6 AC4)
             event = Event(
                 camera_id=camera.id,
                 timestamp=snapshot_result.timestamp,
@@ -967,7 +1193,10 @@ class ProtectEventHandler:
                 smart_detection_type=event_type,  # AC7 (will be 'ring' for doorbell events)
                 is_doorbell_ring=is_doorbell_ring,  # Story P2-4.1 AC3, AC5
                 provider_used=ai_result.provider,  # Story P2-5.3: AI provider tracking
-                fallback_reason=fallback_reason  # Story P3-1.4 AC2: Track clip download failures
+                fallback_reason=effective_fallback_reason,  # Story P3-1.4 AC2, P3-2.6 AC2/AC3
+                # Story P3-2.6 AC4: Record analysis mode and frame count
+                analysis_mode=getattr(self, '_last_analysis_mode', 'single_frame'),
+                frame_count_used=getattr(self, '_last_frame_count', None)
             )
 
             # Story P3-1.4: Use pre-generated event ID if provided
@@ -986,7 +1215,11 @@ class ProtectEventHandler:
                     "camera_id": camera.id,
                     "source_type": event.source_type,
                     "smart_detection_type": event.smart_detection_type,
-                    "is_doorbell_ring": event.is_doorbell_ring
+                    "is_doorbell_ring": event.is_doorbell_ring,
+                    # Story P3-2.6: Log analysis mode info
+                    "analysis_mode": event.analysis_mode,
+                    "frame_count_used": event.frame_count_used,
+                    "fallback_reason": event.fallback_reason
                 }
             )
 

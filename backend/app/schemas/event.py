@@ -27,6 +27,9 @@ class EventCreate(BaseModel):
     is_doorbell_ring: bool = Field(default=False, description="Whether event was triggered by doorbell ring")
     # Story P3-1.4: Fallback reason tracking
     fallback_reason: Optional[str] = Field(None, max_length=100, description="Reason for fallback to snapshot analysis (e.g., 'clip_download_failed')")
+    # Story P3-2.6: Multi-frame analysis tracking
+    analysis_mode: Optional[str] = Field(None, max_length=20, description="Analysis mode used (single_frame/multi_frame/video_native)")
+    frame_count_used: Optional[int] = Field(None, ge=1, le=10, description="Number of frames sent to AI for multi-frame analysis")
 
     @field_validator('objects_detected')
     @classmethod
@@ -89,6 +92,9 @@ class EventResponse(BaseModel):
     provider_used: Optional[str] = Field(None, description="AI provider that generated description (openai/grok/claude/gemini)")
     # Story P3-1.4: Fallback reason tracking
     fallback_reason: Optional[str] = Field(None, description="Reason for fallback to snapshot analysis (e.g., 'clip_download_failed')")
+    # Story P3-2.6: Multi-frame analysis tracking
+    analysis_mode: Optional[str] = Field(None, description="Analysis mode used (single_frame/multi_frame/video_native)")
+    frame_count_used: Optional[int] = Field(None, description="Number of frames sent to AI for multi-frame analysis")
 
     @field_validator('objects_detected', mode='before')
     @classmethod

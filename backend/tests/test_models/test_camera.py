@@ -240,3 +240,138 @@ class TestCameraModel:
         assert "Test Camera" in repr_str
         assert "rtsp" in repr_str
         assert "True" in repr_str
+
+
+class TestCameraAnalysisModeField:
+    """Test suite for Camera.analysis_mode field (Story P3-3.1)"""
+
+    def test_analysis_mode_default_is_single_frame(self, db_session):
+        """AC1, AC2: New camera defaults to 'single_frame' analysis mode"""
+        camera = Camera(
+            name="Test Camera",
+            type="rtsp",
+            rtsp_url="rtsp://example.com/stream"
+        )
+
+        db_session.add(camera)
+        db_session.commit()
+
+        assert camera.analysis_mode == "single_frame"
+
+    def test_analysis_mode_single_frame(self, db_session):
+        """AC1: Camera can be created with analysis_mode='single_frame'"""
+        camera = Camera(
+            name="Test Camera",
+            type="rtsp",
+            rtsp_url="rtsp://example.com/stream",
+            analysis_mode="single_frame"
+        )
+
+        db_session.add(camera)
+        db_session.commit()
+
+        assert camera.analysis_mode == "single_frame"
+
+    def test_analysis_mode_multi_frame(self, db_session):
+        """AC1: Camera can be created with analysis_mode='multi_frame'"""
+        camera = Camera(
+            name="Test Camera",
+            type="rtsp",
+            rtsp_url="rtsp://example.com/stream",
+            analysis_mode="multi_frame"
+        )
+
+        db_session.add(camera)
+        db_session.commit()
+
+        assert camera.analysis_mode == "multi_frame"
+
+    def test_analysis_mode_video_native(self, db_session):
+        """AC1: Camera can be created with analysis_mode='video_native'"""
+        camera = Camera(
+            name="Test Camera",
+            type="rtsp",
+            rtsp_url="rtsp://example.com/stream",
+            analysis_mode="video_native"
+        )
+
+        db_session.add(camera)
+        db_session.commit()
+
+        assert camera.analysis_mode == "video_native"
+
+    def test_analysis_mode_can_be_updated(self, db_session):
+        """Camera's analysis_mode can be updated"""
+        camera = Camera(
+            name="Test Camera",
+            type="rtsp",
+            rtsp_url="rtsp://example.com/stream",
+            analysis_mode="single_frame"
+        )
+
+        db_session.add(camera)
+        db_session.commit()
+
+        # Update analysis_mode
+        camera.analysis_mode = "multi_frame"
+        db_session.commit()
+        db_session.refresh(camera)
+
+        assert camera.analysis_mode == "multi_frame"
+
+    def test_protect_camera_with_multi_frame_default(self, db_session):
+        """AC3: Protect camera can be set to 'multi_frame' as default"""
+        camera = Camera(
+            name="Protect Camera",
+            type="rtsp",
+            source_type="protect",
+            protect_camera_id="test-protect-id",
+            analysis_mode="multi_frame"
+        )
+
+        db_session.add(camera)
+        db_session.commit()
+
+        assert camera.source_type == "protect"
+        assert camera.analysis_mode == "multi_frame"
+
+    def test_analysis_mode_invalid_value_raises_integrity_error(self, db_session):
+        """AC1: Invalid analysis_mode should be rejected by CHECK constraint"""
+        from sqlalchemy.exc import IntegrityError
+
+        camera = Camera(
+            name="Test Camera",
+            type="rtsp",
+            rtsp_url="rtsp://example.com/stream",
+            analysis_mode="invalid_mode"  # Invalid value
+        )
+
+        db_session.add(camera)
+
+        # SQLite enforces CHECK constraint on commit
+        with pytest.raises(IntegrityError):
+            db_session.commit()
+
+        db_session.rollback()
+
+    def test_analysis_mode_column_is_indexed(self, db_session):
+        """AC1: analysis_mode column should be indexed for query performance"""
+        # Create cameras with different analysis modes
+        for i, mode in enumerate(["single_frame", "multi_frame", "video_native"]):
+            camera = Camera(
+                name=f"Camera {mode}",
+                type="rtsp",
+                rtsp_url=f"rtsp://example.com/stream{i}",
+                analysis_mode=mode
+            )
+            db_session.add(camera)
+
+        db_session.commit()
+
+        # Query by analysis_mode (should use index)
+        multi_frame_cameras = db_session.query(Camera).filter(
+            Camera.analysis_mode == "multi_frame"
+        ).all()
+
+        assert len(multi_frame_cameras) == 1
+        assert multi_frame_cameras[0].name == "Camera multi_frame"

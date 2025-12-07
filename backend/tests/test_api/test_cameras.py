@@ -1013,3 +1013,180 @@ def test_schedule_404_for_nonexistent_camera():
     # GET schedule status
     response = client.get(f"/api/v1/cameras/{fake_id}/schedule/status")
     assert response.status_code == 404
+
+
+# ============================================================================
+# Analysis Mode Tests (Story P3-3.1)
+# ============================================================================
+
+
+class TestCameraAnalysisModeAPI:
+    """Test suite for Camera analysis_mode API (Story P3-3.1)"""
+
+    def test_create_camera_default_analysis_mode(self):
+        """AC2: Camera created without analysis_mode defaults to 'single_frame'"""
+        camera_data = {
+            "name": "Default Analysis Mode Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "is_enabled": False
+        }
+
+        response = client.post("/api/v1/cameras", json=camera_data)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["analysis_mode"] == "single_frame"
+
+    def test_create_camera_with_single_frame_mode(self):
+        """AC1: Camera can be created with analysis_mode='single_frame'"""
+        camera_data = {
+            "name": "Single Frame Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "analysis_mode": "single_frame",
+            "is_enabled": False
+        }
+
+        response = client.post("/api/v1/cameras", json=camera_data)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["analysis_mode"] == "single_frame"
+
+    def test_create_camera_with_multi_frame_mode(self):
+        """AC1: Camera can be created with analysis_mode='multi_frame'"""
+        camera_data = {
+            "name": "Multi Frame Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "analysis_mode": "multi_frame",
+            "is_enabled": False
+        }
+
+        response = client.post("/api/v1/cameras", json=camera_data)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["analysis_mode"] == "multi_frame"
+
+    def test_create_camera_with_video_native_mode(self):
+        """AC1: Camera can be created with analysis_mode='video_native'"""
+        camera_data = {
+            "name": "Video Native Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "analysis_mode": "video_native",
+            "is_enabled": False
+        }
+
+        response = client.post("/api/v1/cameras", json=camera_data)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["analysis_mode"] == "video_native"
+
+    def test_create_camera_with_invalid_analysis_mode(self):
+        """AC1: Camera with invalid analysis_mode should return 422"""
+        camera_data = {
+            "name": "Invalid Mode Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "analysis_mode": "invalid_mode",
+            "is_enabled": False
+        }
+
+        response = client.post("/api/v1/cameras", json=camera_data)
+
+        assert response.status_code == 422
+
+    def test_update_camera_analysis_mode(self):
+        """Camera's analysis_mode can be updated via PUT"""
+        # Create camera
+        create_response = client.post("/api/v1/cameras", json={
+            "name": "Update Mode Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "analysis_mode": "single_frame",
+            "is_enabled": False
+        })
+        camera_id = create_response.json()["id"]
+
+        # Update analysis_mode
+        update_response = client.put(f"/api/v1/cameras/{camera_id}", json={
+            "analysis_mode": "multi_frame"
+        })
+
+        assert update_response.status_code == 200
+        data = update_response.json()
+        assert data["analysis_mode"] == "multi_frame"
+
+    def test_update_camera_invalid_analysis_mode(self):
+        """PUT with invalid analysis_mode should return 422"""
+        # Create camera
+        create_response = client.post("/api/v1/cameras", json={
+            "name": "Update Invalid Mode Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "is_enabled": False
+        })
+        camera_id = create_response.json()["id"]
+
+        # Try to update with invalid analysis_mode
+        update_response = client.put(f"/api/v1/cameras/{camera_id}", json={
+            "analysis_mode": "invalid_mode"
+        })
+
+        assert update_response.status_code == 422
+
+    def test_get_camera_includes_analysis_mode(self):
+        """GET /cameras/{id} response includes analysis_mode field"""
+        # Create camera
+        create_response = client.post("/api/v1/cameras", json={
+            "name": "Get Mode Camera",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream",
+            "analysis_mode": "multi_frame",
+            "is_enabled": False
+        })
+        camera_id = create_response.json()["id"]
+
+        # Get camera
+        get_response = client.get(f"/api/v1/cameras/{camera_id}")
+
+        assert get_response.status_code == 200
+        data = get_response.json()
+        assert "analysis_mode" in data
+        assert data["analysis_mode"] == "multi_frame"
+
+    def test_list_cameras_includes_analysis_mode(self):
+        """GET /cameras response includes analysis_mode for each camera"""
+        # Create cameras with different modes
+        client.post("/api/v1/cameras", json={
+            "name": "Camera Mode 1",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream1",
+            "analysis_mode": "single_frame",
+            "is_enabled": False
+        })
+        client.post("/api/v1/cameras", json={
+            "name": "Camera Mode 2",
+            "type": "rtsp",
+            "rtsp_url": "rtsp://example.com/stream2",
+            "analysis_mode": "multi_frame",
+            "is_enabled": False
+        })
+
+        # List cameras
+        list_response = client.get("/api/v1/cameras")
+
+        assert list_response.status_code == 200
+        data = list_response.json()
+        assert len(data) == 2
+        # Check each camera has analysis_mode
+        for camera in data:
+            assert "analysis_mode" in camera
+        # Verify different modes
+        modes = {c["analysis_mode"] for c in data}
+        assert "single_frame" in modes
+        assert "multi_frame" in modes

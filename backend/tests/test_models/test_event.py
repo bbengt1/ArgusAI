@@ -425,3 +425,209 @@ def test_query_events_by_timestamp_range(db_session, test_camera):
 
     # Should get events from 0-4 hours ago (5 events)
     assert len(recent_events) == 5
+
+
+class TestEventAnalysisModeFields:
+    """Story P3-2.6: Test analysis_mode and frame_count_used fields"""
+
+    def test_create_event_with_analysis_mode_single_frame(self, db_session, test_camera):
+        """Test creating event with single_frame analysis mode (AC4)"""
+        event = Event(
+            id="event-single-frame",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Single frame analysis",
+            confidence=85,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            analysis_mode="single_frame",
+            frame_count_used=1
+        )
+
+        db_session.add(event)
+        db_session.commit()
+        db_session.refresh(event)
+
+        assert event.analysis_mode == "single_frame"
+        assert event.frame_count_used == 1
+
+    def test_create_event_with_analysis_mode_multi_frame(self, db_session, test_camera):
+        """Test creating event with multi_frame analysis mode (AC4)"""
+        event = Event(
+            id="event-multi-frame",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Multi-frame analysis showing person walking",
+            confidence=92,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            analysis_mode="multi_frame",
+            frame_count_used=5
+        )
+
+        db_session.add(event)
+        db_session.commit()
+        db_session.refresh(event)
+
+        assert event.analysis_mode == "multi_frame"
+        assert event.frame_count_used == 5
+
+    def test_create_event_with_analysis_mode_video_native(self, db_session, test_camera):
+        """Test creating event with video_native analysis mode (future)"""
+        event = Event(
+            id="event-video-native",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Video native analysis",
+            confidence=95,
+            objects_detected=json.dumps(["person", "vehicle"]),
+            alert_triggered=False,
+            analysis_mode="video_native",
+            frame_count_used=None  # No frame count for native video
+        )
+
+        db_session.add(event)
+        db_session.commit()
+        db_session.refresh(event)
+
+        assert event.analysis_mode == "video_native"
+        assert event.frame_count_used is None
+
+    def test_analysis_mode_nullable(self, db_session, test_camera):
+        """Test analysis_mode is nullable for legacy events"""
+        event = Event(
+            id="event-legacy",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Legacy event without analysis mode",
+            confidence=80,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False
+            # analysis_mode not specified
+        )
+
+        db_session.add(event)
+        db_session.commit()
+        db_session.refresh(event)
+
+        assert event.analysis_mode is None
+        assert event.frame_count_used is None
+
+    def test_frame_count_used_nullable(self, db_session, test_camera):
+        """Test frame_count_used is nullable"""
+        event = Event(
+            id="event-no-frame-count",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Event without frame count",
+            confidence=80,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            analysis_mode="single_frame"
+            # frame_count_used not specified
+        )
+
+        db_session.add(event)
+        db_session.commit()
+        db_session.refresh(event)
+
+        assert event.analysis_mode == "single_frame"
+        assert event.frame_count_used is None
+
+    def test_query_events_by_analysis_mode(self, db_session, test_camera):
+        """Test querying events by analysis_mode (index used for filtering)"""
+        # Create events with different analysis modes
+        events = [
+            Event(
+                id="event-sf-1",
+                camera_id=test_camera.id,
+                timestamp=datetime.now(timezone.utc),
+                description="Single frame 1",
+                confidence=80,
+                objects_detected=json.dumps(["person"]),
+                analysis_mode="single_frame",
+                frame_count_used=1
+            ),
+            Event(
+                id="event-sf-2",
+                camera_id=test_camera.id,
+                timestamp=datetime.now(timezone.utc),
+                description="Single frame 2",
+                confidence=80,
+                objects_detected=json.dumps(["vehicle"]),
+                analysis_mode="single_frame",
+                frame_count_used=1
+            ),
+            Event(
+                id="event-mf-1",
+                camera_id=test_camera.id,
+                timestamp=datetime.now(timezone.utc),
+                description="Multi frame 1",
+                confidence=90,
+                objects_detected=json.dumps(["person"]),
+                analysis_mode="multi_frame",
+                frame_count_used=5
+            ),
+        ]
+
+        for event in events:
+            db_session.add(event)
+        db_session.commit()
+
+        # Query multi-frame events
+        multi_frame_events = db_session.query(Event).filter(
+            Event.analysis_mode == "multi_frame"
+        ).all()
+
+        assert len(multi_frame_events) == 1
+        assert multi_frame_events[0].frame_count_used == 5
+
+        # Query single-frame events
+        single_frame_events = db_session.query(Event).filter(
+            Event.analysis_mode == "single_frame"
+        ).all()
+
+        assert len(single_frame_events) == 2
+
+    def test_create_event_with_fallback_reason(self, db_session, test_camera):
+        """Test creating event with fallback_reason (AC2, AC3)"""
+        event = Event(
+            id="event-fallback",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="Fallback to single frame",
+            confidence=75,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            analysis_mode="single_frame",
+            frame_count_used=1,
+            fallback_reason="frame_extraction_failed"
+        )
+
+        db_session.add(event)
+        db_session.commit()
+        db_session.refresh(event)
+
+        assert event.fallback_reason == "frame_extraction_failed"
+        assert event.analysis_mode == "single_frame"
+
+    def test_fallback_reason_multi_frame_ai_failed(self, db_session, test_camera):
+        """Test fallback_reason for multi-frame AI failure (AC3)"""
+        event = Event(
+            id="event-ai-fallback",
+            camera_id=test_camera.id,
+            timestamp=datetime.now(timezone.utc),
+            description="AI fallback description",
+            confidence=70,
+            objects_detected=json.dumps(["person"]),
+            alert_triggered=False,
+            analysis_mode="single_frame",
+            frame_count_used=1,
+            fallback_reason="multi_frame_ai_failed"
+        )
+
+        db_session.add(event)
+        db_session.commit()
+        db_session.refresh(event)
+
+        assert event.fallback_reason == "multi_frame_ai_failed"

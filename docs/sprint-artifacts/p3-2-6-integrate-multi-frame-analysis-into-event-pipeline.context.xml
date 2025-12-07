@@ -1,0 +1,258 @@
+<story-context id="p3-2-6-integrate-multi-frame-analysis-into-event-pipeline" v="1.0">
+  <metadata>
+    <epicId>P3-2</epicId>
+    <storyId>P3-2.6</storyId>
+    <title>Integrate Multi-Frame Analysis into Event Pipeline</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-06</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p3-2-6-integrate-multi-frame-analysis-into-event-pipeline.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system operator</asA>
+    <iWant>events to automatically use multi-frame analysis when clips are available</iWant>
+    <soThat>users get richer descriptions that capture action and narrative without manual intervention</soThat>
+    <tasks>
+      <task id="1" ac="4">Add analysis_mode and frame_count_used fields to Event model
+        <subtask id="1.1">Add analysis_mode column to Event model (String, nullable, values: "single_frame", "multi_frame", "video_native")</subtask>
+        <subtask id="1.2">Add frame_count_used column to Event model (Integer, nullable)</subtask>
+        <subtask id="1.3">Add fallback_reason column to Event model if not already present (String, nullable)</subtask>
+        <subtask id="1.4">Create Alembic migration for new columns</subtask>
+        <subtask id="1.5">Apply migration and verify schema update</subtask>
+        <subtask id="1.6">Update EventResponse schema to include new fields</subtask>
+      </task>
+      <task id="2" ac="1">Integrate FrameExtractor with EventProcessor
+        <subtask id="2.1">Import FrameExtractor in event_processor.py</subtask>
+        <subtask id="2.2">Add logic to check camera.analysis_mode before AI processing</subtask>
+        <subtask id="2.3">When analysis_mode="multi_frame" and clip exists, call FrameExtractor.extract_frames()</subtask>
+        <subtask id="2.4">Pass extracted frames to AIService.describe_images() with multi-frame prompt</subtask>
+        <subtask id="2.5">Store analysis_mode and frame_count_used on the event</subtask>
+      </task>
+      <task id="3" ac="2">Implement frame extraction fallback logic
+        <subtask id="3.1">Wrap FrameExtractor.extract_frames() call in try/except</subtask>
+        <subtask id="3.2">On exception or empty result, fall back to single-frame using thumbnail</subtask>
+        <subtask id="3.3">Set event.fallback_reason = "frame_extraction_failed"</subtask>
+        <subtask id="3.4">Set event.analysis_mode = "single_frame" (actual mode used)</subtask>
+        <subtask id="3.5">Log warning with clip_path and error details</subtask>
+      </task>
+      <task id="4" ac="3">Implement multi-frame AI fallback logic
+        <subtask id="4.1">Wrap AIService.describe_images() call in try/except</subtask>
+        <subtask id="4.2">On AI failure, fall back to AIService.describe_image() with thumbnail</subtask>
+        <subtask id="4.3">Set event.fallback_reason = "multi_frame_ai_failed"</subtask>
+        <subtask id="4.4">Set event.analysis_mode = "single_frame" (actual mode used)</subtask>
+        <subtask id="4.5">Ensure fallback uses existing thumbnail retrieval logic</subtask>
+      </task>
+      <task id="5" ac="1,2">Connect multi-frame flow with clip download
+        <subtask id="5.1">After ClipService.download_clip() succeeds, check camera.analysis_mode</subtask>
+        <subtask id="5.2">If "multi_frame", proceed with frame extraction</subtask>
+        <subtask id="5.3">If clip download fails, proceed with single-frame (existing behavior)</subtask>
+        <subtask id="5.4">Clean up clip file after frame extraction (call ClipService.cleanup_clip())</subtask>
+      </task>
+      <task id="6" ac="all">Write unit tests
+        <subtask id="6.1">Test Event model includes new fields (analysis_mode, frame_count_used, fallback_reason)</subtask>
+        <subtask id="6.2">Test multi-frame flow when camera.analysis_mode="multi_frame" and clip exists</subtask>
+        <subtask id="6.3">Test fallback when frame extraction fails</subtask>
+        <subtask id="6.4">Test fallback when multi-frame AI request fails</subtask>
+        <subtask id="6.5">Test analysis_mode and frame_count_used are recorded correctly</subtask>
+        <subtask id="6.6">Test fallback_reason is set correctly for each failure scenario</subtask>
+        <subtask id="6.7">Test single-frame flow when camera.analysis_mode="single_frame"</subtask>
+      </task>
+      <task id="7" ac="all">Write integration tests
+        <subtask id="7.1">Test end-to-end multi-frame processing with mocked ClipService and FrameExtractor</subtask>
+        <subtask id="7.2">Test fallback chain: multi_frame to single_frame</subtask>
+        <subtask id="7.3">Test latency is within target (3x single-frame max per NFR3)</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Given a Protect event with successfully downloaded clip, when camera's analysis_mode is "multi_frame", then FrameExtractor extracts frames from clip, AIService.describe_images() is called with frames, and event description captures the action narrative</criterion>
+    <criterion id="AC2">Given frame extraction fails, when multi-frame analysis is attempted, then system falls back to single thumbnail analysis and event.fallback_reason = "frame_extraction_failed"</criterion>
+    <criterion id="AC3">Given multi-frame AI request fails, when fallback is triggered, then system retries with single-frame using thumbnail and event.fallback_reason = "multi_frame_ai_failed"</criterion>
+    <criterion id="AC4">Given event processing completes, when event is saved, then event.analysis_mode records actual mode used and event.frame_count_used records number of frames sent</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Event Processing Pipeline, Phase 3 Additions</section>
+        <snippet>Event processing flow: Camera Capture -> Motion Detection -> Event Queue -> AI Description -> Database. Phase 3 adds video clip analysis with FrameExtractor and multi-image AI.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase3.md</path>
+        <title>Phase 3 Epics</title>
+        <section>Epic P3-2: Multi-Frame Analysis Mode</section>
+        <snippet>Story P3-2.6: Integrate multi-frame analysis into event pipeline. When camera.analysis_mode="multi_frame" and clip available, extract frames and use describe_images().</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase3.md</path>
+        <title>Phase 3 Product Requirements</title>
+        <section>Multi-Frame Analysis Feature</section>
+        <snippet>Extract 5 frames from motion clips for richer AI descriptions that capture action narrative. Fallback to single-frame on failure.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p3-2-5-track-token-usage-for-multi-image-requests.md</path>
+        <title>Previous Story: Token Usage Tracking</title>
+        <section>Dev Agent Record, Learnings</section>
+        <snippet>Multi-image infrastructure complete. describe_images() method and all provider implementations are done. Token tracking with analysis_mode field in AIUsage table.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>1-75</lines>
+        <reason>Primary model to modify. Needs analysis_mode and frame_count_used columns. Already has fallback_reason from P3-1.4.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>service</kind>
+        <symbol>EventProcessor._process_event</symbol>
+        <lines>534-665</lines>
+        <reason>Core integration point. Modify to check camera.analysis_mode, call FrameExtractor.extract_frames(), and use AIService.describe_images() for multi-frame analysis.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/frame_extractor.py</path>
+        <kind>service</kind>
+        <symbol>FrameExtractor.extract_frames</symbol>
+        <lines>210-517</lines>
+        <reason>Already implemented in P3-2.1/P3-2.2. Use extract_frames(clip_path) to get JPEG bytes for AI. Returns empty list on failure.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/clip_service.py</path>
+        <kind>service</kind>
+        <symbol>ClipService.download_clip, ClipService.cleanup_clip</symbol>
+        <lines>568-717, 339-385</lines>
+        <reason>Already implemented in P3-1. Use download_clip() to get video file. Call cleanup_clip() after frame extraction.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>AIService.describe_images</symbol>
+        <lines>1574-1680</lines>
+        <reason>Already implemented in P3-2.3. Pass List[bytes] of JPEG frames. Returns AIResult with description.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/schemas/event.py</path>
+        <kind>schema</kind>
+        <symbol>EventResponse, EventCreate</symbol>
+        <lines>1-231</lines>
+        <reason>Update EventResponse to include analysis_mode and frame_count_used fields for API responses.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>service</kind>
+        <symbol>ProtectEventHandler</symbol>
+        <lines>1-200</lines>
+        <reason>Entry point for Protect events. Passes clip_path to EventProcessor via ProcessingEvent dataclass.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <lines>1-100</lines>
+        <reason>Check camera.analysis_mode field (will be added in P3-3.1). For now, check if field exists or default to "single_frame".</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package>fastapi==0.115.0</package>
+        <package>sqlalchemy>=2.0.36</package>
+        <package>alembic>=1.14.0</package>
+        <package>opencv-python>=4.12.0</package>
+        <package>av>=12.0.0</package>
+        <package>pillow>=10.0.0</package>
+        <package>openai>=1.54.0</package>
+        <package>anthropic>=0.39.0</package>
+        <package>google-generativeai>=0.8.0</package>
+        <package>tenacity>=8.2.0</package>
+        <package>uiprotect>=6.0.0</package>
+        <package>pytest==7.4.3</package>
+        <package>pytest-asyncio==0.21.1</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>NFR3: Multi-frame latency should be less than or equal to 3x single-frame max processing time</constraint>
+    <constraint>NFR8: One failure doesn't block others - events process independently</constraint>
+    <constraint>Processing must remain async and non-blocking</constraint>
+    <constraint>Use existing singleton patterns for services (get_frame_extractor(), get_clip_service())</constraint>
+    <constraint>Fallback to single-frame must use existing thumbnail retrieval logic</constraint>
+    <constraint>analysis_mode field must be indexed for filtering in queries</constraint>
+    <constraint>Camera model may not have analysis_mode field yet (added in P3-3.1) - use getattr with default</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>FrameExtractor.extract_frames</name>
+      <kind>async method</kind>
+      <signature>async def extract_frames(self, clip_path: Path, frame_count: int = 5, strategy: str = "evenly_spaced", filter_blur: bool = True) -> List[bytes]</signature>
+      <path>backend/app/services/frame_extractor.py:210</path>
+    </interface>
+    <interface>
+      <name>ClipService.download_clip</name>
+      <kind>async method</kind>
+      <signature>async def download_clip(self, controller_id: str, camera_id: str, event_start: datetime, event_end: datetime, event_id: str) -> Optional[Path]</signature>
+      <path>backend/app/services/clip_service.py:568</path>
+    </interface>
+    <interface>
+      <name>ClipService.cleanup_clip</name>
+      <kind>sync method</kind>
+      <signature>def cleanup_clip(self, event_id: str) -> bool</signature>
+      <path>backend/app/services/clip_service.py:339</path>
+    </interface>
+    <interface>
+      <name>AIService.describe_images</name>
+      <kind>async method</kind>
+      <signature>async def describe_images(self, images: List[bytes], camera_name: str, timestamp: Optional[str] = None, detected_objects: Optional[List[str]] = None, sla_timeout_ms: int = 10000, custom_prompt: Optional[str] = None) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py:1574</path>
+    </interface>
+    <interface>
+      <name>AIService.generate_description</name>
+      <kind>async method</kind>
+      <signature>async def generate_description(self, frame: np.ndarray, camera_name: str, timestamp: str, detected_objects: List[str], sla_timeout_ms: int = 5000) -> AIResult</signature>
+      <path>backend/app/services/ai_service.py:1400</path>
+    </interface>
+    <interface>
+      <name>ProcessingEvent</name>
+      <kind>dataclass</kind>
+      <signature>@dataclass ProcessingEvent: camera_id, camera_name, frame, timestamp, detected_objects, metadata, clip_path: Optional[Path], fallback_reason: Optional[str]</signature>
+      <path>backend/app/services/event_processor.py:48-71</path>
+    </interface>
+    <interface>
+      <name>get_frame_extractor</name>
+      <kind>singleton factory</kind>
+      <signature>def get_frame_extractor() -> FrameExtractor</signature>
+      <path>backend/app/services/frame_extractor.py:559</path>
+    </interface>
+    <interface>
+      <name>get_clip_service</name>
+      <kind>singleton factory</kind>
+      <signature>def get_clip_service() -> ClipService</signature>
+      <path>backend/app/services/clip_service.py:724</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Tests use pytest with pytest-asyncio for async tests. Mock external services (AIService, ClipService, FrameExtractor). Use SQLAlchemy test sessions for database tests. Follow existing test patterns in backend/tests/test_services/. Create TestMultiFrameIntegration class.</standards>
+    <locations>
+      <location>backend/tests/test_services/test_event_processor.py</location>
+      <location>backend/tests/test_models/test_event.py</location>
+      <location>backend/tests/test_integration/</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test multi-frame flow: mock camera.analysis_mode="multi_frame", clip exists, FrameExtractor returns frames, AIService.describe_images() called, event saved with analysis_mode="multi_frame" and frame_count_used=5</idea>
+      <idea ac="AC2">Test frame extraction fallback: mock FrameExtractor.extract_frames() to return empty list or raise exception, verify fallback to single-frame, event.fallback_reason="frame_extraction_failed"</idea>
+      <idea ac="AC3">Test multi-frame AI fallback: mock AIService.describe_images() to raise exception, verify fallback to generate_description(), event.fallback_reason="multi_frame_ai_failed"</idea>
+      <idea ac="AC4">Test event fields recorded: verify analysis_mode and frame_count_used are set correctly for both multi-frame and single-frame paths</idea>
+      <idea ac="AC4">Test database migration: verify new columns exist with correct types and constraints</idea>
+      <idea ac="AC1,2">Test clip cleanup: verify ClipService.cleanup_clip() called after successful or failed frame extraction</idea>
+      <idea ac="all">Test latency: measure processing time, verify multi-frame is less than 3x single-frame baseline</idea>
+    </ideas>
+  </tests>
+</story-context>
