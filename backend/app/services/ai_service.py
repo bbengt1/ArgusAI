@@ -1052,7 +1052,7 @@ class GeminiProvider(AIProviderBase):
     def __init__(self, api_key: str):
         super().__init__(api_key)
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         self.cost_per_1k_tokens = 0.0001  # Approximate (free tier available)
 
     async def generate_description(
@@ -1171,7 +1171,7 @@ class GeminiProvider(AIProviderBase):
                 extra={
                     "event_type": "ai_api_multi_image_success",
                     "provider": "gemini",
-                    "model": "gemini-2.5-flash-preview-05-20",
+                    "model": "gemini-2.5-flash",
                     "num_images": len(images_base64),
                     "response_time_ms": elapsed_ms,
                     "tokens_used": tokens_used,
@@ -1198,7 +1198,7 @@ class GeminiProvider(AIProviderBase):
                 extra={
                     "event_type": "ai_api_multi_image_error",
                     "provider": "gemini",
-                    "model": "gemini-2.5-flash-preview-05-20",
+                    "model": "gemini-2.5-flash",
                     "num_images": len(images_base64),
                     "response_time_ms": elapsed_ms,
                     "error_type": type(e).__name__,
