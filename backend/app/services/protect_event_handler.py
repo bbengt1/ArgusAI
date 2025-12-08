@@ -1784,11 +1784,47 @@ class ProtectEventHandler:
             # Story P3-5.3 AC6: Get audio transcription from instance or parameter
             effective_audio_transcription = audio_transcription or getattr(self, '_last_audio_transcription', None)
 
-            # Story P3-6.1: Determine low_confidence flag
+            # Story P3-6.1: Determine low_confidence flag from AI confidence
             ai_confidence = getattr(ai_result, 'ai_confidence', None)
-            low_confidence = ai_confidence is not None and ai_confidence < 50
+            low_confidence_from_ai = ai_confidence is not None and ai_confidence < 50
 
-            # Create Event record (AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2, P3-2.6 AC4, P3-5.3 AC6, P3-6.1 AC3/AC6)
+            # Story P3-6.2 AC3, AC6: Detect vague descriptions (supplements AI confidence)
+            vague_reason = None
+            low_confidence_from_vague = False
+            try:
+                from app.services.description_quality import detect_vague_description
+                is_vague, vague_reason = detect_vague_description(ai_result.description)
+                if is_vague:
+                    low_confidence_from_vague = True
+                    logger.info(
+                        f"Vague description detected for camera '{camera.name}': {vague_reason}",
+                        extra={
+                            "event_type": "vague_description_detected",
+                            "camera_id": camera.id,
+                            "camera_name": camera.name,
+                            "vague_reason": vague_reason,
+                            "description_preview": ai_result.description[:50] if ai_result.description else None
+                        }
+                    )
+            except Exception as e:
+                # AC6: Detection errors must NOT block event processing
+                logger.warning(
+                    f"Vagueness detection error for camera '{camera.name}': {e}",
+                    extra={
+                        "event_type": "vagueness_detection_error",
+                        "camera_id": camera.id,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e)
+                    }
+                )
+                # Default to not-vague if detection fails (benefit of doubt)
+                vague_reason = None
+                low_confidence_from_vague = False
+
+            # Story P3-6.1/P3-6.2 AC3: Combine AI confidence AND vagueness for final low_confidence flag
+            low_confidence = low_confidence_from_ai or low_confidence_from_vague
+
+            # Create Event record (AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2, P3-2.6 AC4, P3-5.3 AC6, P3-6.1 AC3/AC6, P3-6.2 AC3/AC4)
             event = Event(
                 camera_id=camera.id,
                 timestamp=snapshot_result.timestamp,
@@ -1811,7 +1847,9 @@ class ProtectEventHandler:
                 audio_transcription=effective_audio_transcription,
                 # Story P3-6.1 AC3/AC6: Store AI confidence scoring
                 ai_confidence=ai_confidence,
-                low_confidence=low_confidence
+                low_confidence=low_confidence,
+                # Story P3-6.2 AC4: Store vagueness detection reason
+                vague_reason=vague_reason
             )
 
             # Story P3-1.4: Use pre-generated event ID if provided
@@ -1839,7 +1877,9 @@ class ProtectEventHandler:
                     "has_audio_transcription": bool(event.audio_transcription),
                     # Story P3-6.1: Log AI confidence info
                     "ai_confidence": event.ai_confidence,
-                    "low_confidence": event.low_confidence
+                    "low_confidence": event.low_confidence,
+                    # Story P3-6.2: Log vagueness detection info
+                    "vague_reason": event.vague_reason
                 }
             )
 

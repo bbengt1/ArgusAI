@@ -34,7 +34,8 @@ class Event(Base):
         frame_count_used: Number of frames sent to AI for multi-frame analysis (Story P3-2.6)
         audio_transcription: Transcribed speech from doorbell audio (Story P3-5.3)
         ai_confidence: AI self-reported confidence score (0-100) (Story P3-6.1)
-        low_confidence: True if ai_confidence < 50, flagging uncertain descriptions (Story P3-6.1)
+        low_confidence: True if ai_confidence < 50 OR vague description, flagging uncertain descriptions (Story P3-6.1, P3-6.2)
+        vague_reason: Human-readable explanation of why description was flagged as vague (Story P3-6.2)
         created_at: Record creation timestamp (UTC with timezone)
     """
 
@@ -71,7 +72,9 @@ class Event(Base):
     audio_transcription = Column(Text, nullable=True)  # Transcribed speech from doorbell audio
     # Story P3-6.1: AI confidence scoring
     ai_confidence = Column(Integer, nullable=True)  # 0-100 AI self-reported confidence (null = not available)
-    low_confidence = Column(Boolean, nullable=False, default=False)  # True if ai_confidence < 50
+    low_confidence = Column(Boolean, nullable=False, default=False)  # True if ai_confidence < 50 OR vague description
+    # Story P3-6.2: Vagueness detection
+    vague_reason = Column(Text, nullable=True)  # Human-readable reason if description flagged as vague (null = not vague)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

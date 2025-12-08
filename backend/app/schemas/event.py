@@ -34,7 +34,9 @@ class EventCreate(BaseModel):
     audio_transcription: Optional[str] = Field(None, description="Transcribed speech from doorbell audio")
     # Story P3-6.1: AI confidence scoring
     ai_confidence: Optional[int] = Field(None, ge=0, le=100, description="AI self-reported confidence score (0-100)")
-    low_confidence: bool = Field(default=False, description="True if ai_confidence < 50, flagging uncertain descriptions")
+    low_confidence: bool = Field(default=False, description="True if ai_confidence < 50 or vague description, flagging uncertain descriptions")
+    # Story P3-6.2: Vagueness detection
+    vague_reason: Optional[str] = Field(None, description="Human-readable explanation of why description was flagged as vague")
 
     @field_validator('objects_detected')
     @classmethod
@@ -104,7 +106,9 @@ class EventResponse(BaseModel):
     audio_transcription: Optional[str] = Field(None, description="Transcribed speech from doorbell audio")
     # Story P3-6.1: AI confidence scoring
     ai_confidence: Optional[int] = Field(None, ge=0, le=100, description="AI self-reported confidence score (0-100)")
-    low_confidence: bool = Field(default=False, description="True if ai_confidence < 50, flagging uncertain descriptions")
+    low_confidence: bool = Field(default=False, description="True if ai_confidence < 50 or vague description, flagging uncertain descriptions")
+    # Story P3-6.2: Vagueness detection
+    vague_reason: Optional[str] = Field(None, description="Human-readable explanation of why description was flagged as vague")
 
     @field_validator('objects_detected', mode='before')
     @classmethod
