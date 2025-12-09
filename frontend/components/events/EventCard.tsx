@@ -107,11 +107,7 @@ export const EventCard = memo(function EventCard({
               src={thumbnailSrc}
               alt="Event thumbnail"
               className="w-full h-full object-cover"
-              onError={(e) => {
-                console.error('Image load failed:', thumbnailSrc, e);
-                setImageError(true);
-              }}
-              onLoad={() => console.log('Image loaded successfully:', thumbnailSrc)}
+              onError={() => setImageError(true)}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
@@ -127,7 +123,7 @@ export const EventCard = memo(function EventCard({
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center space-x-2">
               <Video className="w-4 h-4" />
-              <span>Camera {event.camera_id.slice(0, 8)}</span>
+              <span>{event.camera_name || `Camera ${event.camera_id.slice(0, 8)}`}</span>
             </div>
             <div className="flex items-center gap-2">
               <time

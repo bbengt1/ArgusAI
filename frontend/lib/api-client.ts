@@ -429,7 +429,12 @@ export const apiClient = {
      */
     exportData: async (format: 'json' | 'csv' = 'json'): Promise<Blob> => {
       const url = `${API_BASE_URL}${API_V1_PREFIX}/events/export?format=${format}`;
-      const response = await fetch(url);
+      const headers: HeadersInit = {};
+      const token = getAuthToken();
+      if (token) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+      }
+      const response = await fetch(url, { headers });
       if (!response.ok) {
         throw new ApiError(`Failed to export data`, response.status);
       }

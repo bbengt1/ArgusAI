@@ -347,26 +347,33 @@ class AIProviderBase(ABC):
         import json
         import re
 
-        # Try JSON parsing first - look for JSON object with description field
+        # Try JSON parsing first - use json.loads for proper handling of escapes
         try:
-            # Find JSON in response (may be embedded in text)
-            json_match = re.search(r'\{[^{}]*"description"[^{}]*\}', response_text, re.DOTALL)
-            if json_match:
-                data = json.loads(json_match.group())
+            # Look for JSON that starts with { and ends with }
+            brace_start = response_text.find('{')
+            brace_end = response_text.rfind('}')
+            if brace_start != -1 and brace_end > brace_start:
+                json_str = response_text[brace_start:brace_end + 1]
+                data = json.loads(json_str)
                 description = data.get('description', '').strip()
                 confidence = data.get('confidence')
 
-                # Validate confidence is in valid range
                 if isinstance(confidence, (int, float)) and 0 <= confidence <= 100:
-                    # Use extracted description if valid, otherwise fall back
                     if description:
                         return description, int(confidence)
-                    else:
-                        # JSON found but description empty - use original minus JSON
-                        clean_text = response_text.replace(json_match.group(), '').strip()
-                        return clean_text if clean_text else response_text, int(confidence)
+
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             logger.debug(f"JSON parsing failed for confidence extraction: {e}")
+
+        # Check for truncated JSON response (incomplete description)
+        # Pattern: {"description": "some text without closing quote or brace
+        truncated_match = re.search(r'\{\s*"description"\s*:\s*"([^"]+)$', response_text, re.DOTALL)
+        if truncated_match:
+            # Response was truncated - extract what we have and note it
+            partial_desc = truncated_match.group(1).strip()
+            logger.warning(f"Detected truncated JSON response, extracting partial description: {partial_desc[:50]}...")
+            # Return partial description without confidence (since it was cut off)
+            return partial_desc, None
 
         # Fallback: Try to extract confidence from plain text
         # Look for patterns like "85% confident", "confidence: 85", "confidence is 85"
@@ -1204,7 +1211,7 @@ class GeminiProvider(AIProviderBase):
             response = await self.model.generate_content_async(
                 [full_prompt, image_part],
                 generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=300,
+                    max_output_tokens=500,
                     temperature=0.4
                 )
             )

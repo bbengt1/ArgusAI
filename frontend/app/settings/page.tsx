@@ -22,6 +22,7 @@ import {
   Download,
   Trash2,
   Shield,
+  FileText,
 } from 'lucide-react';
 
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -44,6 +45,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ConfirmDialog } from '@/components/settings/ConfirmDialog';
 import { BackupRestore } from '@/components/settings/BackupRestore';
 import { AIProviders } from '@/components/settings/AIProviders';
+import { LogViewer } from '@/components/settings/LogViewer';
 import { ControllerForm, type ControllerData, DeleteControllerDialog, DiscoveredCameraList } from '@/components/protect';
 import { useQuery } from '@tanstack/react-query';
 import type { AIProvider } from '@/types/settings';
@@ -261,7 +263,7 @@ export default function SettingsPage() {
         <form onSubmit={form.handleSubmit(handleSave)}>
           <Tabs defaultValue={initialTab} className="space-y-6">
             {/* Tab Navigation */}
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="general" className="flex items-center gap-2">
                 <Globe className="h-4 w-4" />
                 <span className="hidden sm:inline">General</span>
@@ -281,6 +283,10 @@ export default function SettingsPage() {
               <TabsTrigger value="protect" className="flex items-center gap-2">
                 <Shield className="h-4 w-4" />
                 <span className="hidden sm:inline">Protect</span>
+              </TabsTrigger>
+              <TabsTrigger value="logs" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Logs</span>
               </TabsTrigger>
             </TabsList>
 
@@ -909,6 +915,11 @@ export default function SettingsPage() {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Logs Tab - FF-001 */}
+            <TabsContent value="logs" className="space-y-4">
+              <LogViewer />
             </TabsContent>
           </Tabs>
 

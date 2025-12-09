@@ -34,6 +34,7 @@ export interface ICorrelatedEvent {
 export interface IEvent {
   id: string;                     // UUID
   camera_id: string;              // UUID foreign key
+  camera_name?: string;           // Human-readable camera name for display (FF-003)
   timestamp: string;              // ISO 8601 datetime
   description: string;            // AI-generated description
   confidence: number;             // 0-100

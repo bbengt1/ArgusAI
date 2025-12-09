@@ -26,6 +26,7 @@ import asyncio
 
 from app.core.database import get_db
 from app.models.event import Event
+from app.models.camera import Camera
 from app.schemas.event import (
     EventCreate,
     EventResponse,
@@ -403,13 +404,54 @@ def list_events(
         has_more = (offset + limit) < total_count
         next_offset = (offset + limit) if has_more else None
 
+        # FF-003: Fetch camera names for all events
+        camera_ids = list(set(e.camera_id for e in events))
+        camera_map = {}
+        if camera_ids:
+            cameras = db.query(Camera.id, Camera.name).filter(Camera.id.in_(camera_ids)).all()
+            camera_map = {c.id: c.name for c in cameras}
+
+        # Enrich events with camera_name
+        enriched_events = []
+        for event in events:
+            event_dict = {
+                "id": event.id,
+                "camera_id": event.camera_id,
+                "camera_name": camera_map.get(event.camera_id, f"Camera {event.camera_id[:8]}"),
+                "timestamp": event.timestamp,
+                "description": event.description,
+                "confidence": event.confidence,
+                "objects_detected": event.objects_detected,
+                "thumbnail_path": event.thumbnail_path,
+                "thumbnail_base64": event.thumbnail_base64,
+                "alert_triggered": event.alert_triggered,
+                "source_type": event.source_type,
+                "protect_event_id": event.protect_event_id,
+                "smart_detection_type": event.smart_detection_type,
+                "is_doorbell_ring": event.is_doorbell_ring,
+                "created_at": event.created_at,
+                "correlation_group_id": event.correlation_group_id,
+                "correlated_events": None,
+                "provider_used": event.provider_used,
+                "fallback_reason": event.fallback_reason,
+                "analysis_mode": event.analysis_mode,
+                "frame_count_used": event.frame_count_used,
+                "audio_transcription": getattr(event, 'audio_transcription', None),
+                "ai_confidence": event.ai_confidence,
+                "low_confidence": event.low_confidence,
+                "vague_reason": event.vague_reason,
+                "reanalyzed_at": event.reanalyzed_at,
+                "reanalysis_count": event.reanalysis_count or 0,
+            }
+            enriched_events.append(EventResponse(**event_dict))
+
         logger.info(
             f"Listed {len(events)} events (total={total_count}, filters: "
             f"camera={camera_id}, search={search_query}, limit={limit}, offset={offset})"
         )
 
         return EventListResponse(
-            events=events,
+            events=enriched_events,
             total_count=total_count,
             has_more=has_more,
             next_offset=next_offset,
@@ -788,7 +830,6 @@ def get_event(
     Example:
         GET /events/123e4567-e89b-12d3-a456-426614174000
     """
-    from app.models.camera import Camera
     from app.schemas.event import CorrelatedEventResponse
 
     try:
@@ -830,10 +871,15 @@ def get_event(
                         timestamp=related.timestamp
                     ))
 
+        # FF-003: Get camera name for this event
+        event_camera = db.query(Camera).filter(Camera.id == event.camera_id).first()
+        event_camera_name = event_camera.name if event_camera else f"Camera {event.camera_id[:8]}"
+
         # Convert to dict and add correlated_events
         event_dict = {
             "id": event.id,
             "camera_id": event.camera_id,
+            "camera_name": event_camera_name,
             "timestamp": event.timestamp,
             "description": event.description,
             "confidence": event.confidence,
@@ -848,10 +894,16 @@ def get_event(
             "created_at": event.created_at,
             "correlation_group_id": event.correlation_group_id,
             "correlated_events": correlated_events,
-            # Story P2-5.3: AI provider tracking
             "provider_used": event.provider_used,
-            # Story P3-1.4: Fallback reason tracking
             "fallback_reason": event.fallback_reason,
+            "analysis_mode": event.analysis_mode,
+            "frame_count_used": event.frame_count_used,
+            "audio_transcription": getattr(event, 'audio_transcription', None),
+            "ai_confidence": event.ai_confidence,
+            "low_confidence": event.low_confidence,
+            "vague_reason": event.vague_reason,
+            "reanalyzed_at": event.reanalyzed_at,
+            "reanalysis_count": event.reanalysis_count or 0,
         }
 
         return EventResponse(**event_dict)

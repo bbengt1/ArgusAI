@@ -79,6 +79,7 @@ class EventResponse(BaseModel):
     """Schema for event API responses"""
     id: str = Field(..., description="Event UUID")
     camera_id: str = Field(..., description="Camera UUID")
+    camera_name: Optional[str] = Field(None, description="Human-readable camera name for display")
     timestamp: datetime = Field(..., description="Event timestamp (UTC with timezone)")
     description: str = Field(..., description="AI-generated description")
     confidence: int = Field(..., ge=0, le=100, description="AI confidence score (0-100)")
