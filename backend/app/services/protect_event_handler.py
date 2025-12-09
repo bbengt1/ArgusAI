@@ -1824,7 +1824,7 @@ class ProtectEventHandler:
             # Story P3-6.1/P3-6.2 AC3: Combine AI confidence AND vagueness for final low_confidence flag
             low_confidence = low_confidence_from_ai or low_confidence_from_vague
 
-            # Create Event record (AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2, P3-2.6 AC4, P3-5.3 AC6, P3-6.1 AC3/AC6, P3-6.2 AC3/AC4)
+            # Create Event record (AC5-9, P2-4.1 AC3, AC5, P3-1.4 AC2, P3-2.6 AC4, P3-5.3 AC6, P3-6.1 AC3/AC6, P3-6.2 AC3/AC4, P3-7.1 AC6)
             event = Event(
                 camera_id=camera.id,
                 timestamp=snapshot_result.timestamp,
@@ -1849,7 +1849,9 @@ class ProtectEventHandler:
                 ai_confidence=ai_confidence,
                 low_confidence=low_confidence,
                 # Story P3-6.2 AC4: Store vagueness detection reason
-                vague_reason=vague_reason
+                vague_reason=vague_reason,
+                # Story P3-7.1 AC6: Store AI cost estimate
+                ai_cost=ai_result.cost_estimate
             )
 
             # Story P3-1.4: Use pre-generated event ID if provided

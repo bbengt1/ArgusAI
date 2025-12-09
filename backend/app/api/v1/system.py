@@ -967,6 +967,170 @@ async def get_ai_provider_stats(
 
 
 # ============================================================================
+# AI Usage Cost Tracking API (Story P3-7.1)
+# ============================================================================
+
+
+from app.schemas.system import (
+    AIUsageResponse,
+    AIUsageByDate,
+    AIUsageByCamera,
+    AIUsageByProvider,
+    AIUsageByMode,
+    AIUsagePeriod
+)
+from app.models.ai_usage import AIUsage
+
+
+@router.get("/ai-usage", response_model=AIUsageResponse)
+async def get_ai_usage(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get AI usage and cost statistics (Story P3-7.1)
+
+    Returns aggregated AI usage data including costs broken down by date,
+    camera, provider, and analysis mode.
+
+    **Query Parameters:**
+    - `start_date`: Start date in ISO 8601 format (default: 30 days ago)
+    - `end_date`: End date in ISO 8601 format (default: now)
+
+    **Response:**
+    ```json
+    {
+        "total_cost": 0.0523,
+        "total_requests": 142,
+        "period": {
+            "start": "2025-11-09T00:00:00Z",
+            "end": "2025-12-09T23:59:59Z"
+        },
+        "by_date": [...],
+        "by_camera": [...],
+        "by_provider": [...],
+        "by_mode": [...]
+    }
+    ```
+
+    **Status Codes:**
+    - 200: Success
+    - 400: Invalid date format
+    - 500: Internal server error
+    """
+    from app.models.event import Event
+    from app.models.camera import Camera
+    from sqlalchemy import func, cast, Date
+
+    try:
+        # Parse date range (default: last 30 days)
+        now = datetime.now(timezone.utc)
+        if end_date:
+            try:
+                end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid end_date format. Use ISO 8601 format."
+                )
+        else:
+            end_dt = now
+
+        if start_date:
+            try:
+                start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid start_date format. Use ISO 8601 format."
+                )
+        else:
+            start_dt = now - timedelta(days=30)
+
+        # Base query with date filter
+        base_query = db.query(AIUsage).filter(
+            AIUsage.timestamp >= start_dt,
+            AIUsage.timestamp <= end_dt
+        )
+
+        # Get all records for aggregation
+        records = base_query.all()
+
+        # Calculate totals
+        total_cost = sum(r.cost_estimate or 0.0 for r in records)
+        total_requests = len(records)
+
+        # Aggregate by date
+        by_date_dict = {}
+        for r in records:
+            date_key = r.timestamp.strftime("%Y-%m-%d")
+            if date_key not in by_date_dict:
+                by_date_dict[date_key] = {"cost": 0.0, "requests": 0}
+            by_date_dict[date_key]["cost"] += r.cost_estimate or 0.0
+            by_date_dict[date_key]["requests"] += 1
+
+        by_date = [
+            AIUsageByDate(date=date, cost=data["cost"], requests=data["requests"])
+            for date, data in sorted(by_date_dict.items(), reverse=True)
+        ]
+
+        # Aggregate by provider
+        by_provider_dict = {}
+        for r in records:
+            provider = r.provider or "unknown"
+            if provider not in by_provider_dict:
+                by_provider_dict[provider] = {"cost": 0.0, "requests": 0}
+            by_provider_dict[provider]["cost"] += r.cost_estimate or 0.0
+            by_provider_dict[provider]["requests"] += 1
+
+        by_provider = [
+            AIUsageByProvider(provider=provider, cost=data["cost"], requests=data["requests"])
+            for provider, data in sorted(by_provider_dict.items(), key=lambda x: x[1]["cost"], reverse=True)
+        ]
+
+        # Aggregate by analysis mode
+        by_mode_dict = {}
+        for r in records:
+            mode = r.analysis_mode or "unknown"
+            if mode not in by_mode_dict:
+                by_mode_dict[mode] = {"cost": 0.0, "requests": 0}
+            by_mode_dict[mode]["cost"] += r.cost_estimate or 0.0
+            by_mode_dict[mode]["requests"] += 1
+
+        by_mode = [
+            AIUsageByMode(mode=mode, cost=data["cost"], requests=data["requests"])
+            for mode, data in sorted(by_mode_dict.items(), key=lambda x: x[1]["cost"], reverse=True)
+        ]
+
+        # Note: AIUsage doesn't have camera_id directly - we'd need to join through Event
+        # For now, return empty list for by_camera (can be implemented if Event-AIUsage link exists)
+        by_camera = []
+
+        return AIUsageResponse(
+            total_cost=round(total_cost, 6),
+            total_requests=total_requests,
+            period=AIUsagePeriod(
+                start=start_dt.isoformat(),
+                end=end_dt.isoformat()
+            ),
+            by_date=by_date,
+            by_camera=by_camera,
+            by_provider=by_provider,
+            by_mode=by_mode
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting AI usage stats: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get AI usage statistics"
+        )
+
+
+# ============================================================================
 # Backup and Restore API (Story 6.4, FF-007)
 # ============================================================================
 

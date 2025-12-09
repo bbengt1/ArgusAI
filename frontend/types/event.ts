@@ -65,6 +65,8 @@ export interface IEvent {
   // Story P3-6.4: Re-analysis tracking
   reanalyzed_at?: string | null;        // Timestamp of last re-analysis (null = never re-analyzed)
   reanalysis_count?: number;            // Number of re-analyses performed
+  // Story P3-7.1: AI cost tracking
+  ai_cost?: number | null;              // Estimated cost in USD for AI analysis
 }
 
 /**

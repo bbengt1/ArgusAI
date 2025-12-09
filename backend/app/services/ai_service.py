@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from app.utils.encryption import decrypt_password
 from app.models.system_setting import SystemSetting
 from app.models.ai_usage import AIUsage
+from app.services.cost_tracker import get_cost_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -2602,8 +2603,8 @@ class AIService:
                 audio_transcription=audio_transcription
             )
 
-            # Track usage with analysis mode (Story P3-2.5)
-            self._track_usage(result, analysis_mode="single_image")
+            # Track usage with analysis mode (Story P3-2.5, P3-7.1)
+            self._track_usage(result, analysis_mode="single_image", image_count=1)
 
             if result.success:
                 total_elapsed_ms = int((time.time() - start_time) * 1000)
@@ -2846,7 +2847,12 @@ class AIService:
                     success=result.success,
                     error=result.error
                 )
-            self._track_usage(result, analysis_mode="multi_frame", is_estimated=is_estimated)
+            self._track_usage(
+                result,
+                analysis_mode="multi_frame",
+                is_estimated=is_estimated,
+                image_count=len(images_base64)
+            )
 
             if result.success:
                 total_elapsed_ms = int((time.time() - start_time) * 1000)
@@ -3054,8 +3060,13 @@ class AIService:
                     custom_prompt=effective_prompt
                 )
 
-                # Track usage with video_native analysis mode
-                self._track_usage(result, analysis_mode="video_native", is_estimated=True)
+                # Track usage with video_native analysis mode (no image_count for video)
+                self._track_usage(
+                    result,
+                    analysis_mode="video_native",
+                    is_estimated=True,
+                    image_count=None  # Video native doesn't use separate images
+                )
 
                 if result.success:
                     total_elapsed_ms = int((time.time() - start_time) * 1000)
@@ -3375,7 +3386,8 @@ class AIService:
         self,
         result: AIResult,
         analysis_mode: Optional[str] = None,
-        is_estimated: bool = False
+        is_estimated: bool = False,
+        image_count: Optional[int] = None
     ):
         """
         Track API usage by persisting to database.
@@ -3387,6 +3399,7 @@ class AIService:
             result: AIResult from provider with usage metadata
             analysis_mode: Type of analysis - "single_image" or "multi_frame" (Story P3-2.5)
             is_estimated: True if token count is estimated rather than from provider (Story P3-2.5)
+            image_count: Number of images in multi-image requests (Story P3-7.1)
         """
         if self.db is None:
             logger.warning("Database not configured, usage tracking disabled")
@@ -3402,7 +3415,8 @@ class AIService:
                 cost_estimate=result.cost_estimate,
                 error=result.error,
                 analysis_mode=analysis_mode,
-                is_estimated=is_estimated
+                is_estimated=is_estimated,
+                image_count=image_count
             )
 
             self.db.add(usage_record)
@@ -3414,11 +3428,13 @@ class AIService:
                 f"{result.tokens_used} tokens - "
                 f"${result.cost_estimate:.6f} - "
                 f"mode={analysis_mode or 'unknown'} - "
+                f"images={image_count or 1} - "
                 f"estimated={is_estimated}",
                 extra={
                     "provider": result.provider,
                     "tokens": result.tokens_used,
                     "analysis_mode": analysis_mode,
+                    "image_count": image_count,
                     "is_estimated": is_estimated
                 }
             )

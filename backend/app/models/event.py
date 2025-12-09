@@ -1,5 +1,5 @@
 """Event SQLAlchemy ORM model for AI-generated semantic events"""
-from sqlalchemy import Column, String, Integer, Text, DateTime, Boolean, ForeignKey, CheckConstraint, Index
+from sqlalchemy import Column, String, Integer, Text, DateTime, Boolean, ForeignKey, CheckConstraint, Index, Float
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 import uuid
@@ -38,6 +38,7 @@ class Event(Base):
         vague_reason: Human-readable explanation of why description was flagged as vague (Story P3-6.2)
         reanalyzed_at: Timestamp of last re-analysis (Story P3-6.4)
         reanalysis_count: Number of re-analyses performed for rate limiting (Story P3-6.4)
+        ai_cost: Estimated cost in USD for AI analysis (Story P3-7.1)
         created_at: Record creation timestamp (UTC with timezone)
     """
 
@@ -80,6 +81,8 @@ class Event(Base):
     # Story P3-6.4: Re-analysis tracking
     reanalyzed_at = Column(DateTime(timezone=True), nullable=True)  # Timestamp of last re-analysis (null = never re-analyzed)
     reanalysis_count = Column(Integer, nullable=False, default=0)  # Number of re-analyses performed (for rate limiting)
+    # Story P3-7.1: AI cost tracking
+    ai_cost = Column(Float, nullable=True)  # Estimated cost in USD for AI analysis (null = not tracked)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

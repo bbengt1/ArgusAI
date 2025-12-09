@@ -113,6 +113,8 @@ class EventResponse(BaseModel):
     # Story P3-6.4: Re-analysis tracking
     reanalyzed_at: Optional[datetime] = Field(None, description="Timestamp of last re-analysis (null = never re-analyzed)")
     reanalysis_count: int = Field(default=0, ge=0, description="Number of re-analyses performed")
+    # Story P3-7.1: AI cost tracking
+    ai_cost: Optional[float] = Field(None, description="Estimated cost in USD for AI analysis")
 
     @field_validator('objects_detected', mode='before')
     @classmethod

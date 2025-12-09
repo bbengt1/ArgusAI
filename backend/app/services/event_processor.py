@@ -619,7 +619,8 @@ class EventProcessor:
                 "thumbnail_base64": thumbnail_base64,
                 "alert_triggered": False,  # Will be set by alert evaluation (Epic 5)
                 "provider_used": ai_result.provider,  # Story P2-5.3: Track AI provider
-                "description_retry_needed": False  # Successfully processed
+                "description_retry_needed": False,  # Successfully processed
+                "ai_cost": ai_result.cost_estimate  # Story P3-7.1: Track AI cost
             }
 
             logger.info(f"Storing event for camera {event.camera_name}: {ai_result.description[:50]}...")
@@ -743,6 +744,7 @@ class EventProcessor:
                     alert_triggered=event_data.get("alert_triggered", False),
                     provider_used=event_data.get("provider_used"),  # Story P2-5.3: AI provider tracking
                     description_retry_needed=event_data.get("description_retry_needed", False),  # Story P2-6.3 AC13
+                    ai_cost=event_data.get("ai_cost"),  # Story P3-7.1: AI cost tracking
                 )
 
                 db.add(event)
