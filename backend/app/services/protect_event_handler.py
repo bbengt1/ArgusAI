@@ -145,19 +145,27 @@ class ProtectEventHandler:
 
             # Debug: Log raw motion/smart detection state for troubleshooting
             is_motion = getattr(new_obj, 'is_motion_currently_detected', None)
-            is_smart_detected = getattr(new_obj, 'is_smart_detected', None)
+            is_smart_detected = getattr(new_obj, 'is_smart_currently_detected', None)
+            is_person = getattr(new_obj, 'is_person_currently_detected', None)
+            is_vehicle = getattr(new_obj, 'is_vehicle_currently_detected', None)
+            is_package = getattr(new_obj, 'is_package_currently_detected', None)
+            is_animal = getattr(new_obj, 'is_animal_currently_detected', None)
             last_smart_event_ids = getattr(new_obj, 'last_smart_detect_event_ids', None)
             active_smart_types = getattr(new_obj, 'active_smart_detect_types', None)
             logger.debug(
                 f"WebSocket update for {model_type} {protect_camera_id[:8]}...: "
-                f"motion={is_motion}, is_smart_detected={is_smart_detected}, "
-                f"last_smart_event_ids={last_smart_event_ids}, active_types={active_smart_types}",
+                f"motion={is_motion}, smart={is_smart_detected}, "
+                f"person={is_person}, vehicle={is_vehicle}, package={is_package}, animal={is_animal}",
                 extra={
                     "event_type": "protect_ws_update",
                     "model_type": model_type,
                     "protect_camera_id": protect_camera_id,
                     "is_motion_currently_detected": is_motion,
-                    "is_smart_detected": is_smart_detected,
+                    "is_smart_currently_detected": is_smart_detected,
+                    "is_person_currently_detected": is_person,
+                    "is_vehicle_currently_detected": is_vehicle,
+                    "is_package_currently_detected": is_package,
+                    "is_animal_currently_detected": is_animal,
                     "last_smart_detect_event_ids": str(last_smart_event_ids) if last_smart_event_ids else None,
                     "active_smart_detect_types": str(active_smart_types) if active_smart_types else None
                 }
@@ -450,31 +458,39 @@ class ProtectEventHandler:
         if is_motion_detected:
             event_types.append("motion")
 
-        # Check for smart detection types
-        # IMPORTANT: 'active_smart_detect_types' returns CONFIGURED types, not currently detected types.
-        # We must check 'is_smart_detected' (bool) FIRST to confirm a detection is active,
-        # then use 'last_smart_detect_event_ids' to determine WHICH type(s) triggered the detection.
-        # If last_smart_detect_event_ids is empty but is_smart_detected is True, we fall back to
-        # using 'active_smart_detect_types' as those are the types that could have triggered.
-        is_smart_detected = getattr(obj, 'is_smart_detected', False)
-        if is_smart_detected:
-            # First try to get specific detection types from event IDs
+        # Check for smart detection types using individual detection flags
+        # These are the most reliable indicators of what was actually detected
+        smart_detect_checks = [
+            ('is_person_currently_detected', 'smart_detect_person'),
+            ('is_vehicle_currently_detected', 'smart_detect_vehicle'),
+            ('is_package_currently_detected', 'smart_detect_package'),
+            ('is_animal_currently_detected', 'smart_detect_animal'),
+        ]
+
+        for attr_name, event_key in smart_detect_checks:
+            if getattr(obj, attr_name, False):
+                if event_key in VALID_EVENT_TYPES:
+                    event_types.append(event_key)
+
+        # Also check is_smart_currently_detected as a fallback for other smart detection types
+        # This catches any smart detections not covered by the individual checks above
+        is_smart_detected = getattr(obj, 'is_smart_currently_detected', False)
+        if is_smart_detected and not any(e.startswith('smart_detect_') for e in event_types):
+            # No specific smart detection found yet, try to extract from last_smart_detect_event_ids
             last_smart_event_ids = getattr(obj, 'last_smart_detect_event_ids', {})
             if last_smart_event_ids:
-                # We have specific detection types
                 for detect_type in last_smart_event_ids.keys():
                     detect_value = getattr(detect_type, 'value', str(detect_type)).lower()
                     event_key = f"smart_detect_{detect_value}"
-                    if event_key in VALID_EVENT_TYPES:
+                    if event_key in VALID_EVENT_TYPES and event_key not in event_types:
                         event_types.append(event_key)
             else:
-                # Fallback: use active_smart_detect_types when is_smart_detected is True
-                # This means a smart detection occurred but we don't know the specific type
+                # Final fallback: use active_smart_detect_types
                 active_types = getattr(obj, 'active_smart_detect_types', set())
                 for detect_type in active_types:
                     detect_value = getattr(detect_type, 'value', str(detect_type)).lower()
                     event_key = f"smart_detect_{detect_value}"
-                    if event_key in VALID_EVENT_TYPES:
+                    if event_key in VALID_EVENT_TYPES and event_key not in event_types:
                         event_types.append(event_key)
 
         # Check for doorbell ring (specific to doorbells)
