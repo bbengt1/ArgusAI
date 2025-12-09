@@ -36,6 +36,8 @@ class Event(Base):
         ai_confidence: AI self-reported confidence score (0-100) (Story P3-6.1)
         low_confidence: True if ai_confidence < 50 OR vague description, flagging uncertain descriptions (Story P3-6.1, P3-6.2)
         vague_reason: Human-readable explanation of why description was flagged as vague (Story P3-6.2)
+        reanalyzed_at: Timestamp of last re-analysis (Story P3-6.4)
+        reanalysis_count: Number of re-analyses performed for rate limiting (Story P3-6.4)
         created_at: Record creation timestamp (UTC with timezone)
     """
 
@@ -75,6 +77,9 @@ class Event(Base):
     low_confidence = Column(Boolean, nullable=False, default=False)  # True if ai_confidence < 50 OR vague description
     # Story P3-6.2: Vagueness detection
     vague_reason = Column(Text, nullable=True)  # Human-readable reason if description flagged as vague (null = not vague)
+    # Story P3-6.4: Re-analysis tracking
+    reanalyzed_at = Column(DateTime(timezone=True), nullable=True)  # Timestamp of last re-analysis (null = never re-analyzed)
+    reanalysis_count = Column(Integer, nullable=False, default=0)  # Number of re-analyses performed (for rate limiting)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

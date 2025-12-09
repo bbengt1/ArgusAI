@@ -346,6 +346,22 @@ export const apiClient = {
         method: 'DELETE',
       });
     },
+
+    /**
+     * Re-analyze an event with a different analysis mode (Story P3-6.4)
+     * @param id Event UUID
+     * @param analysisMode Analysis mode to use: 'single_frame', 'multi_frame', 'video_native'
+     * @returns Updated event with new description and confidence
+     * @throws ApiError with 404 if event not found
+     * @throws ApiError with 400 if analysis mode not available for camera type
+     * @throws ApiError with 429 if rate limit exceeded (max 3 per hour)
+     */
+    reanalyze: async (id: string, analysisMode: 'single_frame' | 'multi_frame' | 'video_native'): Promise<IEvent> => {
+      return apiFetch<IEvent>(`/events/${id}/reanalyze`, {
+        method: 'POST',
+        body: JSON.stringify({ analysis_mode: analysisMode }),
+      });
+    },
   },
 
   /**

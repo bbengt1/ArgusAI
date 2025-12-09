@@ -16,6 +16,8 @@ import { CorrelationIndicator } from './CorrelationIndicator';
 import { AnalysisModeBadge } from './AnalysisModeBadge';
 import { AIProviderBadge } from './AIProviderBadge';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
+import { ReAnalyzeButton } from './ReAnalyzeButton';
+import { ReanalyzedIndicator } from './ReanalyzedIndicator';
 import { cn } from '@/lib/utils';
 
 interface EventCardProps {
@@ -25,6 +27,8 @@ interface EventCardProps {
   onCorrelatedEventClick?: (eventId: string) => void;
   /** Story P2-4.4: Whether this card is currently highlighted (from correlation scroll) */
   isHighlighted?: boolean;
+  /** Story P3-6.4: Callback when event is re-analyzed */
+  onReanalyze?: (updatedEvent: IEvent) => void;
 }
 
 const OBJECT_ICONS: Record<string, string> = {
@@ -49,6 +53,7 @@ export const EventCard = memo(function EventCard({
   onClick,
   onCorrelatedEventClick,
   isHighlighted = false,
+  onReanalyze,
 }: EventCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -145,6 +150,13 @@ export const EventCard = memo(function EventCard({
                 aiConfidence={event.ai_confidence}
                 lowConfidence={event.low_confidence}
                 vagueReason={event.vague_reason}
+              />
+              {/* Story P3-6.4: Re-analyzed Indicator (AC7) */}
+              <ReanalyzedIndicator reanalyzedAt={event.reanalyzed_at} />
+              {/* Story P3-6.4: Re-analyze Button for low confidence events (AC1) */}
+              <ReAnalyzeButton
+                event={event}
+                onReanalyze={onReanalyze}
               />
               {event.source_type && (
                 <SourceTypeBadge sourceType={event.source_type} />

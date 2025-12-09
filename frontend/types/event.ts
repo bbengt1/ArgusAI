@@ -61,6 +61,9 @@ export interface IEvent {
   // Story P3-6.2: Vague description detection
   low_confidence?: boolean;             // True if ai_confidence < 50 OR description is vague
   vague_reason?: string | null;         // Human-readable reason why flagged as vague
+  // Story P3-6.4: Re-analysis tracking
+  reanalyzed_at?: string | null;        // Timestamp of last re-analysis (null = never re-analyzed)
+  reanalysis_count?: number;            // Number of re-analyses performed
 }
 
 /**

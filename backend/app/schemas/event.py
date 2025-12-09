@@ -109,6 +109,9 @@ class EventResponse(BaseModel):
     low_confidence: bool = Field(default=False, description="True if ai_confidence < 50 or vague description, flagging uncertain descriptions")
     # Story P3-6.2: Vagueness detection
     vague_reason: Optional[str] = Field(None, description="Human-readable explanation of why description was flagged as vague")
+    # Story P3-6.4: Re-analysis tracking
+    reanalyzed_at: Optional[datetime] = Field(None, description="Timestamp of last re-analysis (null = never re-analyzed)")
+    reanalysis_count: int = Field(default=0, ge=0, description="Number of re-analyses performed")
 
     @field_validator('objects_detected', mode='before')
     @classmethod
@@ -244,6 +247,27 @@ class EventFilterParams(BaseModel):
                     "limit": 50,
                     "offset": 0,
                     "sort_order": "desc"
+                }
+            ]
+        }
+    }
+
+
+class ReanalyzeRequest(BaseModel):
+    """Schema for event re-analysis request (Story P3-6.4)
+
+    Used by POST /api/v1/events/{id}/reanalyze endpoint.
+    """
+    analysis_mode: Literal["single_frame", "multi_frame", "video_native"] = Field(
+        ...,
+        description="Analysis mode to use for re-analysis: single_frame, multi_frame, or video_native"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "analysis_mode": "multi_frame"
                 }
             ]
         }

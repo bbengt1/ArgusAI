@@ -31,7 +31,8 @@ from app.schemas.event import (
     EventResponse,
     EventListResponse,
     EventStatsResponse,
-    EventFilterParams
+    EventFilterParams,
+    ReanalyzeRequest
 )
 from app.schemas.system import CleanupResponse
 from app.services.cleanup_service import get_cleanup_service
@@ -862,6 +863,323 @@ def get_event(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get event"
+        )
+
+
+@router.post("/{event_id}/reanalyze", response_model=EventResponse)
+async def reanalyze_event(
+    event_id: str,
+    request: ReanalyzeRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Re-analyze an event with a different analysis mode (Story P3-6.4)
+
+    Triggers re-analysis of an existing event using a different AI analysis mode.
+    This is useful for improving low-confidence descriptions.
+
+    Rate limiting: Max 3 re-analyses per event per hour.
+
+    Args:
+        event_id: Event UUID to re-analyze
+        request: ReanalyzeRequest with analysis_mode
+        background_tasks: FastAPI background tasks
+        db: Database session
+
+    Returns:
+        Updated EventResponse with new description and confidence
+
+    Raises:
+        404: Event not found
+        400: Invalid analysis mode for camera type
+        429: Rate limit exceeded (max 3 per hour)
+        500: Re-analysis failed
+
+    Example:
+        POST /events/123e4567-e89b-12d3-a456-426614174000/reanalyze
+        {"analysis_mode": "multi_frame"}
+    """
+    from app.models.camera import Camera
+    from app.services.ai_service import AIService
+    from app.services.clip_service import ClipService
+    from app.services.protect_service import ProtectService
+    from app.services.frame_extractor import FrameExtractor
+    from app.services.vagueness_detector import VaguenessDetector
+    import cv2
+    import numpy as np
+    from pathlib import Path
+
+    try:
+        # 1. Find the event
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        # 2. Check rate limiting (max 3 per hour)
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+        if event.reanalyzed_at and event.reanalyzed_at > one_hour_ago:
+            if event.reanalysis_count >= 3:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded: maximum 3 re-analyses per event per hour"
+                )
+
+        # 3. Get camera to determine available modes
+        camera = db.query(Camera).filter(Camera.id == event.camera_id).first()
+        if not camera:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Camera {event.camera_id} not found"
+            )
+
+        # 4. Validate analysis mode availability
+        analysis_mode = request.analysis_mode
+        source_type = event.source_type or camera.source_type or 'rtsp'
+
+        # For RTSP/USB cameras, only single_frame is available
+        if source_type in ['rtsp', 'usb'] and analysis_mode != 'single_frame':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Analysis mode '{analysis_mode}' is not available for {source_type} cameras. Only 'single_frame' is supported."
+            )
+
+        # 5. Get image/video for re-analysis
+        image_base64 = None
+        frames = []
+        video_path = None
+
+        if analysis_mode == 'single_frame':
+            # Use stored thumbnail
+            if event.thumbnail_base64:
+                image_base64 = event.thumbnail_base64
+            elif event.thumbnail_path:
+                # Load thumbnail from file
+                thumbnail_full_path = os.path.join(THUMBNAIL_DIR, event.thumbnail_path)
+                if os.path.exists(thumbnail_full_path):
+                    with open(thumbnail_full_path, 'rb') as f:
+                        image_base64 = base64.b64encode(f.read()).decode('utf-8')
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Thumbnail not available for re-analysis"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No thumbnail available for re-analysis"
+                )
+
+        elif analysis_mode in ['multi_frame', 'video_native']:
+            # For Protect cameras, download clip
+            if source_type != 'protect':
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Analysis mode '{analysis_mode}' requires a UniFi Protect camera"
+                )
+
+            # Get protect controller for this camera
+            from app.models.protect_controller import ProtectController
+
+            # Find controller by camera's protect_camera_id
+            protect_camera_id = getattr(camera, 'protect_camera_id', None)
+            controller_id = getattr(camera, 'controller_id', None)
+
+            if not protect_camera_id or not controller_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Camera is not properly configured for Protect integration"
+                )
+
+            # Download clip for re-analysis
+            protect_service = ProtectService()
+            await protect_service.load_controllers_from_db(db)
+
+            clip_service = ClipService(protect_service)
+
+            # Determine clip time range (use event timestamp +/- 5 seconds)
+            event_start = event.timestamp - timedelta(seconds=5)
+            event_end = event.timestamp + timedelta(seconds=5)
+
+            try:
+                clip_path = await clip_service.download_clip(
+                    controller_id=controller_id,
+                    camera_id=protect_camera_id,
+                    event_start=event_start,
+                    event_end=event_end,
+                    event_id=f"reanalyze_{event_id}"
+                )
+
+                if not clip_path or not clip_path.exists():
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Failed to download video clip for re-analysis"
+                    )
+
+                video_path = clip_path
+
+            except Exception as e:
+                logger.error(f"Failed to download clip for re-analysis: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to download video clip: {str(e)}"
+                )
+
+        # 6. Initialize AI service
+        ai_service = AIService()
+        await ai_service.load_api_keys_from_db(db)
+
+        # 7. Perform re-analysis based on mode
+        result = None
+        frame_count_used = None
+
+        if analysis_mode == 'single_frame' and image_base64:
+            # Decode base64 to numpy array for AI service
+            import io
+            from PIL import Image as PILImage
+
+            image_data = base64.b64decode(image_base64)
+            pil_image = PILImage.open(io.BytesIO(image_data))
+            frame = np.array(pil_image)
+            if len(frame.shape) == 3 and frame.shape[2] == 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+            result = await ai_service.generate_description(
+                frame=frame,
+                camera_name=camera.name,
+                timestamp=event.timestamp.isoformat(),
+                detected_objects=json.loads(event.objects_detected) if isinstance(event.objects_detected, str) else event.objects_detected
+            )
+
+        elif analysis_mode == 'multi_frame' and video_path:
+            # Extract frames and analyze
+            frame_extractor = FrameExtractor()
+            extracted_frames = await frame_extractor.extract_frames(
+                video_path=video_path,
+                max_frames=5,
+                skip_blur=True
+            )
+
+            if not extracted_frames:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to extract frames from video clip"
+                )
+
+            frame_count_used = len(extracted_frames)
+
+            # Convert frames to base64 for multi-image analysis
+            frames_base64 = []
+            for frame in extracted_frames:
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                frames_base64.append(base64.b64encode(buffer).decode('utf-8'))
+
+            result = await ai_service.describe_images(
+                images_base64=frames_base64,
+                camera_name=camera.name,
+                timestamp=event.timestamp.isoformat(),
+                detected_objects=json.loads(event.objects_detected) if isinstance(event.objects_detected, str) else event.objects_detected
+            )
+
+        elif analysis_mode == 'video_native' and video_path:
+            # Native video analysis
+            result = await ai_service.describe_video(
+                video_path=str(video_path),
+                camera_name=camera.name,
+                timestamp=event.timestamp.isoformat(),
+                detected_objects=json.loads(event.objects_detected) if isinstance(event.objects_detected, str) else event.objects_detected
+            )
+
+        if not result or not result.success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AI re-analysis failed"
+            )
+
+        # 8. Check for vagueness in new description
+        vagueness_detector = VaguenessDetector()
+        vague_result = vagueness_detector.is_vague(result.description)
+
+        # Determine low_confidence flag
+        ai_confidence = result.ai_confidence
+        low_confidence = (ai_confidence is not None and ai_confidence < 50) or vague_result.is_vague
+
+        # 9. Update event with new description
+        event.description = result.description
+        event.confidence = result.confidence
+        event.ai_confidence = ai_confidence
+        event.low_confidence = low_confidence
+        event.vague_reason = vague_result.reason if vague_result.is_vague else None
+        event.analysis_mode = analysis_mode
+        event.provider_used = result.provider
+        event.reanalyzed_at = datetime.now(timezone.utc)
+        event.reanalysis_count = (event.reanalysis_count or 0) + 1
+
+        if frame_count_used:
+            event.frame_count_used = frame_count_used
+
+        db.commit()
+        db.refresh(event)
+
+        logger.info(
+            f"Event {event_id} re-analyzed successfully",
+            extra={
+                "event_type": "event_reanalyzed",
+                "event_id": event_id,
+                "analysis_mode": analysis_mode,
+                "new_confidence": ai_confidence,
+                "provider": result.provider,
+                "reanalysis_count": event.reanalysis_count
+            }
+        )
+
+        # 10. Clean up temporary clip if downloaded
+        if video_path and video_path.exists():
+            try:
+                video_path.unlink()
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp clip: {e}")
+
+        # 11. Build response
+        return EventResponse(
+            id=event.id,
+            camera_id=event.camera_id,
+            timestamp=event.timestamp,
+            description=event.description,
+            confidence=event.confidence,
+            objects_detected=json.loads(event.objects_detected) if isinstance(event.objects_detected, str) else event.objects_detected,
+            thumbnail_path=event.thumbnail_path,
+            thumbnail_base64=event.thumbnail_base64,
+            alert_triggered=event.alert_triggered,
+            source_type=event.source_type,
+            protect_event_id=event.protect_event_id,
+            smart_detection_type=event.smart_detection_type,
+            is_doorbell_ring=event.is_doorbell_ring,
+            created_at=event.created_at,
+            correlation_group_id=event.correlation_group_id,
+            correlated_events=None,
+            provider_used=event.provider_used,
+            fallback_reason=event.fallback_reason,
+            analysis_mode=event.analysis_mode,
+            frame_count_used=event.frame_count_used,
+            audio_transcription=event.audio_transcription,
+            ai_confidence=event.ai_confidence,
+            low_confidence=event.low_confidence,
+            vague_reason=event.vague_reason,
+            reanalyzed_at=event.reanalyzed_at,
+            reanalysis_count=event.reanalysis_count
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to re-analyze event {event_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Re-analysis failed: {str(e)}"
         )
 
 
