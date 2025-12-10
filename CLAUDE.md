@@ -151,3 +151,47 @@ All three camera types can coexist:
 - **USB**: Direct capture, motion detection
 
 Events from all sources appear in unified timeline with `source_type` filtering.
+
+## Phase 3 Architecture (Video Analysis)
+
+### Analysis Modes
+- **single_frame**: Legacy snapshot-based analysis (fastest, lowest cost)
+- **multi_frame**: Extract 3-5 key frames from video clips (balanced)
+- **video_native**: Send full video to AI providers that support it (highest quality)
+
+### Video Processing Pipeline
+```
+Protect Event → Clip Download → Frame Extraction → AI Analysis → Description
+                (uiprotect)     (PyAV/OpenCV)      (multi-image)
+```
+
+### Key Phase 3 Services
+- `video_clip_service.py` - Download motion clips from Protect
+- `frame_extraction_service.py` - Extract key frames from video
+- `cost_tracking_service.py` - Track AI usage and costs per provider
+
+## Phase 4 Roadmap (Planned)
+
+Phase 4 adds intelligent context awareness and smart home integration:
+
+### Planned Features
+- **Push Notifications**: Web Push with thumbnails, PWA support
+- **Home Assistant**: MQTT integration with auto-discovery
+- **Temporal Context**: Recognize recurring visitors, pattern detection
+- **Activity Summaries**: Daily digests and natural language reports
+- **User Feedback**: Thumbs up/down to improve AI accuracy
+
+### Phase 4 Documentation
+- PRD: `docs/PRD-phase4.md`
+- Epics: `docs/epics-phase4.md`
+- Architecture: `docs/architecture.md` (Phase 4 Additions section)
+
+### Phase 4 Key APIs (Planned)
+```
+GET  /api/v1/context/similar/{event_id}   # Find similar past events
+GET  /api/v1/entities                      # List recognized people/vehicles
+POST /api/v1/push/subscribe                # Register for push notifications
+GET  /api/v1/summaries/daily               # Get daily activity digest
+POST /api/v1/events/{id}/feedback          # Submit feedback on description
+GET  /api/v1/integrations/mqtt/status      # MQTT connection status
+```

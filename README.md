@@ -314,13 +314,16 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 |----------|-------------|
 | [Product Brief](docs/product-brief.md) | Project vision and goals |
 | [PRD Phase 2](docs/PRD-phase2.md) | UniFi Protect integration requirements |
+| [PRD Phase 3](docs/PRD-phase3.md) | Video analysis requirements |
+| [PRD Phase 4](docs/PRD-phase4.md) | Context & smart home requirements |
 | [Architecture](docs/architecture.md) | System design and decisions |
-| [Epics](docs/epics-phase2.md) | Story breakdown and status |
+| [Epics Phase 3](docs/epics-phase3.md) | Phase 3 story breakdown |
+| [Epics Phase 4](docs/epics-phase4.md) | Phase 4 story breakdown |
 | [UX Design](docs/ux-design-specification.md) | UI/UX specifications |
 
 ## Roadmap
 
-### Completed (MVP + Phase 2)
+### Completed (MVP + Phase 2 + Phase 3)
 - ✅ RTSP/USB camera support with motion detection
 - ✅ Multi-provider AI descriptions (OpenAI, xAI Grok, Claude, Gemini)
 - ✅ Event storage with search and retention
@@ -336,12 +339,26 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - ✅ xAI Grok provider with vision capabilities
 - ✅ RTSP/USB/Protect camera coexistence
 - ✅ Comprehensive error handling and recovery
+- ✅ **Phase 3: Video Analysis**
+  - Video clip download from UniFi Protect
+  - Multi-frame analysis mode (3-5 key frames)
+  - AI confidence scoring and quality indicators
+  - Cost monitoring dashboard with daily/monthly caps
+  - Key frames gallery on event detail
+  - Analysis mode filter on timeline
 
-### Planned
+### Phase 4: Intelligent Context & Smart Home (Planned)
+- 📋 Push notifications with thumbnails (PWA support)
+- 📋 Home Assistant integration via MQTT
+- 📋 Temporal context ("same person as yesterday")
+- 📋 Activity summaries and daily digests
+- 📋 User feedback loop for AI improvement
+- 📋 Behavioral anomaly detection
+- 📋 Person/vehicle recognition (privacy-first)
+- 📋 Voice assistant integration (HomeKit, Alexa)
+
+### Future
 - 📋 Local LLM support (Ollama)
-- 📋 Mobile push notifications
-- 📋 Historical pattern analysis
-- 📋 HomeKit integration
 
 ## License
 
