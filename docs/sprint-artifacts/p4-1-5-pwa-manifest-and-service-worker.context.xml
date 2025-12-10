@@ -1,0 +1,481 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Story Context: P4-1.5 - PWA Manifest & Service Worker
+  Generated: 2025-12-10
+  Epic: P4-1 Push Notifications & PWA
+
+  This context file provides implementation guidance for enabling Progressive Web App
+  functionality including manifest.json, app icons, service worker caching, install
+  prompt, and iOS support.
+-->
+<story-context>
+  <metadata>
+    <story-id>p4-1-5</story-id>
+    <story-title>PWA Manifest & Service Worker</story-title>
+    <epic>P4-1: Push Notifications & PWA</epic>
+    <phase>4</phase>
+    <generated>2025-12-10</generated>
+  </metadata>
+
+  <acceptance-criteria>
+    <criterion id="1" priority="must">PWA manifest includes required fields (name, icons, start_url, display)</criterion>
+    <criterion id="2" priority="must">App icons provided in all required sizes (192x192, 512x512 minimum)</criterion>
+    <criterion id="3" priority="must">Service worker caches critical assets for offline access</criterion>
+    <criterion id="4" priority="should">Install prompt shown to eligible mobile users</criterion>
+    <criterion id="5" priority="must">App can be added to home screen on iOS and Android</criterion>
+    <criterion id="6" priority="must">Offline page displayed when network unavailable</criterion>
+    <criterion id="7" priority="should">Cached events viewable when offline</criterion>
+    <criterion id="8" priority="should">Service worker updates transparently</criterion>
+  </acceptance-criteria>
+
+  <tasks>
+    <task id="1" acceptance-criteria="1,2,5">
+      <title>Create PWA manifest</title>
+      <subtasks>
+        <subtask>Create frontend/public/manifest.json with required fields</subtask>
+        <subtask>Set name, short_name, description, start_url, display: standalone</subtask>
+        <subtask>Configure theme_color and background_color</subtask>
+        <subtask>Add icon array with all required sizes</subtask>
+        <subtask>Link manifest in frontend/app/layout.tsx head</subtask>
+      </subtasks>
+    </task>
+    <task id="2" acceptance-criteria="2">
+      <title>Generate app icons</title>
+      <subtasks>
+        <subtask>Create source icon (1024x1024 PNG)</subtask>
+        <subtask>Generate sizes: 72, 96, 128, 144, 152, 192, 384, 512</subtask>
+        <subtask>Include maskable icons for Android adaptive icons</subtask>
+        <subtask>Save to frontend/public/icons/ directory</subtask>
+        <subtask>Update manifest with icon paths</subtask>
+      </subtasks>
+    </task>
+    <task id="3" acceptance-criteria="3,6,7">
+      <title>Enhance service worker for caching</title>
+      <subtasks>
+        <subtask>Update existing frontend/public/sw.js for asset caching</subtask>
+        <subtask>Implement cache-first strategy for static assets (JS, CSS, images)</subtask>
+        <subtask>Implement network-first strategy for API calls with cache fallback</subtask>
+        <subtask>Create offline fallback page</subtask>
+        <subtask>Cache recent events data for offline viewing</subtask>
+      </subtasks>
+    </task>
+    <task id="4" acceptance-criteria="4,5">
+      <title>Implement install prompt UI</title>
+      <subtasks>
+        <subtask>Listen for beforeinstallprompt event</subtask>
+        <subtask>Create install prompt banner/modal component</subtask>
+        <subtask>Show prompt to eligible users (not already installed)</subtask>
+        <subtask>Dismiss prompt if user declines</subtask>
+        <subtask>Track install events for analytics</subtask>
+      </subtasks>
+    </task>
+    <task id="5" acceptance-criteria="8">
+      <title>Service worker lifecycle management</title>
+      <subtasks>
+        <subtask>Implement skipWaiting() for immediate activation</subtask>
+        <subtask>Add version tracking in service worker</subtask>
+        <subtask>Show "update available" toast when new version detected</subtask>
+        <subtask>Allow user to refresh for new version</subtask>
+        <subtask>Clean old caches on activation</subtask>
+      </subtasks>
+    </task>
+    <task id="6" acceptance-criteria="5">
+      <title>Add meta tags and iOS support</title>
+      <subtasks>
+        <subtask>Add apple-touch-icon links for iOS</subtask>
+        <subtask>Add apple-mobile-web-app-capable meta tag</subtask>
+        <subtask>Add apple-mobile-web-app-status-bar-style meta tag</subtask>
+        <subtask>Add theme-color meta tag</subtask>
+        <subtask>Test on iOS Safari "Add to Home Screen"</subtask>
+      </subtasks>
+    </task>
+    <task id="7" acceptance-criteria="all">
+      <title>Test and validate PWA</title>
+      <subtasks>
+        <subtask>Run Lighthouse PWA audit</subtask>
+        <subtask>Fix any PWA criteria failures</subtask>
+        <subtask>Test offline functionality manually</subtask>
+        <subtask>Test install flow on Android and iOS</subtask>
+        <subtask>Document PWA limitations per platform</subtask>
+      </subtasks>
+    </task>
+  </tasks>
+
+  <existing-code>
+    <artifact type="service-worker" path="frontend/public/sw.js" relevance="high">
+      <description>
+        Existing service worker handles push notifications. Must be extended for:
+        - Asset caching (JS, CSS, images, fonts)
+        - API response caching (events for offline viewing)
+        - Offline fallback page
+
+        Current capabilities:
+        - SW_VERSION = '1.0.0' version tracking
+        - Push notification handling with rich formatting
+        - skipWaiting() and clients.claim() in lifecycle events
+        - Message handler for GET_VERSION
+      </description>
+      <code-snippet title="Current lifecycle handlers">
+<![CDATA[
+self.addEventListener('install', (event) => {
+  console.log('[SW] Service worker installing, version:', SW_VERSION);
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('[SW] Service worker activating, version:', SW_VERSION);
+  event.waitUntil(clients.claim());
+});
+]]>
+      </code-snippet>
+    </artifact>
+
+    <artifact type="layout" path="frontend/app/layout.tsx" relevance="high">
+      <description>
+        Root layout needs manifest link and PWA meta tags added to head.
+        Currently has metadata title/description but no PWA-specific configuration.
+      </description>
+      <code-snippet title="Current metadata">
+<![CDATA[
+export const metadata: Metadata = {
+  title: "Live Object AI Classifier",
+  description: "AI-powered event detection and monitoring for home security",
+  keywords: ["security", "AI", "camera", "monitoring", "event detection"],
+  authors: [{ name: "Live Object AI Team" }],
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+]]>
+      </code-snippet>
+    </artifact>
+
+    <artifact type="icons" path="frontend/public/icons/" relevance="medium">
+      <description>
+        Existing notification icons (SVG format):
+        - notification-192.svg - Main notification icon
+        - badge-72.svg - Badge icon for notifications
+        - view-24.svg - View action button
+        - dismiss-24.svg - Dismiss action button
+
+        PWA requires PNG icons in multiple sizes. These SVGs can be used as
+        design reference or converted, but new PNG files needed.
+      </description>
+    </artifact>
+
+    <artifact type="settings-ui" path="frontend/components/settings/PushNotificationSettings.tsx" relevance="medium">
+      <description>
+        Notifications settings tab (8th tab) - can add PWA install prompt UI here
+        or create separate InstallPrompt component.
+      </description>
+    </artifact>
+
+    <artifact type="api-client" path="frontend/lib/api-client.ts" relevance="low">
+      <description>
+        API client with typed methods. For offline caching, the service worker
+        will intercept API calls - no changes needed to api-client itself.
+
+        Key endpoints to cache:
+        - GET /api/v1/events - Recent events for offline viewing
+        - GET /api/v1/cameras - Camera list
+      </description>
+    </artifact>
+  </existing-code>
+
+  <technical-guidance>
+    <guidance category="manifest-requirements">
+      <title>PWA Manifest Requirements for Installability</title>
+      <content>
+Minimum requirements for browser install prompt:
+- Valid manifest.json linked in HTML head
+- Service worker registered with fetch handler
+- Served over HTTPS (or localhost for dev)
+- Icons: 192x192 and 512x512 PNG minimum
+- display must be standalone, fullscreen, or minimal-ui
+- name and short_name fields populated
+- start_url defined (typically "/" or "/events")
+      </content>
+    </guidance>
+
+    <guidance category="icon-sizes">
+      <title>Required Icon Sizes by Platform</title>
+      <content>
+Android:
+  - 72x72, 96x96, 128x128, 144x144, 152x152, 192x192, 384x384, 512x512
+  - Maskable icons: 192x192, 512x512 (with purpose: "maskable")
+
+iOS (apple-touch-icon):
+  - 120x120, 152x152, 167x167, 180x180
+  - Note: iOS ignores manifest icons, requires apple-touch-icon link tags
+
+Recommended: Generate from 1024x1024 source PNG
+      </content>
+    </guidance>
+
+    <guidance category="caching-strategy">
+      <title>Caching Strategies</title>
+      <content>
+Cache-first (static assets):
+- JavaScript bundles
+- CSS files
+- Static images (icons, logos)
+- Fonts
+
+Network-first with cache fallback (dynamic data):
+- /api/v1/events - Cache last 50 events for offline
+- /api/v1/cameras - Camera list
+
+Offline fallback:
+- /offline.html - Displayed when network unavailable
+- Show cached events list if available
+
+Cache versioning:
+- STATIC_CACHE_NAME = 'static-v1'
+- API_CACHE_NAME = 'api-v1'
+- Clean old caches on activation
+      </content>
+      <code-example title="Cache-first implementation">
+<![CDATA[
+const STATIC_CACHE = 'static-v1';
+const STATIC_ASSETS = [
+  '/',
+  '/events',
+  '/cameras',
+  '/settings',
+  '/offline',
+  // Next.js chunks will be added dynamically
+];
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Static assets: cache-first
+  if (STATIC_ASSETS.includes(url.pathname)) {
+    event.respondWith(
+      caches.match(request).then(cached => {
+        return cached || fetch(request).then(response => {
+          const clone = response.clone();
+          caches.open(STATIC_CACHE).then(cache => cache.put(request, clone));
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // API calls: network-first with cache fallback
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(API_CACHE).then(cache => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+});
+]]>
+      </code-example>
+    </guidance>
+
+    <guidance category="install-prompt">
+      <title>Install Prompt Handling</title>
+      <content>
+The beforeinstallprompt event fires when browser determines app is installable.
+Store the event and show custom UI, then call prompt() when user clicks install.
+
+Note: iOS Safari does not fire beforeinstallprompt - need alternative UI
+(instructions to use Share > Add to Home Screen).
+      </content>
+      <code-example title="Install prompt hook">
+<![CDATA[
+// hooks/useInstallPrompt.ts
+import { useState, useEffect } from 'react';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
+
+export function useInstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    // Check if already installed (standalone mode)
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+      return;
+    }
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+
+    // Track successful installs
+    window.addEventListener('appinstalled', () => {
+      setIsInstalled(true);
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    });
+
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const promptInstall = async () => {
+    if (!deferredPrompt) return false;
+
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+    setIsInstallable(false);
+
+    return outcome === 'accepted';
+  };
+
+  return { isInstallable, isInstalled, promptInstall };
+}
+]]>
+      </code-example>
+    </guidance>
+
+    <guidance category="next-js-pwa">
+      <title>Next.js PWA Considerations</title>
+      <content>
+Next.js App Router specifics:
+- Manifest link goes in layout.tsx via metadata.manifest
+- Meta tags can be added via metadata object
+- Static files in public/ folder are served at root
+- Service worker must handle Next.js dynamic chunks
+
+For manifest in Next.js:
+```typescript
+export const metadata: Metadata = {
+  manifest: '/manifest.json',
+  // ... other metadata
+};
+```
+
+For apple meta tags, use the icons field or add to head directly.
+      </content>
+    </guidance>
+
+    <guidance category="sw-updates">
+      <title>Service Worker Update Flow</title>
+      <content>
+1. On new SW install, skip waiting to activate immediately
+2. On activate, clean old caches
+3. Notify app of new version via postMessage
+4. App shows toast: "Update available. Click to refresh."
+5. User clicks, page reloads with new SW
+
+Consider using workbox-window for easier update management,
+but vanilla implementation is acceptable for MVP.
+      </content>
+    </guidance>
+  </technical-guidance>
+
+  <dependencies>
+    <dependency type="runtime">
+      <name>Next.js 16.0.7</name>
+      <purpose>App Router with metadata API for manifest/meta tags</purpose>
+    </dependency>
+    <dependency type="runtime">
+      <name>React 19.2.0</name>
+      <purpose>Hook for install prompt management</purpose>
+    </dependency>
+    <dependency type="browser-api">
+      <name>Service Worker API</name>
+      <purpose>Caching, offline support</purpose>
+    </dependency>
+    <dependency type="browser-api">
+      <name>Cache API</name>
+      <purpose>Asset and API response caching</purpose>
+    </dependency>
+    <dependency type="browser-api">
+      <name>beforeinstallprompt Event</name>
+      <purpose>Trigger install prompt (Chromium only)</purpose>
+    </dependency>
+  </dependencies>
+
+  <testing-guidance>
+    <test-approach>
+      <category>Lighthouse PWA Audit</category>
+      <description>
+        Run Lighthouse PWA audit in Chrome DevTools:
+        1. Open DevTools > Lighthouse tab
+        2. Select "Progressive Web App" category
+        3. Run audit
+        4. Fix any failures (manifest, icons, service worker)
+
+        Key criteria:
+        - Installable
+        - PWA Optimized (manifest, icons, SW)
+        - Content sized correctly
+      </description>
+    </test-approach>
+
+    <test-approach>
+      <category>Offline Testing</category>
+      <description>
+        1. Load app normally
+        2. Open DevTools > Network tab
+        3. Enable "Offline" checkbox
+        4. Verify offline page displays
+        5. Navigate to events - cached events should show
+        6. Verify no errors in console
+      </description>
+    </test-approach>
+
+    <test-approach>
+      <category>Install Flow Testing</category>
+      <description>
+        Android (Chrome):
+        1. Open app in Chrome
+        2. Install banner should appear (or use menu > Install)
+        3. App installs to home screen
+        4. Open from home screen - runs in standalone mode
+
+        iOS (Safari):
+        1. Open app in Safari
+        2. Tap Share button
+        3. Tap "Add to Home Screen"
+        4. App icon appears on home screen
+        5. Open - runs with minimal browser chrome
+      </description>
+    </test-approach>
+
+    <test-approach>
+      <category>Service Worker Update Testing</category>
+      <description>
+        1. Load app, verify SW active
+        2. Change SW_VERSION in sw.js
+        3. Rebuild and deploy
+        4. Refresh app
+        5. Verify "update available" toast appears
+        6. Click to refresh
+        7. Verify new version active
+      </description>
+    </test-approach>
+  </testing-guidance>
+
+  <references>
+    <reference type="prd">docs/PRD-phase4.md#FR14 - PWA installable on mobile devices</reference>
+    <reference type="epic">docs/epics-phase4.md#Story-P4-1.5</reference>
+    <reference type="previous-story">docs/sprint-artifacts/p4-1-4-notification-preferences.md</reference>
+    <reference type="external">https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps</reference>
+    <reference type="external">https://web.dev/pwa-checklist/</reference>
+    <reference type="external">https://nextjs.org/docs/app/building-your-application/configuring/progressive-web-apps</reference>
+  </references>
+</story-context>
