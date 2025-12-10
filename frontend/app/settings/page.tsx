@@ -31,6 +31,7 @@ import { ConnectionErrorBanner, getConnectionErrorType } from '@/components/prot
 
 import { apiClient } from '@/lib/api-client';
 import { completeSettingsSchema } from '@/lib/settings-validation';
+import { useSettings } from '@/contexts/SettingsContext';
 import type { SystemSettings, StorageStats } from '@/types/settings';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -56,6 +57,7 @@ import type { AIProvider } from '@/types/settings';
 export default function SettingsPage() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'general';
+  const { refreshSystemName } = useSettings(); // BUG-003: Refresh system name after save
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -185,6 +187,10 @@ export default function SettingsPage() {
 
       const updated = await apiClient.settings.update(changedData);
       form.reset(updated); // Reset form with new data to clear dirty state
+      // BUG-003: Refresh system name in context if it was changed
+      if ('system_name' in changedData) {
+        await refreshSystemName();
+      }
       toast.success(`Settings saved successfully at ${new Date().toLocaleTimeString()}`);
     } catch (error) {
       console.error('Failed to save settings:', error);

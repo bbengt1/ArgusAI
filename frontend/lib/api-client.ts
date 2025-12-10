@@ -363,6 +363,27 @@ export const apiClient = {
     },
 
     /**
+     * Delete multiple events by ID (FF-010)
+     * @param ids Array of event UUIDs to delete
+     * @returns Deletion statistics
+     * @throws ApiError with 400 if no IDs provided or too many (>100)
+     * @throws ApiError with 404 if no events found
+     */
+    bulkDelete: async (ids: string[]): Promise<{
+      deleted_count: number;
+      thumbnails_deleted: number;
+      frames_deleted: number;
+      space_freed_mb: number;
+      not_found_count: number;
+    }> => {
+      const params = new URLSearchParams();
+      ids.forEach(id => params.append('event_ids', id));
+      return apiFetch(`/events/bulk?${params.toString()}`, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
      * Re-analyze an event with a different analysis mode (Story P3-6.4)
      * @param id Event UUID
      * @param analysisMode Analysis mode to use: 'single_frame', 'multi_frame', 'video_native'

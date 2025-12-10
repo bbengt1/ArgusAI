@@ -837,6 +837,220 @@ async def manual_cleanup(
         )
 
 
+@router.delete("/bulk")
+async def bulk_delete_events(
+    event_ids: list[str] = Query(..., description="List of event UUIDs to delete"),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete multiple events by ID (FF-010)
+
+    Deletes multiple events and their associated thumbnails/frames in a single request.
+    Supports batch deletion for bulk cleanup operations from the UI.
+
+    Args:
+        event_ids: List of event UUIDs to delete
+        db: Database session
+
+    Returns:
+        Deletion statistics including count and space freed
+
+    Raises:
+        400: No event IDs provided or invalid IDs
+        500: Deletion failed
+
+    Example:
+        DELETE /events/bulk?event_ids=123&event_ids=456&event_ids=789
+    """
+    try:
+        if not event_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one event ID is required"
+            )
+
+        # Limit bulk deletion to 100 events per request to prevent abuse
+        if len(event_ids) > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Maximum 100 events can be deleted per request"
+            )
+
+        # Find all events that exist
+        events = db.query(Event).filter(Event.id.in_(event_ids)).all()
+
+        if not events:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No events found with the provided IDs"
+            )
+
+        deleted_count = 0
+        thumbnails_deleted = 0
+        frames_deleted = 0
+        space_freed_bytes = 0
+
+        # Delete thumbnails and frames for each event
+        for event in events:
+            # Delete thumbnail file if exists
+            if event.thumbnail_path:
+                thumbnail_file = os.path.join(THUMBNAIL_DIR, event.thumbnail_path)
+                if os.path.exists(thumbnail_file):
+                    try:
+                        space_freed_bytes += os.path.getsize(thumbnail_file)
+                        os.remove(thumbnail_file)
+                        thumbnails_deleted += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to delete thumbnail {thumbnail_file}: {e}")
+
+            # Delete frame files if event has frames (multi-frame analysis)
+            if hasattr(event, 'frame_paths') and event.frame_paths:
+                try:
+                    frame_paths = json.loads(event.frame_paths) if isinstance(event.frame_paths, str) else event.frame_paths
+                    frames_dir = os.path.join(os.path.dirname(THUMBNAIL_DIR), 'frames')
+                    for frame_path in frame_paths:
+                        frame_file = os.path.join(frames_dir, frame_path)
+                        if os.path.exists(frame_file):
+                            space_freed_bytes += os.path.getsize(frame_file)
+                            os.remove(frame_file)
+                            frames_deleted += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete frames for event {event.id}: {e}")
+
+            deleted_count += 1
+
+        # Delete events from database
+        db.query(Event).filter(Event.id.in_([e.id for e in events])).delete(synchronize_session=False)
+        db.commit()
+
+        space_freed_mb = round(space_freed_bytes / (1024 * 1024), 2)
+
+        logger.info(
+            f"Bulk delete complete: {deleted_count} events deleted, "
+            f"{thumbnails_deleted} thumbnails, {frames_deleted} frames, {space_freed_mb} MB freed",
+            extra={
+                "deleted_count": deleted_count,
+                "thumbnails_deleted": thumbnails_deleted,
+                "frames_deleted": frames_deleted,
+                "space_freed_mb": space_freed_mb,
+                "requested_ids": len(event_ids)
+            }
+        )
+
+        # Audit log
+        audit_logger.warning(
+            "AUDIT: Bulk event deletion completed",
+            extra={
+                "audit_event": "bulk_delete",
+                "operation": "DELETE /events/bulk",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "parameters": {"event_ids_count": len(event_ids)},
+                "result": {
+                    "deleted_count": deleted_count,
+                    "thumbnails_deleted": thumbnails_deleted,
+                    "frames_deleted": frames_deleted,
+                    "space_freed_mb": space_freed_mb
+                },
+                "source": "api_endpoint",
+                "status": "success"
+            }
+        )
+
+        return {
+            "deleted_count": deleted_count,
+            "thumbnails_deleted": thumbnails_deleted,
+            "frames_deleted": frames_deleted,
+            "space_freed_mb": space_freed_mb,
+            "not_found_count": len(event_ids) - deleted_count
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to bulk delete events: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete events"
+        )
+
+
+@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event(
+    event_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a single event by ID
+
+    Deletes an event and its associated thumbnail/frame files.
+
+    Args:
+        event_id: Event UUID to delete
+        db: Database session
+
+    Returns:
+        204 No Content on success
+
+    Raises:
+        404: Event not found
+        500: Deletion failed
+
+    Example:
+        DELETE /events/123e4567-e89b-12d3-a456-426614174000
+    """
+    try:
+        event = db.query(Event).filter(Event.id == event_id).first()
+
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        # Delete thumbnail file if exists
+        if event.thumbnail_path:
+            thumbnail_file = os.path.join(THUMBNAIL_DIR, event.thumbnail_path)
+            if os.path.exists(thumbnail_file):
+                try:
+                    os.remove(thumbnail_file)
+                    logger.debug(f"Deleted thumbnail for event {event_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete thumbnail {thumbnail_file}: {e}")
+
+        # Delete frame files if event has frames
+        if hasattr(event, 'frame_paths') and event.frame_paths:
+            try:
+                frame_paths = json.loads(event.frame_paths) if isinstance(event.frame_paths, str) else event.frame_paths
+                frames_dir = os.path.join(os.path.dirname(THUMBNAIL_DIR), 'frames')
+                for frame_path in frame_paths:
+                    frame_file = os.path.join(frames_dir, frame_path)
+                    if os.path.exists(frame_file):
+                        os.remove(frame_file)
+                        logger.debug(f"Deleted frame {frame_path} for event {event_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete frames for event {event_id}: {e}")
+
+        # Delete event from database
+        db.delete(event)
+        db.commit()
+
+        logger.info(f"Deleted event {event_id}")
+
+        # Return 204 No Content (no response body)
+        return None
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete event {event_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete event"
+        )
+
+
 @router.get("/{event_id}", response_model=EventResponse)
 def get_event(
     event_id: str,

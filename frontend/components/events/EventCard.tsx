@@ -8,7 +8,6 @@ import { useState, memo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Video, ChevronDown, ChevronUp } from 'lucide-react';
 import type { IEvent, SmartDetectionType } from '@/types/event';
-import { getConfidenceColor } from '@/types/event';
 import { Card } from '@/components/ui/card';
 import { SourceTypeBadge } from './SourceTypeBadge';
 import { SmartDetectionBadge } from './SmartDetectionBadge';
@@ -65,8 +64,6 @@ export const EventCard = memo(function EventCard({
   const relativeTime = formatDistanceToNow(eventDate, {
     addSuffix: true,
   });
-
-  const confidenceColorClass = getConfidenceColor(event.confidence);
 
   // Determine thumbnail source
   // thumbnail_path from DB is already full API path like "/api/v1/thumbnails/2025-11-25/uuid.jpg"
@@ -184,33 +181,23 @@ export const EventCard = memo(function EventCard({
             )}
           </div>
 
-          {/* Confidence and Objects */}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            {/* Detected Objects and Smart Detection Badge */}
-            <div className="flex flex-wrap gap-1.5">
-              {/* Smart Detection Badge for Protect events */}
-              {event.smart_detection_type && (
-                <SmartDetectionBadge
-                  detectionType={event.smart_detection_type as SmartDetectionType}
-                />
-              )}
-              {event.objects_detected.map((obj, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
-                >
-                  <span className="mr-1">{OBJECT_ICONS[obj] || OBJECT_ICONS.unknown}</span>
-                  {obj.charAt(0).toUpperCase() + obj.slice(1)}
-                </span>
-              ))}
-            </div>
-
-            {/* Confidence Score */}
-            <div
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold ${confidenceColorClass}`}
-            >
-              {event.confidence}% confident
-            </div>
+          {/* Detected Objects */}
+          <div className="flex flex-wrap gap-1.5">
+            {/* Smart Detection Badge for Protect events */}
+            {event.smart_detection_type && (
+              <SmartDetectionBadge
+                detectionType={event.smart_detection_type as SmartDetectionType}
+              />
+            )}
+            {event.objects_detected.map((obj, idx) => (
+              <span
+                key={idx}
+                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+              >
+                <span className="mr-1">{OBJECT_ICONS[obj] || OBJECT_ICONS.unknown}</span>
+                {obj.charAt(0).toUpperCase() + obj.slice(1)}
+              </span>
+            ))}
           </div>
 
           {/* Story P2-4.4: Correlation Indicator (AC1, AC2, AC3, AC8) */}

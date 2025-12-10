@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { ChevronUp, AlertCircle, Loader2, Filter, RefreshCw } from 'lucide-react';
+import { ChevronUp, AlertCircle, Loader2, Filter, RefreshCw, Trash2, X, CheckSquare } from 'lucide-react';
 import { EventCard } from '@/components/events/EventCard';
 import { DoorbellEventCard } from '@/components/events/DoorbellEventCard';
 import { EventFilters } from '@/components/events/EventFilters';
@@ -18,6 +18,17 @@ import type { IEventFilters, IEvent } from '@/types/event';
 import type { ICamera } from '@/types/camera';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 // Helper: Parse URL params to filters
@@ -121,6 +132,12 @@ export default function EventsPage() {
   const [newEventsCount, setNewEventsCount] = useState(0);
   const invalidateEvents = useInvalidateEvents();
 
+  // FF-010: Multi-select state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // FF-002: Subscribe to WebSocket for real-time updates
   const handleNewEvent = useCallback((data: { event_id: string; camera_id: string; description: string | null }) => {
     // Increment new events counter
@@ -142,6 +159,59 @@ export default function EventsPage() {
     setNewEventsCount(0);
     invalidateEvents();
   }, [invalidateEvents]);
+
+  // FF-010: Selection handlers
+  const toggleSelection = useCallback((eventId: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(eventId)) {
+        newSet.delete(eventId);
+      } else {
+        newSet.add(eventId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback((allEventIds: string[]) => {
+    setSelectedIds(prev => {
+      if (prev.size === allEventIds.length) {
+        // All selected, deselect all
+        return new Set();
+      }
+      // Select all
+      return new Set(allEventIds);
+    });
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const result = await apiClient.events.bulkDelete(Array.from(selectedIds));
+      toast.success(`Deleted ${result.deleted_count} events`, {
+        description: result.space_freed_mb > 0
+          ? `Freed ${result.space_freed_mb} MB of storage`
+          : undefined,
+      });
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      invalidateEvents();
+    } catch (error) {
+      toast.error('Failed to delete events', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }, [selectedIds, invalidateEvents]);
 
   // Sync filters to URL params
   useEffect(() => {
@@ -229,6 +299,17 @@ export default function EventsPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* FF-010: Selection mode toggle */}
+              {!selectionMode && allEvents.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectionMode(true)}
+                >
+                  <CheckSquare className="w-4 h-4 mr-2" />
+                  Select
+                </Button>
+              )}
               {/* FF-002: Refresh button with new events indicator */}
               <Button
                 variant={newEventsCount > 0 ? 'default' : 'outline'}
@@ -304,21 +385,59 @@ export default function EventsPage() {
         {/* Events Timeline */}
         {!isLoading && !isError && allEvents.length > 0 && (
           <div className="space-y-4">
-            {allEvents.map((event) =>
-              event.is_doorbell_ring ? (
-                <DoorbellEventCard
-                  key={event.id}
-                  event={event}
-                  onClick={() => setSelectedEvent(event)}
-                />
-              ) : (
-                <EventCard
-                  key={event.id}
-                  event={event}
-                  onClick={() => setSelectedEvent(event)}
-                />
-              )
+            {/* FF-010: Selection header when in selection mode */}
+            {selectionMode && (
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg sticky top-0 z-10">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    checked={selectedIds.size === allEvents.length && allEvents.length > 0}
+                    onCheckedChange={() => toggleSelectAll(allEvents.map(e => e.id))}
+                    aria-label="Select all events"
+                  />
+                  <span className="text-sm font-medium">
+                    {selectedIds.size > 0
+                      ? `${selectedIds.size} selected`
+                      : 'Select events'}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={exitSelectionMode}
+                >
+                  <X className="w-4 h-4 mr-1" />
+                  Cancel
+                </Button>
+              </div>
             )}
+
+            {allEvents.map((event) => (
+              <div key={event.id} className="flex items-start gap-3">
+                {/* FF-010: Selection checkbox */}
+                {selectionMode && (
+                  <div className="pt-4 pl-1">
+                    <Checkbox
+                      checked={selectedIds.has(event.id)}
+                      onCheckedChange={() => toggleSelection(event.id)}
+                      aria-label={`Select event ${event.id}`}
+                    />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  {event.is_doorbell_ring ? (
+                    <DoorbellEventCard
+                      event={event}
+                      onClick={() => !selectionMode && setSelectedEvent(event)}
+                    />
+                  ) : (
+                    <EventCard
+                      event={event}
+                      onClick={() => !selectionMode && setSelectedEvent(event)}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
 
             {/* Loading More Indicator */}
             {isFetchingNextPage && (
@@ -361,6 +480,59 @@ export default function EventsPage() {
         allEvents={allEvents}
         onNavigate={setSelectedEvent}
       />
+
+      {/* FF-010: Floating action bar when items selected */}
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-3 bg-background border border-border rounded-lg shadow-lg px-4 py-3">
+            <span className="text-sm font-medium">
+              {selectedIds.size} event{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeleting}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* FF-010: Delete confirmation dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} event{selectedIds.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the selected events
+              and their associated thumbnails and frames.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

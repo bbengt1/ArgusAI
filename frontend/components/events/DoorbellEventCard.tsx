@@ -15,7 +15,6 @@ import { useState, memo } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Bell, Video, ChevronDown, ChevronUp } from 'lucide-react';
 import type { IEvent } from '@/types/event';
-import { getConfidenceColor } from '@/types/event';
 import { Card } from '@/components/ui/card';
 
 interface DoorbellEventCardProps {
@@ -60,7 +59,6 @@ export const DoorbellEventCard = memo(function DoorbellEventCard({
 
   const eventDate = parseUTCTimestamp(event.timestamp);
   const relativeTime = formatRelativeTime(eventDate);
-  const confidenceColorClass = getConfidenceColor(event.confidence);
 
   // Determine thumbnail source
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -155,35 +153,25 @@ export const DoorbellEventCard = memo(function DoorbellEventCard({
             )}
           </div>
 
-          {/* Detected Objects and Confidence */}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            {/* Detected Objects - Always show Person first if detected */}
-            <div className="flex flex-wrap gap-1.5">
-              {hasPersonDetected && (
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  <span className="mr-1">{OBJECT_ICONS.person}</span>
-                  Person
+          {/* Detected Objects - Always show Person first if detected */}
+          <div className="flex flex-wrap gap-1.5">
+            {hasPersonDetected && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <span className="mr-1">{OBJECT_ICONS.person}</span>
+                Person
+              </span>
+            )}
+            {event.objects_detected
+              .filter((obj) => obj !== 'person')
+              .map((obj, idx) => (
+                <span
+                  key={idx}
+                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+                >
+                  <span className="mr-1">{OBJECT_ICONS[obj] || OBJECT_ICONS.unknown}</span>
+                  {obj.charAt(0).toUpperCase() + obj.slice(1)}
                 </span>
-              )}
-              {event.objects_detected
-                .filter((obj) => obj !== 'person')
-                .map((obj, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
-                  >
-                    <span className="mr-1">{OBJECT_ICONS[obj] || OBJECT_ICONS.unknown}</span>
-                    {obj.charAt(0).toUpperCase() + obj.slice(1)}
-                  </span>
-                ))}
-            </div>
-
-            {/* Confidence Score */}
-            <div
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold ${confidenceColorClass}`}
-            >
-              {event.confidence}% confident
-            </div>
+              ))}
           </div>
         </div>
       </div>
