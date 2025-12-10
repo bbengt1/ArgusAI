@@ -216,6 +216,79 @@ development_status:
   epic-p3-7-retrospective: optional
 
   # ============================================================================
+  # PHASE 4: Intelligent Context & Smart Home Integration
+  # ============================================================================
+  # Source: docs/epics-phase4.md
+  # PRD: docs/PRD-phase4.md
+
+  # Epic P4-1: Push Notifications & PWA
+  epic-p4-1: backlog
+  p4-1-1-implement-web-push-backend: backlog
+  p4-1-2-create-push-subscription-ui: backlog
+  p4-1-3-rich-notification-formatting: backlog
+  p4-1-4-notification-preferences: backlog
+  p4-1-5-pwa-manifest-and-service-worker: backlog
+  epic-p4-1-retrospective: optional
+
+  # Epic P4-2: Home Assistant Integration
+  epic-p4-2: backlog
+  p4-2-1-mqtt-client-implementation: backlog
+  p4-2-2-home-assistant-discovery: backlog
+  p4-2-3-event-publishing: backlog
+  p4-2-4-integration-settings-ui: backlog
+  p4-2-5-camera-status-sensors: backlog
+  epic-p4-2-retrospective: optional
+
+  # Epic P4-3: Temporal Context Engine
+  epic-p4-3: backlog
+  p4-3-1-event-embedding-generation: backlog
+  p4-3-2-similarity-search: backlog
+  p4-3-3-recurring-visitor-detection: backlog
+  p4-3-4-context-enhanced-ai-prompts: backlog
+  p4-3-5-pattern-detection: backlog
+  p4-3-6-entity-management-ui: backlog
+  epic-p4-3-retrospective: optional
+
+  # Epic P4-4: Activity Summaries & Digests
+  epic-p4-4: backlog
+  p4-4-1-summary-generation-service: backlog
+  p4-4-2-daily-digest-scheduler: backlog
+  p4-4-3-digest-delivery: backlog
+  p4-4-4-summary-ui-in-dashboard: backlog
+  p4-4-5-on-demand-summary-generation: backlog
+  epic-p4-4-retrospective: optional
+
+  # Epic P4-5: User Feedback & Learning
+  epic-p4-5: backlog
+  p4-5-1-feedback-collection-ui: backlog
+  p4-5-2-feedback-storage-and-api: backlog
+  p4-5-3-accuracy-dashboard: backlog
+  p4-5-4-feedback-informed-prompts: backlog
+  epic-p4-5-retrospective: optional
+
+  # Epic P4-6: Voice Assistant Integration (Growth)
+  epic-p4-6: backlog
+  p4-6-1-homekit-accessory-server: backlog
+  p4-6-2-homekit-motion-events: backlog
+  p4-6-3-voice-query-api: backlog
+  epic-p4-6-retrospective: optional
+
+  # Epic P4-7: Behavioral Anomaly Detection (Growth)
+  epic-p4-7: backlog
+  p4-7-1-baseline-activity-learning: backlog
+  p4-7-2-anomaly-scoring: backlog
+  p4-7-3-anomaly-alerts: backlog
+  epic-p4-7-retrospective: optional
+
+  # Epic P4-8: Person & Vehicle Recognition (Growth)
+  epic-p4-8: backlog
+  p4-8-1-face-embedding-storage: backlog
+  p4-8-2-person-matching: backlog
+  p4-8-3-vehicle-recognition: backlog
+  p4-8-4-named-entity-alerts: backlog
+  epic-p4-8-retrospective: optional
+
+  # ============================================================================
   # TECHNICAL DEBT
   # ============================================================================
   # Source: docs/backlog.md
