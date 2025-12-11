@@ -233,7 +233,7 @@ development_status:
   # Epic P4-2: Home Assistant Integration
   epic-p4-2: contexted
   p4-2-1-mqtt-client-implementation: done
-  p4-2-2-home-assistant-discovery: backlog
+  p4-2-2-home-assistant-discovery: done
   p4-2-3-event-publishing: backlog
   p4-2-4-integration-settings-ui: backlog
   p4-2-5-camera-status-sensors: backlog

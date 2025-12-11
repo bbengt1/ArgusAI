@@ -35,6 +35,7 @@ from app.services.motion_detection_service import motion_detection_service
 from app.services.detection_zone_manager import detection_zone_manager
 from app.services.event_processor import get_event_processor, ProcessingEvent
 from app.services.protect_service import get_protect_service
+from app.services.mqtt_discovery_service import on_camera_deleted, on_camera_disabled  # Story P4-2.2
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,7 @@ def get_camera(
 
 
 @router.put("/{camera_id}", response_model=CameraResponse)
-def update_camera(
+async def update_camera(
     camera_id: str,
     camera_data: CameraUpdate,
     db: Session = Depends(get_db)
@@ -258,6 +259,12 @@ def update_camera(
             # Stop camera (was enabled, now disabled)
             camera_service.stop_camera(camera_id)
 
+            # Remove MQTT discovery config when camera disabled (Story P4-2.2, AC4)
+            try:
+                await on_camera_disabled(camera_id)
+            except Exception as e:
+                logger.warning(f"Failed to remove MQTT discovery for disabled camera {camera_id}: {e}")
+
         logger.info(f"Camera updated: {camera_id}")
 
         return camera
@@ -274,7 +281,7 @@ def update_camera(
 
 
 @router.delete("/{camera_id}", status_code=status.HTTP_200_OK)
-def delete_camera(
+async def delete_camera(
     camera_id: str,
     db: Session = Depends(get_db)
 ):
@@ -302,6 +309,13 @@ def delete_camera(
 
         # Stop capture thread if running
         camera_service.stop_camera(camera_id)
+
+        # Remove MQTT discovery config (Story P4-2.2, AC4)
+        try:
+            await on_camera_deleted(camera_id)
+        except Exception as e:
+            logger.warning(f"Failed to remove MQTT discovery for camera {camera_id}: {e}")
+            # Don't fail delete if MQTT discovery removal fails
 
         # Delete from database
         db.delete(camera)

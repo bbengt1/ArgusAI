@@ -374,14 +374,15 @@ async def test_mqtt_connection(test_request: MQTTTestRequest):
 @router.post("/mqtt/publish-discovery", response_model=PublishDiscoveryResponse)
 async def publish_discovery(db: Session = Depends(get_db)):
     """
-    Manually trigger Home Assistant discovery publishing.
+    Manually trigger Home Assistant discovery publishing (Story P4-2.2, AC1).
 
     Publishes discovery configuration for all enabled cameras.
     Use after adding new cameras or when discovery messages need refresh.
 
-    Note: This endpoint is a placeholder for Story P4-2.2.
-    Full implementation will be added in that story.
+    Requires MQTT to be connected and discovery to be enabled.
     """
+    from app.services.mqtt_discovery_service import get_discovery_service
+
     mqtt_service = get_mqtt_service()
 
     if not mqtt_service.is_connected:
@@ -390,15 +391,28 @@ async def publish_discovery(db: Session = Depends(get_db)):
             detail="MQTT not connected. Configure and enable MQTT first."
         )
 
-    # TODO: Implement full discovery publishing in Story P4-2.2
-    # For now, return a placeholder response
+    # Check if discovery is enabled
+    config = db.query(MQTTConfig).first()
+    if config and not config.discovery_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MQTT discovery is disabled. Enable it in MQTT settings."
+        )
+
+    # Publish discovery for all cameras
+    discovery_service = get_discovery_service()
+    cameras_published = await discovery_service.publish_all_discovery_configs()
+
     logger.info(
-        "Manual discovery publish requested",
-        extra={"event_type": "mqtt_discovery_requested"}
+        "Manual discovery publish completed",
+        extra={
+            "event_type": "mqtt_discovery_manual_publish",
+            "cameras_published": cameras_published
+        }
     )
 
     return PublishDiscoveryResponse(
         success=True,
-        message="Discovery publishing will be implemented in Story P4-2.2",
-        cameras_published=0
+        message=f"Published discovery for {cameras_published} cameras",
+        cameras_published=cameras_published
     )

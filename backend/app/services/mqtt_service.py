@@ -198,6 +198,17 @@ class MQTTService:
             self._client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
             logger.debug("MQTT TLS enabled")
 
+        # Configure Last Will and Testament (LWT) for availability (Story P4-2.2, AC7)
+        # This message is sent by the broker if the client disconnects unexpectedly
+        status_topic = f"{self._config.topic_prefix}/status"
+        self._client.will_set(
+            topic=status_topic,
+            payload="offline",
+            qos=1,
+            retain=True
+        )
+        logger.debug(f"MQTT LWT configured on topic {status_topic}")
+
         # Start network loop in background thread
         self._client.loop_start()
 

@@ -38,6 +38,7 @@ from app.services.event_processor import initialize_event_processor, shutdown_ev
 from app.services.cleanup_service import get_cleanup_service
 from app.services.protect_service import get_protect_service  # Story P2-1.4: Protect WebSocket
 from app.services.mqtt_service import initialize_mqtt_service, shutdown_mqtt_service  # Story P4-2.1: MQTT
+from app.services.mqtt_discovery_service import initialize_discovery_service, get_discovery_service  # Story P4-2.2: HA Discovery
 
 # Application version
 APP_VERSION = "1.0.0"
@@ -375,6 +376,14 @@ async def lifespan(app: FastAPI):
         logger.info(
             "MQTT service initialized",
             extra={"event_type": "mqtt_init_complete"}
+        )
+
+        # Initialize MQTT discovery service (Story P4-2.2)
+        # Must be after MQTT service to register on_connect callback
+        await initialize_discovery_service()
+        logger.info(
+            "MQTT discovery service initialized",
+            extra={"event_type": "mqtt_discovery_init_complete"}
         )
     except Exception as e:
         # MQTT failure should not prevent app startup
