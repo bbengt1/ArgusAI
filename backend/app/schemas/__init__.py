@@ -17,6 +17,16 @@ from app.schemas.motion import (
     DetectionZone,
     DetectionSchedule,
 )
+from app.schemas.feedback import (
+    FeedbackCreate,
+    FeedbackUpdate,
+    FeedbackResponse,
+    # Story P4-5.2: Feedback statistics schemas
+    CameraFeedbackStats,
+    DailyFeedbackStats,
+    CorrectionSummary,
+    FeedbackStatsResponse,
+)
 
 __all__ = [
     "CameraBase",
@@ -33,4 +43,12 @@ __all__ = [
     "MotionEventStatsResponse",
     "DetectionZone",
     "DetectionSchedule",
+    "FeedbackCreate",
+    "FeedbackUpdate",
+    "FeedbackResponse",
+    # Story P4-5.2: Feedback statistics schemas
+    "CameraFeedbackStats",
+    "DailyFeedbackStats",
+    "CorrectionSummary",
+    "FeedbackStatsResponse",
 ]

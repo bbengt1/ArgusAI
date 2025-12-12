@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import List, Optional, Literal
+from app.schemas.feedback import FeedbackResponse
 
 
 class MatchedEntitySummary(BaseModel):
@@ -145,6 +146,8 @@ class EventResponse(BaseModel):
     frame_timestamps: Optional[List[float]] = Field(None, description="Timestamps in seconds for each key frame")
     # Story P4-3.3: Recurring Visitor Detection
     matched_entity: Optional["MatchedEntitySummary"] = Field(None, description="Matched recurring entity, if any")
+    # Story P4-5.1: User Feedback
+    feedback: Optional[FeedbackResponse] = Field(None, description="User feedback on this event's description")
 
     @field_validator('objects_detected', mode='before')
     @classmethod

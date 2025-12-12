@@ -31,6 +31,60 @@ export interface ICorrelatedEvent {
   timestamp: string;              // ISO 8601 datetime
 }
 
+/**
+ * Story P4-5.1: Event Feedback interface for user ratings and corrections
+ */
+export interface IEventFeedback {
+  id: string;                     // Feedback UUID
+  event_id: string;               // Event UUID
+  camera_id?: string | null;      // Story P4-5.2: Denormalized camera ID for aggregate stats
+  rating: 'helpful' | 'not_helpful';  // User rating
+  correction: string | null;      // Optional correction text
+  created_at: string;             // ISO 8601 datetime
+  updated_at?: string | null;     // ISO 8601 datetime
+}
+
+/**
+ * Story P4-5.2: Per-camera feedback statistics
+ */
+export interface ICameraFeedbackStats {
+  camera_id: string;
+  camera_name: string;
+  helpful_count: number;
+  not_helpful_count: number;
+  accuracy_rate: number;          // Percentage 0-100
+}
+
+/**
+ * Story P4-5.2: Daily feedback statistics for trend analysis
+ */
+export interface IDailyFeedbackStats {
+  date: string;                   // YYYY-MM-DD format
+  helpful_count: number;
+  not_helpful_count: number;
+}
+
+/**
+ * Story P4-5.2: Correction summary for common patterns
+ */
+export interface ICorrectionSummary {
+  correction_text: string;
+  count: number;
+}
+
+/**
+ * Story P4-5.2: Aggregate feedback statistics response
+ */
+export interface IFeedbackStats {
+  total_count: number;
+  helpful_count: number;
+  not_helpful_count: number;
+  accuracy_rate: number;                         // Percentage 0-100
+  feedback_by_camera: Record<string, ICameraFeedbackStats>;
+  daily_trend: IDailyFeedbackStats[];
+  top_corrections: ICorrectionSummary[];
+}
+
 export interface IEvent {
   id: string;                     // UUID
   camera_id: string;              // UUID foreign key
@@ -70,6 +124,8 @@ export interface IEvent {
   // Story P3-7.5: Key frames for gallery display
   key_frames_base64?: string[] | null;  // Base64-encoded key frames used for AI analysis
   frame_timestamps?: number[] | null;   // Timestamps in seconds for each key frame
+  // Story P4-5.1: User feedback
+  feedback?: IEventFeedback | null;     // User feedback on this event's description
 }
 
 /**

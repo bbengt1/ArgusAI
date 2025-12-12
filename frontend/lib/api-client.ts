@@ -13,6 +13,8 @@ import type {
   IEvent,
   IEventFilters,
   IEventsResponse,
+  IEventFeedback,  // Story P4-5.1
+  IFeedbackStats,  // Story P4-5.2
 } from '@/types/event';
 import type {
   SystemSettings,
@@ -403,6 +405,88 @@ export const apiClient = {
         method: 'POST',
         body: JSON.stringify({ analysis_mode: analysisMode }),
       });
+    },
+
+    /**
+     * Submit feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @param data Feedback data with rating and optional correction
+     * @returns Created feedback object
+     * @throws ApiError with 404 if event not found
+     * @throws ApiError with 409 if feedback already exists
+     */
+    submitFeedback: async (eventId: string, data: {
+      rating: 'helpful' | 'not_helpful';
+      correction?: string;
+    }): Promise<IEventFeedback> => {
+      return apiFetch<IEventFeedback>(`/events/${eventId}/feedback`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * Get feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @returns Feedback object if exists
+     * @throws ApiError with 404 if event or feedback not found
+     */
+    getFeedback: async (eventId: string): Promise<IEventFeedback> => {
+      return apiFetch<IEventFeedback>(`/events/${eventId}/feedback`);
+    },
+
+    /**
+     * Update feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @param data Updated feedback data
+     * @returns Updated feedback object
+     * @throws ApiError with 404 if event or feedback not found
+     */
+    updateFeedback: async (eventId: string, data: {
+      rating?: 'helpful' | 'not_helpful';
+      correction?: string;
+    }): Promise<IEventFeedback> => {
+      return apiFetch<IEventFeedback>(`/events/${eventId}/feedback`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * Delete feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @throws ApiError with 404 if event or feedback not found
+     */
+    deleteFeedback: async (eventId: string): Promise<void> => {
+      await apiFetch<void>(`/events/${eventId}/feedback`, {
+        method: 'DELETE',
+      });
+    },
+  },
+
+  /**
+   * Feedback Statistics API client (Story P4-5.2)
+   */
+  feedback: {
+    /**
+     * Get aggregate feedback statistics for AI description accuracy monitoring
+     * @param params Optional filters: camera_id, start_date, end_date
+     * @returns Aggregate feedback statistics including accuracy rates, per-camera breakdown, daily trends, and top corrections
+     */
+    getStats: async (params?: {
+      camera_id?: string;
+      start_date?: string;
+      end_date?: string;
+    }): Promise<IFeedbackStats> => {
+      const queryParams = new URLSearchParams();
+      if (params?.camera_id) queryParams.append('camera_id', params.camera_id);
+      if (params?.start_date) queryParams.append('start_date', params.start_date);
+      if (params?.end_date) queryParams.append('end_date', params.end_date);
+
+      const queryString = queryParams.toString();
+      const endpoint = `/feedback/stats${queryString ? `?${queryString}` : ''}`;
+
+      return apiFetch<IFeedbackStats>(endpoint);
     },
   },
 

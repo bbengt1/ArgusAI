@@ -260,8 +260,8 @@ development_status:
 
   # Epic P4-5: User Feedback & Learning
   epic-p4-5: backlog
-  p4-5-1-feedback-collection-ui: backlog
-  p4-5-2-feedback-storage-and-api: backlog
+  p4-5-1-feedback-collection-ui: done
+  p4-5-2-feedback-storage-and-api: done
   p4-5-3-accuracy-dashboard: backlog
   p4-5-4-feedback-informed-prompts: backlog
   epic-p4-5-retrospective: optional
