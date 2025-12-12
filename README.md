@@ -1,4 +1,4 @@
-# Live Object AI Classifier
+# ArgusAI
 
 AI-powered event detection and monitoring for home security. Analyzes video feeds from multiple camera sources, detects motion and smart events, and uses AI to generate natural language descriptions of what's happening.
 
@@ -214,7 +214,7 @@ To enable xAI Grok:
 ## Project Structure
 
 ```
-live-object-ai-classifier/
+argusai/
 ├── backend/                  # FastAPI backend
 │   ├── app/
 │   │   ├── api/v1/          # REST API endpoints

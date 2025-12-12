@@ -17,7 +17,7 @@
 
 ## Executive Summary
 
-**Topic:** Live Object AI Classifier - Multi-camera AI vision system with Python backend and Next.js frontend
+**Topic:** ArgusAI - Multi-camera AI vision system with Python backend and Next.js frontend
 
 **Session Goals:** Comprehensive exploration of all aspects including:
 - User experience and interface design

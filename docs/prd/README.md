@@ -1,5 +1,5 @@
 # Product Requirements Document (PRD)
-# Live Object AI Classifier
+# ArgusAI
 
 **Document Version:** 1.0  
 **Date:** 2025-11-15  

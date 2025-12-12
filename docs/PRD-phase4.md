@@ -1,4 +1,4 @@
-# Live Object AI Classifier - Phase 4 PRD
+# ArgusAI - Phase 4 PRD
 
 **Author:** Brent
 **Date:** 2025-12-10
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Phase 4 transforms the Live Object AI Classifier from a reactive event system into an **intelligent context-aware assistant**. By remembering past events, detecting patterns, and integrating with smart home ecosystems, the system becomes proactive - telling you not just what's happening, but what's unusual, what you should know, and automating responses to routine events.
+Phase 4 transforms the ArgusAI from a reactive event system into an **intelligent context-aware assistant**. By remembering past events, detecting patterns, and integrating with smart home ecosystems, the system becomes proactive - telling you not just what's happening, but what's unusual, what you should know, and automating responses to routine events.
 
 This phase builds on the video-aware AI descriptions from Phase 3, adding temporal intelligence and ecosystem connectivity.
 

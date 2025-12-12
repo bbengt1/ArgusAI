@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #===============================================================================
-# Live Object AI Classifier - Installation Script
+# ArgusAI - Installation Script
 #===============================================================================
-# This script automates the setup of the Live Object AI Classifier application.
+# This script automates the setup of the ArgusAI application.
 # It checks dependencies, creates virtual environments, installs packages,
 # initializes the database, and generates required configuration.
 #

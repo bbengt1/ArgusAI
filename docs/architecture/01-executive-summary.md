@@ -6,7 +6,7 @@
 
 ## Architectural Overview
 
-The Live Object AI Classifier uses an **event-driven architecture** that processes camera feeds through motion detection, generates natural language descriptions via AI models, and delivers real-time notifications to a web dashboard. The system prioritizes simplicity and privacy by storing semantic descriptions rather than video footage, making it suitable for security, accessibility, and home automation use cases.
+The ArgusAI uses an **event-driven architecture** that processes camera feeds through motion detection, generates natural language descriptions via AI models, and delivers real-time notifications to a web dashboard. The system prioritizes simplicity and privacy by storing semantic descriptions rather than video footage, making it suitable for security, accessibility, and home automation use cases.
 
 ## High-Level Architecture Diagram
 

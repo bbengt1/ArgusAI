@@ -1,4 +1,4 @@
-# live-object-ai-classifier - Epic Breakdown
+# argusai - Epic Breakdown
 
 **Date:** 2025-11-15
 **Project Level:** Simple (Quick Flow)

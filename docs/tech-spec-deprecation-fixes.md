@@ -1,4 +1,4 @@
-# live-object-ai-classifier - Technical Specification
+# argusai - Technical Specification
 
 **Author:** Brent
 **Date:** 2025-11-15
@@ -13,7 +13,7 @@
 ### Available Documents
 
 **Documents Loaded:**
-- ✅ Product Brief: `docs/product-brief.md` - Live Object AI Classifier vision and architecture
+- ✅ Product Brief: `docs/product-brief.md` - ArgusAI vision and architecture
 - ✅ Architecture Document: `docs/architecture.md` - Event-driven system design
 - ✅ Code Review: F2-1 Motion Detection Algorithm review (2025-11-15)
 
@@ -187,7 +187,7 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutdown complete")
 
 app = FastAPI(
-    title="Live Object AI Classifier API",
+    title="ArgusAI API",
     description="API for camera-based motion detection and AI-powered object description",
     version="1.0.0",
     docs_url="/docs",
@@ -538,7 +538,7 @@ pytest -v --tb=short  # Should show 78 passing tests with deprecation warnings
 - Code:
   ```python
   app = FastAPI(
-      title="Live Object AI Classifier API",
+      title="ArgusAI API",
       description="API for camera-based motion detection and AI-powered object description",
       version="1.0.0",
       docs_url="/docs",

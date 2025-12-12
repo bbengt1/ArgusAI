@@ -137,7 +137,7 @@ class MQTTDiscoveryService:
             "device": {
                 "identifiers": [device_identifier],
                 "name": camera.name,
-                "manufacturer": "Live Object AI",
+                "manufacturer": "ArgusAI",
                 "model": model_name,
                 "sw_version": APP_VERSION,
             }
@@ -181,7 +181,7 @@ class MQTTDiscoveryService:
             "device": {
                 "identifiers": [device_identifier],
                 "name": camera.name,
-                "manufacturer": "Live Object AI",
+                "manufacturer": "ArgusAI",
                 "model": "AI Classifier",
                 "sw_version": APP_VERSION,
             }
@@ -224,7 +224,7 @@ class MQTTDiscoveryService:
             "device": {
                 "identifiers": [device_identifier],
                 "name": camera.name,
-                "manufacturer": "Live Object AI",
+                "manufacturer": "ArgusAI",
                 "model": "AI Classifier",
                 "sw_version": APP_VERSION,
             }
@@ -266,7 +266,7 @@ class MQTTDiscoveryService:
             "device": {
                 "identifiers": [device_identifier],
                 "name": camera.name,
-                "manufacturer": "Live Object AI",
+                "manufacturer": "ArgusAI",
                 "model": "AI Classifier",
                 "sw_version": APP_VERSION,
             }
@@ -308,7 +308,7 @@ class MQTTDiscoveryService:
             "device": {
                 "identifiers": [device_identifier],
                 "name": camera.name,
-                "manufacturer": "Live Object AI",
+                "manufacturer": "ArgusAI",
                 "model": "AI Classifier",
                 "sw_version": APP_VERSION,
             }
@@ -350,7 +350,7 @@ class MQTTDiscoveryService:
             "device": {
                 "identifiers": [device_identifier],
                 "name": camera.name,
-                "manufacturer": "Live Object AI",
+                "manufacturer": "ArgusAI",
                 "model": "AI Classifier",
                 "sw_version": APP_VERSION,
             }

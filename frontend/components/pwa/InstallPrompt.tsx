@@ -141,7 +141,7 @@ export function InstallPrompt({ variant = 'banner' }: InstallPromptProps) {
               <Download className="h-5 w-5 text-primary-foreground" />
             </div>
             <div className="min-w-0">
-              <p className="font-medium truncate">Install Live Object AI</p>
+              <p className="font-medium truncate">Install ArgusAI</p>
               <p className="text-sm text-muted-foreground truncate">
                 {isIOS ? 'Add to home screen' : 'Quick access & offline support'}
               </p>
@@ -180,7 +180,7 @@ function IOSInstallDialog({
         <DialogHeader>
           <DialogTitle>Install on iOS</DialogTitle>
           <DialogDescription>
-            Follow these steps to add Live Object AI to your home screen
+            Follow these steps to add ArgusAI to your home screen
           </DialogDescription>
         </DialogHeader>
 

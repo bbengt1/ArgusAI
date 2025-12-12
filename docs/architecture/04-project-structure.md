@@ -7,7 +7,7 @@
 ## Complete Project Structure
 
 ```
-live-object-ai-classifier/
+argusai/
 ├── backend/
 │   ├── main.py                          # FastAPI app entry point, server startup
 │   ├── requirements.txt                 # Python dependencies with pinned versions

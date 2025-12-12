@@ -6,7 +6,7 @@
 
 ## Overview
 
-This document details all functional requirements for the Live Object AI Classifier MVP, organized by major feature area. Each requirement includes priority, acceptance criteria, and dependencies.
+This document details all functional requirements for the ArgusAI MVP, organized by major feature area. Each requirement includes priority, acceptance criteria, and dependencies.
 
 **Priority Levels:**
 - **MUST HAVE** - Required for MVP launch, blocking

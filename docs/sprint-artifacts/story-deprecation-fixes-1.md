@@ -153,7 +153,7 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutdown complete")
 
 app = FastAPI(
-    title="Live Object AI Classifier API",
+    title="ArgusAI API",
     description="...",
     version="1.0.0",
     lifespan=lifespan  # ← Pass lifespan here

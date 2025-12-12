@@ -1,0 +1,175 @@
+<story-context id="p4-3-6-entity-management-ui" v="1.0">
+  <metadata>
+    <epicId>P4-3</epicId>
+    <storyId>6</storyId>
+    <title>Entity Management UI</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-3-6-entity-management-ui.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>a user interface to view, name, delete, and merge recognized entities (recurring people and vehicles)</iWant>
+    <soThat>I can manage who is known to my system, assign meaningful names like "Mail Carrier" or "Neighbor Bob", and maintain accurate visitor tracking</soThat>
+    <tasks>
+      <task id="1" acs="8,9,11">Create entity types and API client methods</task>
+      <task id="2" acs="2,14">Create EntityCard component</task>
+      <task id="3" acs="1,3,4,5">Create EntityList component with filtering</task>
+      <task id="4" acs="6,7,14">Create EntityDetail modal/panel</task>
+      <task id="5" acs="8,11">Implement entity name editing</task>
+      <task id="6" acs="9,10,11">Implement entity deletion</task>
+      <task id="7" acs="1,13,15">Create Entities page</task>
+      <task id="8" acs="12,13">Implement loading and empty states</task>
+      <task id="9" acs="1">Add navigation link</task>
+      <task id="10" acs="1-15">Write component tests</task>
+      <task id="11" acs="8,9,11">Write integration tests</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1">Entity list page displays all recognized entities sorted by last_seen_at descending</ac>
+    <ac id="2">Entity list shows: thumbnail preview, name (or "Unknown"), entity_type, occurrence_count, first_seen_at, last_seen_at</ac>
+    <ac id="3">Entity list supports filtering by entity_type (person, vehicle, unknown)</ac>
+    <ac id="4">Entity list supports filtering by named_only (show only entities with names)</ac>
+    <ac id="5">Entity list supports pagination (50 per page default, configurable)</ac>
+    <ac id="6">Clicking an entity opens detail view showing entity info and recent events</ac>
+    <ac id="7">Entity detail view shows occurrence history with thumbnails and timestamps</ac>
+    <ac id="8">User can assign/update entity name via inline edit or modal</ac>
+    <ac id="9">User can delete an entity with confirmation dialog</ac>
+    <ac id="10">Delete confirmation shows warning about unlinking events (events kept, only entity link removed)</ac>
+    <ac id="11">API error handling with user-friendly error messages (entity not found, network errors)</ac>
+    <ac id="12">Loading states displayed during API calls (skeleton loaders, spinners)</ac>
+    <ac id="13">Empty state displayed when no entities exist with helpful guidance</ac>
+    <ac id="14">Entity cards show thumbnail from most recent associated event</ac>
+    <ac id="15">Responsive design works on mobile (stacked layout) and desktop (grid layout)</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/PRD-phase4.md" title="Phase 4 PRD" section="FR5 - Familiar Faces Registry" snippet="System maintains a familiar faces/vehicles registry. Recognized entities stored with entity_type, name, reference_embedding." />
+      <doc path="docs/PRD-phase4.md" title="Phase 4 PRD" section="API Additions" snippet="GET /api/v1/entities - List recognized entities. PUT /api/v1/entities/{id} - Name an entity." />
+      <doc path="docs/epics-phase4.md" title="Phase 4 Epics" section="Story P4-3.6" snippet="Entity Management UI - Create frontend for viewing/editing/deleting recognized entities with filtering and pagination." />
+      <doc path="docs/architecture.md" title="Architecture" section="Phase 4 API Contracts" snippet="Entity API endpoints for listing, updating, and deleting recognized entities from the temporal context engine." />
+    </docs>
+
+    <code>
+      <!-- Backend API (already implemented) -->
+      <file path="backend/app/api/v1/context.py" kind="router" symbol="router" lines="472-660" reason="Entity API endpoints: GET /entities, GET /entities/{id}, PUT /entities/{id}, DELETE /entities/{id}" />
+      <file path="backend/app/services/entity_service.py" kind="service" symbol="EntityService" reason="Entity CRUD operations, get_all_entities, get_entity, update_entity, delete_entity" />
+      <file path="backend/app/models/recognized_entity.py" kind="model" symbol="RecognizedEntity, EntityEvent" reason="Entity model with entity_type, name, embeddings; EntityEvent junction table" />
+
+      <!-- Frontend patterns to follow -->
+      <file path="frontend/app/cameras/page.tsx" kind="page" symbol="CamerasPage" reason="Reference pattern: grid layout, filtering, delete dialog, empty state" />
+      <file path="frontend/components/events/EventCard.tsx" kind="component" symbol="EventCard" reason="Reference pattern: card with thumbnail, metadata display, badges" />
+      <file path="frontend/components/common/EmptyState.tsx" kind="component" symbol="EmptyState" reason="Reusable empty state component with icon, title, description, action button" />
+      <file path="frontend/lib/api-client.ts" kind="client" symbol="apiClient, apiFetch, ApiError" reason="Pattern for API calls with error handling; add entity methods here" />
+      <file path="frontend/hooks/useCameras.ts" kind="hook" symbol="useCameras" reason="Hook pattern for data fetching; can adapt for useEntities" />
+
+      <!-- UI components available -->
+      <file path="frontend/components/ui/card.tsx" kind="ui" symbol="Card" reason="Use for EntityCard wrapper" />
+      <file path="frontend/components/ui/dialog.tsx" kind="ui" symbol="Dialog" reason="Use for EntityDetail modal" />
+      <file path="frontend/components/ui/alert-dialog.tsx" kind="ui" symbol="AlertDialog" reason="Use for DeleteEntityDialog confirmation" />
+      <file path="frontend/components/ui/select.tsx" kind="ui" symbol="Select" reason="Use for entity_type filter dropdown" />
+      <file path="frontend/components/ui/switch.tsx" kind="ui" symbol="Switch" reason="Use for named_only toggle" />
+      <file path="frontend/components/ui/skeleton.tsx" kind="ui" symbol="Skeleton" reason="Use for loading states" />
+      <file path="frontend/components/ui/input.tsx" kind="ui" symbol="Input" reason="Use for entity name edit" />
+      <file path="frontend/components/ui/badge.tsx" kind="ui" symbol="Badge" reason="Use for entity_type badge" />
+
+      <!-- Navigation to update -->
+      <file path="frontend/components/layout/Sidebar.tsx" kind="layout" symbol="navigation" lines="34-40" reason="Add Entities link to navigation array" />
+      <file path="frontend/components/layout/Header.tsx" kind="layout" symbol="navigation" lines="32-38" reason="Add Entities link to mobile navigation array" />
+
+      <!-- Test utilities -->
+      <file path="frontend/__tests__/test-utils.tsx" kind="test" symbol="render, mockEvent, mockCamera" reason="Custom render with providers, mock factories pattern" />
+    </code>
+
+    <dependencies>
+      <frontend>
+        <package name="next" version="16.0.7" />
+        <package name="react" version="19.2.0" />
+        <package name="@tanstack/react-query" version="^5.90.10" />
+        <package name="lucide-react" version="^0.553.0" />
+        <package name="date-fns" version="^4.1.0" />
+        <package name="sonner" version="^2.0.7" />
+        <package name="zod" version="^4.1.12" />
+        <package name="@radix-ui/react-dialog" version="^1.1.15" />
+        <package name="@radix-ui/react-alert-dialog" version="^1.1.15" />
+        <package name="@radix-ui/react-select" version="^2.2.6" />
+        <package name="@radix-ui/react-switch" version="^1.2.6" />
+        <package name="vitest" version="^4.0.15" dev="true" />
+        <package name="@testing-library/react" version="^16.3.0" dev="true" />
+      </frontend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing api-client.ts pattern for fetch wrappers with ApiError handling</constraint>
+    <constraint type="pattern">Use TanStack Query (useQuery/useMutation) for server state, following useCameras hook pattern</constraint>
+    <constraint type="pattern">Use shadcn/ui components for all UI elements (Card, Dialog, AlertDialog, Select, Switch, Skeleton)</constraint>
+    <constraint type="pattern">Use lucide-react icons consistently (Users icon for entities)</constraint>
+    <constraint type="pattern">Use date-fns formatDistanceToNow for relative timestamps</constraint>
+    <constraint type="pattern">Use sonner toast for success/error notifications</constraint>
+    <constraint type="pattern">Create components in frontend/components/entities/ directory</constraint>
+    <constraint type="pattern">Create types in frontend/types/entity.ts</constraint>
+    <constraint type="pattern">Create hooks in frontend/hooks/useEntities.ts</constraint>
+    <constraint type="style">Responsive grid: grid-cols-1 md:grid-cols-2 lg:grid-cols-3</constraint>
+    <constraint type="style">Use cn() utility from lib/utils for conditional classNames</constraint>
+    <constraint type="api">Entity API uses /api/v1/context/entities prefix (not /api/v1/entities)</constraint>
+    <constraint type="testing">Component tests use Vitest + React Testing Library</constraint>
+    <constraint type="testing">Custom render from __tests__/test-utils.tsx wraps with QueryClientProvider</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="GET /api/v1/context/entities" kind="REST" path="backend/app/api/v1/context.py">
+      <signature>GET /context/entities?limit=50&amp;offset=0&amp;entity_type=person&amp;named_only=true</signature>
+      <response>EntityListResponse { entities: EntityResponse[], total: int }</response>
+    </interface>
+    <interface name="GET /api/v1/context/entities/{entity_id}" kind="REST" path="backend/app/api/v1/context.py">
+      <signature>GET /context/entities/{entity_id}?event_limit=10</signature>
+      <response>EntityDetailResponse { id, entity_type, name, first_seen_at, last_seen_at, occurrence_count, created_at, updated_at, recent_events: EventSummaryForEntity[] }</response>
+    </interface>
+    <interface name="PUT /api/v1/context/entities/{entity_id}" kind="REST" path="backend/app/api/v1/context.py">
+      <signature>PUT /context/entities/{entity_id} body: { name: string }</signature>
+      <response>EntityResponse { id, entity_type, name, first_seen_at, last_seen_at, occurrence_count }</response>
+    </interface>
+    <interface name="DELETE /api/v1/context/entities/{entity_id}" kind="REST" path="backend/app/api/v1/context.py">
+      <signature>DELETE /context/entities/{entity_id}</signature>
+      <response>204 No Content</response>
+    </interface>
+    <interface name="EntityResponse" kind="TypeScript" path="frontend/types/entity.ts (to create)">
+      <signature>interface EntityResponse { id: string; entity_type: 'person' | 'vehicle' | 'unknown'; name: string | null; first_seen_at: string; last_seen_at: string; occurrence_count: number; }</signature>
+    </interface>
+    <interface name="EntityDetailResponse" kind="TypeScript" path="frontend/types/entity.ts (to create)">
+      <signature>interface EntityDetailResponse extends EntityResponse { created_at: string; updated_at: string; recent_events: EventSummaryForEntity[]; }</signature>
+    </interface>
+    <interface name="EventSummaryForEntity" kind="TypeScript" path="frontend/types/entity.ts (to create)">
+      <signature>interface EventSummaryForEntity { id: string; timestamp: string; description: string; thumbnail_url: string | null; camera_id: string; similarity_score: number; }</signature>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use Vitest with React Testing Library. Custom render function from __tests__/test-utils.tsx wraps components with QueryClientProvider. Mock API responses directly or use vi.mock(). Test loading, error, and empty states for all components. Follow existing test patterns in __tests__/components/ subdirectories.
+    </standards>
+    <locations>
+      <location>frontend/__tests__/components/entities/</location>
+      <location>frontend/__tests__/hooks/</location>
+    </locations>
+    <ideas>
+      <idea ac="1,2">Test EntityCard renders all fields (thumbnail, name fallback, type badge, counts, dates)</idea>
+      <idea ac="3">Test EntityList type filter changes URL param and filters display</idea>
+      <idea ac="4">Test EntityList named_only toggle filters to only named entities</idea>
+      <idea ac="5">Test pagination controls increment/decrement offset correctly</idea>
+      <idea ac="6,7">Test clicking EntityCard opens EntityDetail with event list</idea>
+      <idea ac="8">Test EntityNameEdit save calls PUT API and invalidates query</idea>
+      <idea ac="9,10">Test DeleteEntityDialog shows warning and calls DELETE API on confirm</idea>
+      <idea ac="11">Test API errors display toast notification with error message</idea>
+      <idea ac="12">Test skeleton loaders appear during loading state</idea>
+      <idea ac="13">Test EmptyState renders when entities array is empty</idea>
+      <idea ac="14">Test thumbnail uses most recent event thumbnail_url or fallback</idea>
+      <idea ac="15">Test responsive classes applied for mobile/desktop layouts</idea>
+    </ideas>
+  </tests>
+</story-context>

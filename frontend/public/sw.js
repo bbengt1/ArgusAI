@@ -251,7 +251,7 @@ self.addEventListener('push', (event) => {
 
   // Default notification options if payload parsing fails
   const defaultOptions = {
-    title: 'Live Object AI',
+    title: 'ArgusAI',
     body: 'New event detected',
     icon: '/icons/icon-192.png',
     badge: '/icons/badge-72.svg',
@@ -306,7 +306,7 @@ self.addEventListener('push', (event) => {
   console.log('[SW] Showing notification:', title, notificationOptions);
 
   event.waitUntil(
-    self.registration.showNotification(title || 'Live Object AI', notificationOptions)
+    self.registration.showNotification(title || 'ArgusAI', notificationOptions)
   );
 });
 

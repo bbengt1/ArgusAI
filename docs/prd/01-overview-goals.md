@@ -7,7 +7,7 @@
 ## Document Overview
 
 ### Purpose
-This PRD defines the detailed requirements for the Live Object AI Classifier MVP (Minimum Viable Product) and outlines future phases. It translates the product vision from the Product Brief into specific, actionable requirements for the engineering team.
+This PRD defines the detailed requirements for the ArgusAI MVP (Minimum Viable Product) and outlines future phases. It translates the product vision from the Product Brief into specific, actionable requirements for the engineering team.
 
 ### Scope
 

@@ -8,7 +8,7 @@ import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 
 export const metadata = {
-  title: "Dashboard - Live Object AI Classifier",
+  title: "Dashboard - ArgusAI",
   description: "AI-powered event detection and monitoring dashboard",
 };
 

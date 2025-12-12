@@ -46,7 +46,7 @@ const SETUP_STEPS: SetupStep[] = [
   {
     id: 'welcome',
     title: 'Welcome',
-    description: 'Get started with Live Object AI Classifier',
+    description: 'Get started with ArgusAI',
     icon: <Settings className="h-5 w-5" />,
     required: true,
   },
@@ -317,7 +317,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         <Brain className="h-8 w-8 text-primary" />
       </div>
       <div className="space-y-2">
-        <h2 className="text-2xl font-bold">Welcome to Live Object AI Classifier</h2>
+        <h2 className="text-2xl font-bold">Welcome to ArgusAI</h2>
         <p className="text-muted-foreground max-w-md mx-auto">
           AI-powered event detection and monitoring for your home security cameras.
           Let&apos;s get you set up in just a few steps.
@@ -584,7 +584,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       <div className="space-y-2">
         <h2 className="text-2xl font-bold">Setup Complete!</h2>
         <p className="text-muted-foreground max-w-md mx-auto">
-          Your Live Object AI Classifier is ready to use. You can now start monitoring your cameras.
+          ArgusAI is ready to use. You can now start monitoring your cameras.
         </p>
       </div>
 

@@ -46,7 +46,7 @@ const defaultSettings: SystemSettings = {
   theme: 'system',
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   backendUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
-  systemName: 'Live Object AI', // BUG-003: Default system name
+  systemName: 'ArgusAI', // BUG-003: Default system name
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);

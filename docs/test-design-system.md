@@ -1,5 +1,5 @@
 # System-Level Test Design
-## Live Object AI Classifier MVP
+## ArgusAI MVP
 
 **Date:** 2025-11-15  
 **Author:** BMad Test Architect (TEA Agent)  
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-This document assesses the **testability** of the Live Object AI Classifier architecture and defines the system-level testing strategy before implementation begins. The goal is to ensure the architecture supports effective testing and identify any testability concerns that should be addressed before Sprint Planning.
+This document assesses the **testability** of the ArgusAI architecture and defines the system-level testing strategy before implementation begins. The goal is to ensure the architecture supports effective testing and identify any testability concerns that should be addressed before Sprint Planning.
 
 **Architecture Assessment:** ✅ **PASS** with minor recommendations  
 **Testability Score:** 85/100 (Very Good)  
@@ -1041,7 +1041,7 @@ jobs:
 
 ### 9.1 Architecture Testability: ✅ PASS
 
-The Live Object AI Classifier architecture is **highly testable** with:
+The ArgusAI architecture is **highly testable** with:
 - Clear service boundaries enabling mock injection
 - Event-driven design with observable state transitions
 - Database abstraction supporting test isolation

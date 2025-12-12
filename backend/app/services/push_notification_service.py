@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 MAX_RETRIES = 3
 RETRY_BASE_DELAY_SECONDS = 2  # Exponential backoff: 2s, 4s, 8s
-VAPID_CLAIMS_EMAIL = "mailto:admin@liveobject.local"
+VAPID_CLAIMS_EMAIL = "mailto:admin@argusai.local"
 
 
 # ============================================================================

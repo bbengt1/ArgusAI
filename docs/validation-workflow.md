@@ -1,6 +1,6 @@
 # Motion Detection Validation Workflow
 
-**Project:** Live Object AI Classifier
+**Project:** ArgusAI
 **Last Updated:** 2025-11-16
 **Story:** F2.1-4 - Validation and Documentation
 **Version:** 1.0
@@ -9,7 +9,7 @@
 
 ## Overview
 
-This document provides a comprehensive, step-by-step procedure for validating the motion detection system in the Live Object AI Classifier. This workflow ensures consistent testing methodology and repeatable results for current and future validation efforts.
+This document provides a comprehensive, step-by-step procedure for validating the motion detection system in the ArgusAI. This workflow ensures consistent testing methodology and repeatable results for current and future validation efforts.
 
 **Purpose:**
 - Validate motion detection accuracy and reliability
@@ -48,7 +48,7 @@ This document provides a comprehensive, step-by-step procedure for validating th
 - [ ] **Project Repository Cloned**
   ```bash
   git clone [repository-url]
-  cd live-object-ai-classifier
+  cd argusai
   ```
 
 - [ ] **Backend Dependencies Installed**

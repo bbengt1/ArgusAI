@@ -1,6 +1,6 @@
 # Tested Hardware - Camera Compatibility
 
-**Project:** Live Object AI Classifier
+**Project:** ArgusAI
 **Last Updated:** 2025-11-16
 **Story:** F2.1-4 - Validation and Documentation
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-This document provides a comprehensive list of camera hardware tested with the Live Object AI Classifier motion detection system. It includes compatibility notes, known issues, and recommended configurations to help users select and configure cameras for optimal performance.
+This document provides a comprehensive list of camera hardware tested with the ArgusAI motion detection system. It includes compatibility notes, known issues, and recommended configurations to help users select and configure cameras for optimal performance.
 
 **Testing Date:** 2025-11-16
 **Tested By:** Brent
@@ -381,7 +381,7 @@ _______________
    - Access camera settings and configure recommended settings
 
 2. **Software Configuration**
-   - Add camera to Live Object AI Classifier
+   - Add camera to ArgusAI
    - Configure motion detection settings
    - Test with each algorithm (MOG2, KNN, Frame Diff)
 

@@ -69,7 +69,7 @@ describe('Header', () => {
 
       render(<Header />, { wrapper: TestWrapper })
 
-      expect(screen.getByText('Live Object AI')).toBeInTheDocument()
+      expect(screen.getByText('ArgusAI')).toBeInTheDocument()
     })
 
     it('renders navigation links', () => {

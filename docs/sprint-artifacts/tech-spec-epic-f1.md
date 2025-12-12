@@ -9,7 +9,7 @@ Status: Draft
 
 ## Overview
 
-The Camera Feed Integration epic establishes the foundational infrastructure for capturing video feeds from both RTSP-enabled IP cameras and USB webcams. This epic serves as the entry point for all video data into the Live Object AI Classifier system. The implementation focuses on robust connection handling, automatic reconnection logic, and a user-friendly configuration interface that enables non-technical users to set up cameras in under 5 minutes.
+The Camera Feed Integration epic establishes the foundational infrastructure for capturing video feeds from both RTSP-enabled IP cameras and USB webcams. This epic serves as the entry point for all video data into the ArgusAI system. The implementation focuses on robust connection handling, automatic reconnection logic, and a user-friendly configuration interface that enables non-technical users to set up cameras in under 5 minutes.
 
 This epic is the prerequisite for all downstream functionality (motion detection, AI analysis, and event generation). Without reliable camera capture, the entire system cannot function. The architecture supports single-camera MVP with design patterns that scale to multi-camera in Phase 2.
 

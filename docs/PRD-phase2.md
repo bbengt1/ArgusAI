@@ -1,4 +1,4 @@
-# Live Object AI Classifier Phase 2 - Product Requirements Document
+# ArgusAI Phase 2 - Product Requirements Document
 
 **Author:** Brent
 **Date:** 2025-11-30
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Phase 2 extends the Live Object AI Classifier from generic RTSP/USB camera support to native camera system integration, starting with UniFi Protect. This evolution leverages existing smart detection capabilities from camera ecosystems rather than reimplementing them, while expanding AI provider options with xAI Grok.
+Phase 2 extends the ArgusAI from generic RTSP/USB camera support to native camera system integration, starting with UniFi Protect. This evolution leverages existing smart detection capabilities from camera ecosystems rather than reimplementing them, while expanding AI provider options with xAI Grok.
 
 **The core promise:** Real-time, reliable AI-powered event descriptions by tapping directly into UniFi Protect's superior motion detection and smart classifications, eliminating the limitations of RTSP polling.
 
@@ -255,6 +255,6 @@ Requirements must be decomposed into epics and bite-sized stories.
 
 ---
 
-_This PRD captures Phase 2 of Live Object AI Classifier - native integration over generic._
+_This PRD captures Phase 2 of ArgusAI - native integration over generic._
 
 _Created through collaborative discovery between Brent and AI facilitator._

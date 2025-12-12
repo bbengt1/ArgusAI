@@ -1,5 +1,5 @@
 /**
- * Event-related TypeScript interfaces for Live Object AI Classifier
+ * Event-related TypeScript interfaces for ArgusAI
  */
 
 /**

@@ -1,3 +1,3 @@
-"""Live Object AI Classifier - Backend Application"""
+"""ArgusAI - Backend Application"""
 
 __version__ = "0.1.0"

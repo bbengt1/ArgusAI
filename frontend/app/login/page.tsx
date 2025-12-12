@@ -116,7 +116,7 @@ export default function LoginPage() {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">
-            Live Object AI Classifier
+            ArgusAI
           </CardTitle>
           <CardDescription>
             Sign in to access your camera monitoring dashboard

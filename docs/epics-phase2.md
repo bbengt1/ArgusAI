@@ -1,4 +1,4 @@
-# Live Object AI Classifier Phase 2 - Epic Breakdown
+# ArgusAI Phase 2 - Epic Breakdown
 
 **Author:** Brent
 **Date:** 2025-11-30
@@ -9,7 +9,7 @@
 
 ## Overview
 
-This document provides the complete epic and story breakdown for Phase 2 of Live Object AI Classifier, decomposing the requirements from [PRD-phase2.md](./PRD-phase2.md) into implementable stories.
+This document provides the complete epic and story breakdown for Phase 2 of ArgusAI, decomposing the requirements from [PRD-phase2.md](./PRD-phase2.md) into implementable stories.
 
 **Phase 2 Focus:**
 1. **Primary:** UniFi Protect Native Integration - Real-time WebSocket events, camera auto-discovery, smart detection filtering

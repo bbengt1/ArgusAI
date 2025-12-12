@@ -1,5 +1,5 @@
 """
-FastAPI application entry point for Live Object AI Classifier
+FastAPI application entry point for ArgusAI
 
 Initializes the FastAPI app, registers routers, and sets up startup/shutdown events.
 """
@@ -520,7 +520,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Live Object AI Classifier API",
+    title="ArgusAI API",
     description="API for camera-based motion detection and AI-powered object description",
     version="1.0.0",
     docs_url="/docs",
@@ -625,7 +625,7 @@ async def get_thumbnail(date: str, filename: str):
 async def root():
     """Root endpoint - API status check"""
     return {
-        "name": "Live Object AI Classifier API",
+        "name": "ArgusAI API",
         "version": "1.0.0",
         "status": "running"
     }

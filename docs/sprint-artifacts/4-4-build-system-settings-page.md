@@ -20,7 +20,7 @@ so that **I can customize the system without editing configuration files**.
    - Responsive layout: Stacks on mobile (<768px), side-by-side on desktop
 
 2. **General Tab** - Basic system configuration
-   - System Name: Text input with 100 char limit (default: "Live Object AI Classifier")
+   - System Name: Text input with 100 char limit (default: "ArgusAI")
    - Timezone: Searchable dropdown with auto-detected timezone pre-selected
    - Language: Dropdown showing only "English" (placeholder for i18n in future)
    - Date Format: Dropdown with options: MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD

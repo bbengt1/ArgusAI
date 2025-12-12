@@ -1,4 +1,4 @@
-# Live Object AI Classifier - UX Design Specification
+# ArgusAI - UX Design Specification
 
 _Created on 2025-11-17 by Brent_
 _Generated using BMad Method - Create UX Design Workflow v1.0_
@@ -7,7 +7,7 @@ _Generated using BMad Method - Create UX Design Workflow v1.0_
 
 ## Executive Summary
 
-Live Object AI Classifier is an intelligent multi-camera AI vision system that transforms surveillance into understanding by storing rich natural language descriptions of events instead of raw video footage. This UX specification defines the visual design, interaction patterns, and user experience decisions for the web-based dashboard.
+ArgusAI is an intelligent multi-camera AI vision system that transforms surveillance into understanding by storing rich natural language descriptions of events instead of raw video footage. This UX specification defines the visual design, interaction patterns, and user experience decisions for the web-based dashboard.
 
 **Target Users:** Security-conscious homeowners, smart home enthusiasts, and accessibility users (visually impaired)
 
@@ -1062,4 +1062,4 @@ Phase 2 introduces native UniFi Protect integration and xAI Grok as an additiona
 
 ---
 
-_This UX Design Specification provides the visual design foundation and interaction patterns for the Live Object AI Classifier dashboard. Implementation should reference this document for all design decisions, ensuring consistency and meeting accessibility requirements._
+_This UX Design Specification provides the visual design foundation and interaction patterns for the ArgusAI dashboard. Implementation should reference this document for all design decisions, ensuring consistency and meeting accessibility requirements._

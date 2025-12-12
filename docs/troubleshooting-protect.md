@@ -1,6 +1,6 @@
 # UniFi Protect Troubleshooting Guide
 
-This guide covers common issues and solutions when integrating UniFi Protect controllers with the Live Object AI Classifier.
+This guide covers common issues and solutions when integrating UniFi Protect controllers with the ArgusAI.
 
 ## Table of Contents
 

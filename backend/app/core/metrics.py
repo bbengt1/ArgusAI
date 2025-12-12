@@ -281,7 +281,7 @@ def init_metrics(version: str = "1.0.0"):
 
     app_info.info({
         'version': version,
-        'name': 'Live Object AI Classifier'
+        'name': 'ArgusAI'
     })
 
     logger.info("Prometheus metrics initialized", extra={"version": version})

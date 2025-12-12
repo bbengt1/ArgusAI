@@ -406,7 +406,7 @@ async def get_settings(db: Session = Depends(get_db)):
     **Response:**
     ```json
     {
-        "system_name": "Live Object AI Classifier",
+        "system_name": "ArgusAI",
         "timezone": "America/Los_Angeles",
         "primary_api_key": "****abcd",
         ...

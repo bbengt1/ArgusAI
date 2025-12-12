@@ -11,7 +11,7 @@
 
 **Recommendation:** **APPROVE** - Move story to "done" status.
 
-This story successfully implements a complete, production-ready camera management UI for the Live Object AI Classifier. The implementation demonstrates strong technical execution with:
+This story successfully implements a complete, production-ready camera management UI for the ArgusAI. The implementation demonstrates strong technical execution with:
 
 - ✅ **All 10 acceptance criteria validated** with file:line evidence
 - ✅ **All 9 tasks completed** (40+ subtasks)

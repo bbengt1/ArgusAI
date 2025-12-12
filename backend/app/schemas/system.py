@@ -147,7 +147,7 @@ class SystemSettings(BaseModel):
     - Data retention and privacy settings
     """
     # General Settings
-    system_name: str = Field(default="Live Object AI Classifier", max_length=100)
+    system_name: str = Field(default="ArgusAI", max_length=100)
     timezone: str = Field(default="UTC")
     language: str = Field(default="English")
     date_format: Literal["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"] = Field(default="MM/DD/YYYY")
@@ -178,7 +178,7 @@ class SystemSettings(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "system_name": "Live Object AI Classifier",
+                "system_name": "ArgusAI",
                 "timezone": "America/Los_Angeles",
                 "language": "English",
                 "date_format": "MM/DD/YYYY",

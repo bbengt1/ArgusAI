@@ -1,4 +1,4 @@
-# Live Object AI Classifier - Phase 3 Epic Breakdown
+# ArgusAI - Phase 3 Epic Breakdown
 
 **Author:** Brent
 **Date:** 2025-12-05

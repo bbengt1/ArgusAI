@@ -1,5 +1,5 @@
 /**
- * API Client for Live Object AI Classifier Backend
+ * API Client for ArgusAI Backend
  * Base URL configured via NEXT_PUBLIC_API_URL environment variable
  */
 

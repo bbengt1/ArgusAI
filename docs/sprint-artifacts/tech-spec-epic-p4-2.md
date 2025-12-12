@@ -9,7 +9,7 @@ Status: Draft
 
 ## Overview
 
-Epic P4-2 enables seamless integration with Home Assistant via MQTT, allowing users to create smart home automations based on AI-detected events. This transforms the Live Object AI Classifier from a standalone monitoring system into a connected hub that can trigger actions across the entire smart home ecosystem.
+Epic P4-2 enables seamless integration with Home Assistant via MQTT, allowing users to create smart home automations based on AI-detected events. This transforms the ArgusAI from a standalone monitoring system into a connected hub that can trigger actions across the entire smart home ecosystem.
 
 The integration uses MQTT Discovery protocol for automatic sensor registration in Home Assistant, publishes event data in real-time, and provides status sensors for each camera.
 

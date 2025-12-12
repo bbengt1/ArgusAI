@@ -70,7 +70,7 @@ class TestDiscoveryConfigGeneration:
         device = config["device"]
         assert device["identifiers"] == ["liveobject_camera-456"]
         assert device["name"] == "Back Yard"
-        assert device["manufacturer"] == "Live Object AI"
+        assert device["manufacturer"] == "ArgusAI"
         assert device["model"] == "AI Classifier - Protect"
         assert "sw_version" in device
 

@@ -12,7 +12,7 @@
 
 ## Executive Summary
 
-**Topic:** New feature ideas beyond the current MVP for Live Object AI Classifier
+**Topic:** New feature ideas beyond the current MVP for ArgusAI
 
 **Session Goals:** Explore new features that extend the MVP capabilities, building on a vision for native UniFi Protect integration and xAI Grok as an additional AI provider.
 

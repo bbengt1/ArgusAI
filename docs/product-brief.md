@@ -1,4 +1,4 @@
-# Product Brief: Live Object AI Classifier
+# Product Brief: ArgusAI
 
 **Document Version:** 1.0  
 **Date:** 2025-11-15  
@@ -10,7 +10,7 @@
 
 ## Executive Summary
 
-**Live Object AI Classifier** is an intelligent multi-camera AI vision system that transforms surveillance into understanding. Rather than simply recording video, the system acts as an intelligent observer that watches, interprets, and describes what's happening in natural language - serving as a guardian and assistant for homes and businesses.
+**ArgusAI** is an intelligent multi-camera AI vision system that transforms surveillance into understanding. Rather than simply recording video, the system acts as an intelligent observer that watches, interprets, and describes what's happening in natural language - serving as a guardian and assistant for homes and businesses.
 
 **Core Value Proposition:** Natural language descriptions of visual events, not raw footage. The description IS the product.
 

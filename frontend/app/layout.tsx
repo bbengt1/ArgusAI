@@ -26,15 +26,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Live Object AI Classifier",
+  title: "ArgusAI",
   description: "AI-powered event detection and monitoring for home security",
   keywords: ["security", "AI", "camera", "monitoring", "event detection"],
-  authors: [{ name: "Live Object AI Team" }],
+  authors: [{ name: "ArgusAI Team" }],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Live Object AI",
+    title: "ArgusAI",
   },
   icons: {
     icon: [

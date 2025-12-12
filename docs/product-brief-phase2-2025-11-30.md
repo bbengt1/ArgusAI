@@ -1,4 +1,4 @@
-# Product Brief: Live Object AI Classifier - Phase 2
+# Product Brief: ArgusAI - Phase 2
 
 **Date:** 2025-11-30
 **Author:** Brent
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Phase 2 extends the Live Object AI Classifier beyond the generic RTSP/USB approach to native camera system integration, starting with UniFi Protect. This evolution leverages existing smart detection capabilities from camera ecosystems rather than reimplementing them, while expanding AI provider options for greater flexibility.
+Phase 2 extends the ArgusAI beyond the generic RTSP/USB approach to native camera system integration, starting with UniFi Protect. This evolution leverages existing smart detection capabilities from camera ecosystems rather than reimplementing them, while expanding AI provider options for greater flexibility.
 
 **Core Value Proposition:** Native integration over generic - purpose-built connections to camera systems that unlock real-time events, auto-discovery, and smart detection filtering.
 
@@ -179,7 +179,7 @@ The current MVP relies on generic RTSP streaming with custom motion detection, w
 
 ---
 
-_This Product Brief captures the vision and requirements for Live Object AI Classifier Phase 2._
+_This Product Brief captures the vision and requirements for ArgusAI Phase 2._
 
 _It was created through collaborative discovery and reflects the next evolution beyond the MVP._
 

@@ -6,7 +6,7 @@ Status: done
 
 As a **home automation user**,
 I want **a dedicated settings UI for configuring MQTT broker connection and Home Assistant discovery**,
-so that **I can easily connect my Live Object AI Classifier to my Home Assistant instance without editing config files**.
+so that **I can easily connect my ArgusAI to my Home Assistant instance without editing config files**.
 
 ## Acceptance Criteria
 

@@ -1,7 +1,7 @@
 # Implementation Readiness Assessment Report
 
 **Date:** 2025-11-30
-**Project:** Live Object AI Classifier - Phase 2
+**Project:** ArgusAI - Phase 2
 **Assessed By:** Winston (Architect Agent)
 **Assessment Type:** Phase 3 to Phase 4 Transition Validation
 
@@ -27,7 +27,7 @@ All critical gaps have been addressed. Phase 2 is **ready for sprint planning an
 
 | Attribute | Value |
 |-----------|-------|
-| Project Name | Live Object AI Classifier |
+| Project Name | ArgusAI |
 | Phase | Phase 2 (Feature Enhancement) |
 | Track | bmad-method |
 | Field Type | Brownfield (extending existing MVP) |

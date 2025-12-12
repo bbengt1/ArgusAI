@@ -813,7 +813,7 @@ Epic F2 successfully delivered backend functionality but deferred frontend UI an
 **Tool:** Claude Code (claude-sonnet-4-5-20250929)
 **Format Version:** 1.0
 **Epic:** F2 - Motion Detection
-**Project:** Live Object AI Classifier
+**Project:** ArgusAI
 
 **Next Retrospective:** After Epic F2.1 (Motion Detection Validation & UI)
 **Review This Document:** Before starting Epic F3 planning

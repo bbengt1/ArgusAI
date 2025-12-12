@@ -228,7 +228,7 @@ Create `.env`:
 # Backend environment variables
 
 # Application
-APP_NAME=Live Object AI Classifier
+APP_NAME=ArgusAI
 DEBUG=True
 
 # Database
@@ -271,7 +271,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 app = FastAPI(
-    title="Live Object AI Classifier API",
+    title="ArgusAI API",
     version="1.0.0",
     description="Event-driven AI-powered camera monitoring"
 )
@@ -287,7 +287,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Live Object AI Classifier API", "version": "1.0.0"}
+    return {"message": "ArgusAI API", "version": "1.0.0"}
 
 @app.get("/health")
 async def health_check():
@@ -305,7 +305,7 @@ from pydantic_settings import BaseSettings
 from typing import List
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Live Object AI Classifier"
+    APP_NAME: str = "ArgusAI"
     DEBUG: bool = False
     
     DATABASE_URL: str = "sqlite:///data/app.db"

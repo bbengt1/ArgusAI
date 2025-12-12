@@ -1,4 +1,4 @@
-# live-object-ai-classifier - Epic Breakdown
+# argusai - Epic Breakdown
 
 **Author:** Brent
 **Date:** 2025-11-16
@@ -9,7 +9,7 @@
 
 ## Overview
 
-This document provides the complete epic and story breakdown for live-object-ai-classifier, decomposing the requirements from the [PRD](./prd.md) into implementable stories.
+This document provides the complete epic and story breakdown for argusai, decomposing the requirements from the [PRD](./prd.md) into implementable stories.
 
 **Living Document Notice:** This is the initial version. It will be updated after UX Design and Architecture workflows add interaction and technical details to stories.
 
@@ -1307,7 +1307,7 @@ This document provides the complete epic and story breakdown for live-object-ai-
 - Auto-save indicator: "Saved" message with timestamp
 
 **And** General tab includes:
-- System Name: Text input (default: "Live Object AI Classifier")
+- System Name: Text input (default: "ArgusAI")
 - Timezone: Dropdown selector (auto-detect user timezone)
 - Language: Dropdown (English only in MVP, placeholder for future)
 - Date format: Dropdown (MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD)

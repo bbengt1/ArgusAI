@@ -1,6 +1,6 @@
 # Motion Detection Validation Report
 
-**Project:** Live Object AI Classifier
+**Project:** ArgusAI
 **Report Date:** 2025-11-16
 **Story:** F2.1-4 - Validation and Documentation
 **QA Engineer:** Brent

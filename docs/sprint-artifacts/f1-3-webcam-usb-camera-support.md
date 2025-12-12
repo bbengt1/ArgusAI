@@ -385,7 +385,7 @@ Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
 
 ### Summary
 
-Story F1.3 (USB/Webcam Camera Support) successfully implements complete USB camera functionality for the Live Object AI Classifier. The implementation demonstrates excellent technical execution with systematic validation showing all 8 acceptance criteria met, all 5 tasks verified complete, and 65/65 tests passing (100% pass rate). The code quality is production-ready with comprehensive error handling, cross-platform support, and thorough documentation.
+Story F1.3 (USB/Webcam Camera Support) successfully implements complete USB camera functionality for the ArgusAI. The implementation demonstrates excellent technical execution with systematic validation showing all 8 acceptance criteria met, all 5 tasks verified complete, and 65/65 tests passing (100% pass rate). The code quality is production-ready with comprehensive error handling, cross-platform support, and thorough documentation.
 
 **Strengths:**
 - Clean code reuse from F1.1 RTSP infrastructure

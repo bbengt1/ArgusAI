@@ -102,7 +102,7 @@ export default function SettingsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(completeSettingsSchema) as any,
     defaultValues: {
-      system_name: 'Live Object AI Classifier',
+      system_name: 'ArgusAI',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       language: 'English',
       date_format: 'MM/DD/YYYY',
@@ -333,7 +333,7 @@ export default function SettingsPage() {
                       id="system-name"
                       {...form.register('system_name')}
                       maxLength={100}
-                      placeholder="Live Object AI Classifier"
+                      placeholder="ArgusAI"
                     />
                     {form.formState.errors.system_name && (
                       <p className="text-sm text-destructive">

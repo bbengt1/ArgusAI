@@ -1,1 +1,1 @@
-"""Test suite for Live Object AI Classifier backend"""
+"""Test suite for ArgusAI backend"""

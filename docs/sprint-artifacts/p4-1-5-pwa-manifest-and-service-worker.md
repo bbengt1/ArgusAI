@@ -4,7 +4,7 @@ Status: done
 
 ## Story
 
-As a **mobile user accessing the Live Object AI Classifier dashboard**,
+As a **mobile user accessing the ArgusAI dashboard**,
 I want **the application to be installable as a Progressive Web App with offline capabilities**,
 so that **I can access security events quickly from my home screen and view cached content when offline**.
 

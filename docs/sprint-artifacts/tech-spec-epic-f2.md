@@ -9,7 +9,7 @@ Status: Draft
 
 ## Overview
 
-Epic F2 implements motion detection capabilities to trigger AI-powered event analysis in the Live Object AI Classifier system. Building on Epic F1's camera feed integration, this epic adds computer vision-based motion detection using OpenCV to identify movement in video streams and trigger downstream AI processing only when motion is detected. This event-driven approach reduces computational overhead and API costs by processing only relevant frames rather than continuous analysis.
+Epic F2 implements motion detection capabilities to trigger AI-powered event analysis in the ArgusAI system. Building on Epic F1's camera feed integration, this epic adds computer vision-based motion detection using OpenCV to identify movement in video streams and trigger downstream AI processing only when motion is detected. This event-driven approach reduces computational overhead and API costs by processing only relevant frames rather than continuous analysis.
 
 The motion detection system will support configurable sensitivity levels, detection zones, and optional scheduling to provide users fine-grained control over when and where motion triggers events. This aligns with the PRD's goal of achieving <5 second end-to-end latency from motion detection to AI description generation while maintaining a false positive rate below 20%.
 

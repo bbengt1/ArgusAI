@@ -1,6 +1,6 @@
 {
-  "name": "Live Object AI Classifier",
-  "short_name": "Live Object AI",
+  "name": "ArgusAI",
+  "short_name": "ArgusAI",
   "description": "AI-powered event detection and monitoring for home security",
   "start_url": "/",
   "display": "standalone",

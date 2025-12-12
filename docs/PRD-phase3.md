@@ -1,4 +1,4 @@
-# Live Object AI Classifier - Phase 3 PRD
+# ArgusAI - Phase 3 PRD
 
 **Author:** Brent
 **Date:** 2025-12-05
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Phase 3 transforms the Live Object AI Classifier from snapshot-based event descriptions to video-aware analysis. By leveraging motion clips from UniFi Protect, the system will generate richer, more accurate AI descriptions that capture action, narrative, and intent - information fundamentally impossible to derive from single frames.
+Phase 3 transforms the ArgusAI from snapshot-based event descriptions to video-aware analysis. By leveraging motion clips from UniFi Protect, the system will generate richer, more accurate AI descriptions that capture action, narrative, and intent - information fundamentally impossible to derive from single frames.
 
 This phase builds on the UniFi Protect integration completed in Phase 2, extending it to download and analyze motion video clips rather than just event thumbnails.
 
@@ -321,6 +321,6 @@ Requirements will be decomposed into epics and stories following BMad Method.
 
 ---
 
-_This PRD captures the Phase 3 vision for Live Object AI Classifier - transforming from snapshot-based to video-aware AI descriptions that capture the full story of security events._
+_This PRD captures the Phase 3 vision for ArgusAI - transforming from snapshot-based to video-aware AI descriptions that capture the full story of security events._
 
 _Created through collaborative discovery between Brent and AI facilitator._

@@ -4,7 +4,7 @@ Status: done
 
 ## Story
 
-As a **system administrator deploying Live Object AI Classifier**,
+As a **system administrator deploying ArgusAI**,
 I want **the backend to connect to an MQTT broker with auto-reconnect**,
 so that **events can be published to Home Assistant and other MQTT subscribers reliably**.
 

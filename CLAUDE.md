@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Live Object AI Classifier is an AI-powered event detection system for home security. It analyzes video feeds from UniFi Protect cameras, RTSP IP cameras, and USB webcams, detects motion and smart events, and generates natural language descriptions using multi-provider AI (OpenAI, xAI Grok, Anthropic Claude, Google Gemini).
+ArgusAI is an AI-powered event detection system for home security. It analyzes video feeds from UniFi Protect cameras, RTSP IP cameras, and USB webcams, detects motion and smart events, and generates natural language descriptions using multi-provider AI (OpenAI, xAI Grok, Anthropic Claude, Google Gemini).
 
 ## Tech Stack
 
