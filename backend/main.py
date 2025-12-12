@@ -41,6 +41,7 @@ from app.services.protect_service import get_protect_service  # Story P2-1.4: Pr
 from app.services.mqtt_service import initialize_mqtt_service, shutdown_mqtt_service  # Story P4-2.1: MQTT
 from app.services.mqtt_discovery_service import initialize_discovery_service, get_discovery_service  # Story P4-2.2: HA Discovery
 from app.services.mqtt_status_service import initialize_status_sensors  # Story P4-2.5: Camera Status Sensors
+from app.services.pattern_service import get_pattern_service  # Story P4-3.5: Pattern Detection
 
 # Application version
 APP_VERSION = "1.0.0"
@@ -147,6 +148,40 @@ async def scheduled_backup_job():
         logger.error(f"Scheduled backup failed: {e}", exc_info=True)
 
 
+async def scheduled_pattern_calculation_job():
+    """
+    Scheduled pattern calculation job that runs hourly (Story P4-3.5)
+
+    Recalculates activity patterns for all enabled cameras based on their
+    historical event data. Patterns are used to provide timing context in AI descriptions.
+    """
+    try:
+        logger.info("Starting scheduled pattern calculation")
+
+        from app.core.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            # Get pattern service and recalculate all patterns
+            pattern_service = get_pattern_service()
+            result = await pattern_service.recalculate_all_patterns(db)
+
+            logger.info(
+                f"Scheduled pattern calculation complete: {result['patterns_calculated']} patterns updated, "
+                f"{result['patterns_skipped']} skipped",
+                extra={
+                    "event_type": "scheduled_pattern_calculation_complete",
+                    **result
+                }
+            )
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.error(f"Scheduled pattern calculation failed: {e}", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -242,12 +277,21 @@ async def lifespan(app: FastAPI):
         replace_existing=True
     )
 
+    # Add pattern calculation job (Story P4-3.5) - Hourly
+    scheduler.add_job(
+        scheduled_pattern_calculation_job,
+        trigger=CronTrigger(minute=0),  # Every hour at :00
+        id="hourly_pattern_calculation",
+        name="Hourly activity pattern calculation",
+        replace_existing=True
+    )
+
     scheduler.start()
     logger.info(
         "Scheduler started",
         extra={
             "event_type": "scheduler_init",
-            "jobs": ["daily_cleanup", "system_metrics_update", "daily_backup"]
+            "jobs": ["daily_cleanup", "system_metrics_update", "daily_backup", "hourly_pattern_calculation"]
         }
     )
 

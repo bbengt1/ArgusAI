@@ -27,6 +27,7 @@ import logging
 import time
 import httpx
 import numpy as np
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -592,7 +593,138 @@ class EventProcessor:
                 success = await self._store_event_with_retry(event_data, max_retries=3)
                 return success
 
-            # Step 1: Generate AI description
+            # Step 1: Generate thumbnail from frame (needed for embedding)
+            thumbnail_base64 = self._generate_thumbnail(event.frame)
+
+            # Step 2: Generate embedding early for entity matching (Story P4-3.4)
+            # This allows us to match entities BEFORE generating AI description
+            embedding_vector = None
+            entity_result = None
+
+            try:
+                if thumbnail_base64:
+                    from app.services.embedding_service import get_embedding_service
+                    import base64 as b64
+
+                    embedding_service = get_embedding_service()
+
+                    # Strip data URI prefix if present
+                    b64_str = thumbnail_base64
+                    if b64_str.startswith("data:"):
+                        comma_idx = b64_str.find(",")
+                        if comma_idx != -1:
+                            b64_str = b64_str[comma_idx + 1:]
+                    embedding_bytes = b64.b64decode(b64_str)
+
+                    # Generate embedding
+                    embedding_vector = await embedding_service.generate_embedding(embedding_bytes)
+
+                    logger.debug(
+                        f"Early embedding generated for context (camera {event.camera_name})",
+                        extra={
+                            "camera_id": event.camera_id,
+                            "embedding_dim": len(embedding_vector) if embedding_vector else 0,
+                        }
+                    )
+
+            except Exception as embed_error:
+                logger.debug(
+                    f"Early embedding generation failed (will skip context): {embed_error}",
+                    extra={"camera_id": event.camera_id}
+                )
+
+            # Step 3: Match entity for context building (Story P4-3.4)
+            # Uses read-only match_entity_only() - does NOT create entities or links
+            if embedding_vector:
+                try:
+                    from app.services.entity_service import get_entity_service
+
+                    entity_service = get_entity_service()
+
+                    with SessionLocal() as entity_db:
+                        entity_result = await entity_service.match_entity_only(
+                            db=entity_db,
+                            embedding=embedding_vector,
+                            threshold=0.75,
+                        )
+
+                    if entity_result:
+                        logger.debug(
+                            f"Entity matched for context (camera {event.camera_name})",
+                            extra={
+                                "camera_id": event.camera_id,
+                                "entity_id": entity_result.entity_id,
+                                "entity_name": entity_result.name,
+                                "similarity_score": entity_result.similarity_score,
+                            }
+                        )
+                    else:
+                        logger.debug(
+                            f"No entity match for context (camera {event.camera_name})",
+                            extra={"camera_id": event.camera_id}
+                        )
+
+                except Exception as entity_error:
+                    logger.debug(
+                        f"Entity matching for context failed (will skip context): {entity_error}",
+                        extra={"camera_id": event.camera_id}
+                    )
+
+            # Step 4: Build context-enhanced prompt (Story P4-3.4)
+            # Uses historical context from similar events and matched entity
+            context_enhanced_prompt = None
+            context_result = None
+
+            try:
+                from app.services.context_prompt_service import get_context_prompt_service
+
+                context_service = get_context_prompt_service()
+
+                # Build default base prompt (same as AI service would use)
+                base_prompt = (
+                    "Describe what you see in this image. Include: "
+                    "WHO (people, their appearance, clothing), "
+                    "WHAT (objects, vehicles, packages), "
+                    "WHERE (location in frame), "
+                    "and ACTIONS (what is happening). "
+                    "Be specific and detailed."
+                )
+
+                # Use a temporary event ID for context lookup
+                # We're looking up HISTORICAL context, not the current event
+                temp_event_id = str(uuid.uuid4())
+
+                with SessionLocal() as context_db:
+                    context_result = await context_service.build_context_enhanced_prompt(
+                        db=context_db,
+                        event_id=temp_event_id,
+                        base_prompt=base_prompt,
+                        camera_id=event.camera_id,
+                        event_time=event.timestamp,
+                        matched_entity=entity_result,  # From Step 3
+                    )
+
+                if context_result and context_result.context_included:
+                    context_enhanced_prompt = context_result.prompt
+                    logger.info(
+                        f"Context-enhanced prompt built for camera {event.camera_name}",
+                        extra={
+                            "camera_id": event.camera_id,
+                            "entity_context": context_result.entity_context_included,
+                            "similar_events": context_result.similar_events_count,
+                            "time_pattern": context_result.time_pattern_included,
+                            "context_gather_time_ms": round(context_result.context_gather_time_ms, 2),
+                        }
+                    )
+
+            except Exception as context_error:
+                # Graceful degradation - context failures don't block AI description (AC10)
+                logger.warning(
+                    f"Context building failed (proceeding without context): {context_error}",
+                    extra={"camera_id": event.camera_id, "error": str(context_error)}
+                )
+
+            # Step 5: Generate AI description (with context if available)
             logger.debug(f"Worker {worker_id}: Calling AI service for camera {event.camera_name}")
 
             ai_result = await self.ai_service.generate_description(
@@ -600,11 +732,9 @@ class EventProcessor:
                 camera_name=event.camera_name,
                 timestamp=event.timestamp.isoformat(),
                 detected_objects=event.detected_objects,
-                sla_timeout_ms=5000
+                sla_timeout_ms=5000,
+                custom_prompt=context_enhanced_prompt,  # Story P4-3.4: Pass enhanced prompt
             )
-
-            # Step 2: Generate thumbnail from frame
-            thumbnail_base64 = self._generate_thumbnail(event.frame)
 
             # Story P2-6.3 AC13: If all AI providers fail, store event without description
             # and flag for retry instead of failing completely
@@ -842,33 +972,16 @@ class EventProcessor:
                     extra={"error": str(status_error), "event_id": event_id}
                 )
 
-            # Step 9: Generate embedding for temporal context (Story P4-3.1)
+            # Step 9: Store embedding for this event (Story P4-3.1, P4-3.4)
+            # Note: Embedding was already generated earlier (Step 2) for context building
+            # Here we just need to store it linked to the actual event_id
             # AC2: Embedding generated for each new event thumbnail
             # AC7: Graceful fallback if embedding generation fails
-            embedding_vector = None  # Initialize for entity matching step
             try:
-                from app.services.embedding_service import get_embedding_service
+                if embedding_vector:
+                    from app.services.embedding_service import get_embedding_service
 
-                embedding_service = get_embedding_service()
-
-                # AC10: Works for both base64 and file-path thumbnails
-                # Extract thumbnail bytes from stored event or thumbnail_base64
-                embedding_bytes = None
-
-                if thumbnail_base64:
-                    # Already have base64 from earlier in the pipeline
-                    import base64 as b64
-                    # Strip data URI prefix if present
-                    b64_str = thumbnail_base64
-                    if b64_str.startswith("data:"):
-                        comma_idx = b64_str.find(",")
-                        if comma_idx != -1:
-                            b64_str = b64_str[comma_idx + 1:]
-                    embedding_bytes = b64.b64decode(b64_str)
-
-                if embedding_bytes:
-                    # Generate embedding
-                    embedding_vector = await embedding_service.generate_embedding(embedding_bytes)
+                    embedding_service = get_embedding_service()
 
                     # Store embedding in database (AC3: stored in event_embeddings table)
                     with SessionLocal() as embed_db:
@@ -879,7 +992,7 @@ class EventProcessor:
                         )
 
                     logger.debug(
-                        f"Embedding generated and stored for event {event_id}",
+                        f"Embedding stored for event {event_id}",
                         extra={
                             "event_id": event_id,
                             "camera_id": event.camera_id,
@@ -888,24 +1001,25 @@ class EventProcessor:
                     )
                 else:
                     logger.debug(
-                        f"No thumbnail available for embedding generation (event {event_id})",
+                        f"No embedding available for event {event_id} (will be generated later if needed)",
                         extra={"event_id": event_id}
                     )
 
             except Exception as embedding_error:
                 # AC7: Graceful fallback - embedding failures must not block event creation
                 logger.warning(
-                    f"Embedding generation failed for event {event_id}: {embedding_error}",
+                    f"Embedding storage failed for event {event_id}: {embedding_error}",
                     extra={
                         "event_id": event_id,
                         "camera_id": event.camera_id,
                         "error": str(embedding_error),
                     }
                 )
-                embedding_vector = None  # Mark as unavailable for entity matching
 
-            # Step 10: Match or create entity for recurring visitor detection (Story P4-3.3)
-            # AC11: Entity matching integrated into event pipeline after embedding generation
+            # Step 10: Match or create entity and link to event (Story P4-3.3, P4-3.4)
+            # Note: Step 3 did a read-only match for context. Now we do the full
+            # match_or_create_entity to actually link/create the entity-event relationship.
+            # AC11: Entity matching integrated into event pipeline
             # AC14: Graceful handling when embedding service unavailable
             try:
                 if embedding_vector:
@@ -915,33 +1029,33 @@ class EventProcessor:
 
                     # Determine entity type from smart detection or objects detected
                     entity_type = "unknown"
-                    if event.smart_detection_type in ("person", "vehicle"):
+                    if hasattr(event, 'smart_detection_type') and event.smart_detection_type in ("person", "vehicle"):
                         entity_type = event.smart_detection_type
-                    elif event.objects_detected:
-                        objects_list = json.loads(event.objects_detected) if isinstance(event.objects_detected, str) else event.objects_detected
-                        if "person" in objects_list:
+                    elif event.detected_objects:
+                        objects_list = event.detected_objects if isinstance(event.detected_objects, list) else json.loads(event.detected_objects)
+                        if "person" in [o.lower() for o in objects_list]:
                             entity_type = "person"
-                        elif "vehicle" in objects_list:
+                        elif "vehicle" in [o.lower() for o in objects_list]:
                             entity_type = "vehicle"
 
                     with SessionLocal() as entity_db:
-                        entity_result = await entity_service.match_or_create_entity(
+                        final_entity_result = await entity_service.match_or_create_entity(
                             db=entity_db,
                             event_id=event_id,
                             embedding=embedding_vector,
                             entity_type=entity_type,
-                            threshold=0.75,  # Default threshold
+                            threshold=0.75,
                         )
 
                     logger.info(
-                        f"Entity {'created' if entity_result.is_new else 'matched'} for event {event_id}",
+                        f"Entity {'created' if final_entity_result.is_new else 'matched'} for event {event_id}",
                         extra={
                             "event_id": event_id,
-                            "entity_id": entity_result.entity_id,
-                            "entity_type": entity_result.entity_type,
-                            "is_new": entity_result.is_new,
-                            "similarity_score": entity_result.similarity_score,
-                            "occurrence_count": entity_result.occurrence_count,
+                            "entity_id": final_entity_result.entity_id,
+                            "entity_type": final_entity_result.entity_type,
+                            "is_new": final_entity_result.is_new,
+                            "similarity_score": final_entity_result.similarity_score,
+                            "occurrence_count": final_entity_result.occurrence_count,
                         }
                     )
                 else:

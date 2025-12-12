@@ -1,0 +1,248 @@
+<story-context id=".bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P4-3</epicId>
+    <storyId>4</storyId>
+    <title>Context-Enhanced AI Prompts</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-11</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-3-4-context-enhanced-ai-prompts.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security system user</asA>
+    <iWant>the AI descriptions to include relevant historical context about recognized visitors and patterns</iWant>
+    <soThat>I receive more informative descriptions like "Your regular mail carrier is at the door (seen 12 times this month)" instead of just "Person at door"</soThat>
+    <tasks>
+      <task id="1" acs="1,2,3,4,5,6">Create ContextEnhancedPromptService</task>
+      <task id="2" acs="2,3">Implement entity context formatting</task>
+      <task id="3" acs="4">Implement similarity context formatting</task>
+      <task id="4" acs="5">Implement time pattern context</task>
+      <task id="5" acs="9,12">Add system settings for context enhancement</task>
+      <task id="6" acs="7,8,10">Integrate with AI description pipeline</task>
+      <task id="7" acs="12">Implement A/B test logic</task>
+      <task id="8" acs="11">Add logging and analytics</task>
+      <task id="9" acs="2,3,4,5,6">Write unit tests</task>
+      <task id="10" acs="1,7,8,10">Write integration tests</task>
+      <task id="11" acs="9,12">Write API/settings tests</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">When generating AI descriptions, the system retrieves similar past events using SimilarityService</criterion>
+    <criterion id="2">If a matched entity exists (from EntityService), entity name and occurrence count are included in the AI prompt</criterion>
+    <criterion id="3">Historical context format in prompt: "This visitor has been seen [X] times. First seen: [date]. Last seen: [date]. User name: [name or 'unnamed']"</criterion>
+    <criterion id="4">If similar events found (>0.7 similarity), include summary: "Similar events detected: [count] occurrences in last [N] days"</criterion>
+    <criterion id="5">AI prompt includes time-of-day pattern context when available</criterion>
+    <criterion id="6">Context is only included when confidence is high enough (>0.7 similarity threshold)</criterion>
+    <criterion id="7">AI description output naturally incorporates context</criterion>
+    <criterion id="8">Performance: Context gathering adds less than 300ms to event processing</criterion>
+    <criterion id="9">Feature can be enabled/disabled via system settings (enable_context_enhanced_prompts)</criterion>
+    <criterion id="10">Graceful degradation: If context service fails, AI description generated without context</criterion>
+    <criterion id="11">Context inclusion logged for debugging and analytics</criterion>
+    <criterion id="12">A/B test capability: System can randomly skip context for comparison</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase4.md</path>
+        <title>Phase 4 Epics</title>
+        <section>Story P4-3.4: Context-Enhanced AI Prompts</section>
+        <snippet>Include similarity results in AI prompt, add "previously seen" context to descriptions, format historical information naturally, A/B test context inclusion impact.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase4.md</path>
+        <title>Phase 4 PRD</title>
+        <section>FR4: Temporal Context</section>
+        <snippet>AI descriptions include historical context when relevant. System maintains familiar faces/vehicles registry. Context transforms data into insight.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Phase 4 Service Architecture - Context Service Flow</section>
+        <snippet>Event Created → Embedding Service (generate CLIP embedding) → Entity Matching → Context building → AI description with context.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-3-3-recurring-visitor-detection.md</path>
+        <title>Story P4-3.3 (Previous Story)</title>
+        <section>Dev Agent Record</section>
+        <snippet>EntityService.match_or_create_entity() returns EntityMatchResult with entity details and similarity_score. Use get_entity_service() for dependency injection.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-3-2-similarity-search.md</path>
+        <title>Story P4-3.2</title>
+        <section>Dev Notes</section>
+        <snippet>SimilarityService.find_similar_events(db, event_id, limit, min_similarity, days_back) returns list of SimilarEvent objects.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-3-1-event-embedding-generation.md</path>
+        <title>Story P4-3.1</title>
+        <section>Dev Notes</section>
+        <snippet>EmbeddingService generates CLIP embeddings and stores in EventEmbedding model. Integrated into Step 9 of event_processor.py.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>backend/app/services/entity_service.py</path>
+        <kind>service</kind>
+        <symbol>EntityService</symbol>
+        <lines>66-685</lines>
+        <reason>Core entity matching service. Provides match_or_create_entity() and get_entity_for_event() methods needed for context building.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/entity_service.py</path>
+        <kind>dataclass</kind>
+        <symbol>EntityMatchResult</symbol>
+        <lines>53-63</lines>
+        <reason>Data structure returned by EntityService with entity_id, name, occurrence_count, first_seen_at, last_seen_at, similarity_score.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/similarity_service.py</path>
+        <kind>service</kind>
+        <symbol>SimilarityService</symbol>
+        <lines>148-317</lines>
+        <reason>Finds similar past events. Use find_similar_events() method for getting similar events within time window.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/similarity_service.py</path>
+        <kind>dataclass</kind>
+        <symbol>SimilarEvent</symbol>
+        <lines>39-48</lines>
+        <reason>Data structure for similar event results with event_id, similarity_score, timestamp, description.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>AIService</symbol>
+        <lines>1-200</lines>
+        <reason>AI description generation. Need to modify to accept optional context parameter and enhance prompts.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>constant</kind>
+        <symbol>CONFIDENCE_INSTRUCTION</symbol>
+        <lines>48-58</lines>
+        <reason>Existing prompt instruction format. Context should follow similar JSON response pattern.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>service</kind>
+        <symbol>EventProcessor._ai_worker</symbol>
+        <lines>843-962</lines>
+        <reason>Pipeline integration point. Steps 9-10 generate embeddings and match entities. Context building goes between entity matching and AI description.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/system_setting.py</path>
+        <kind>model</kind>
+        <symbol>SystemSetting</symbol>
+        <reason>Existing settings model for enable_context_enhanced_prompts and related settings.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_entity_service.py</path>
+        <kind>test</kind>
+        <symbol>Test patterns</symbol>
+        <reason>Reference for testing patterns with mock embeddings and entity matching.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_similarity_service.py</path>
+        <kind>test</kind>
+        <symbol>Test patterns</symbol>
+        <reason>Reference for testing similarity search with mock data.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="==0.115.0">Web framework</package>
+        <package name="sqlalchemy" version=">=2.0.36">Database ORM</package>
+        <package name="sentence-transformers" version=">=2.2.0">CLIP embeddings</package>
+        <package name="numpy">Vector operations for cosine similarity</package>
+        <package name="openai" version=">=1.54.0">AI provider</package>
+        <package name="anthropic" version=">=0.39.0">AI provider</package>
+        <package name="google-generativeai" version=">=0.8.0">AI provider</package>
+        <package name="pytest" version="==7.4.3">Testing</package>
+        <package name="pytest-asyncio" version="==0.21.1">Async test support</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="performance">Context gathering must add less than 300ms to event processing (combined with existing pipeline)</constraint>
+    <constraint type="architecture">Use existing EntityService and SimilarityService via get_*_service() factory functions - DO NOT recreate</constraint>
+    <constraint type="architecture">Context service must integrate after Step 10 (entity matching) and before AI description in event_processor.py</constraint>
+    <constraint type="architecture">Follow singleton service pattern with factory function (get_context_prompt_service())</constraint>
+    <constraint type="error-handling">Graceful degradation required - context failures must not block AI description generation</constraint>
+    <constraint type="testing">Target coverage: unit tests for formatting, integration tests for pipeline, API tests for settings</constraint>
+    <constraint type="settings">New settings: enable_context_enhanced_prompts, context_ab_test_percentage, context_similarity_threshold, context_time_window_days</constraint>
+    <constraint type="logging">Must log context components used, similarity scores, and timing for each event</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>EntityService.match_or_create_entity</name>
+      <kind>async method</kind>
+      <signature>async def match_or_create_entity(db: Session, event_id: str, embedding: list[float], entity_type: str = "unknown", threshold: float = 0.75) -> EntityMatchResult</signature>
+      <path>backend/app/services/entity_service.py:144-250</path>
+    </interface>
+    <interface>
+      <name>EntityService.get_entity_for_event</name>
+      <kind>async method</kind>
+      <signature>async def get_entity_for_event(db: Session, event_id: str) -> Optional[dict]</signature>
+      <path>backend/app/services/entity_service.py:609-649</path>
+    </interface>
+    <interface>
+      <name>SimilarityService.find_similar_events</name>
+      <kind>async method</kind>
+      <signature>async def find_similar_events(db: Session, event_id: str, limit: int = 10, min_similarity: float = 0.7, time_window_days: int = 30, camera_id: Optional[str] = None) -> list[SimilarEvent]</signature>
+      <path>backend/app/services/similarity_service.py:180-317</path>
+    </interface>
+    <interface>
+      <name>get_entity_service</name>
+      <kind>factory function</kind>
+      <signature>def get_entity_service() -> EntityService</signature>
+      <path>backend/app/services/entity_service.py:656-674</path>
+    </interface>
+    <interface>
+      <name>get_similarity_service</name>
+      <kind>factory function</kind>
+      <signature>def get_similarity_service() -> SimilarityService</signature>
+      <path>backend/app/services/similarity_service.py:324-342</path>
+    </interface>
+    <interface>
+      <name>cosine_similarity</name>
+      <kind>function</kind>
+      <signature>def cosine_similarity(vec1: list[float], vec2: list[float]) -> float</signature>
+      <path>backend/app/services/similarity_service.py:51-86</path>
+    </interface>
+    <interface>
+      <name>batch_cosine_similarity</name>
+      <kind>function</kind>
+      <signature>def batch_cosine_similarity(query: list[float], candidates: list[list[float]]) -> list[float]</signature>
+      <path>backend/app/services/similarity_service.py:89-145</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Testing follows pytest with pytest-asyncio for async tests. Unit tests mock database and external services. Integration tests use real SQLite database with test fixtures. API tests use FastAPI TestClient. Target 70%+ coverage for new code. Follow existing patterns in backend/tests/test_services/ for service testing.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_context_prompt_service.py (NEW - unit tests)</location>
+      <location>backend/tests/test_integration/test_context_prompt_integration.py (NEW - integration tests)</location>
+      <location>backend/tests/test_api/test_system.py (modify for settings tests)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test that build_context_enhanced_prompt calls SimilarityService.find_similar_events</idea>
+      <idea ac="2,3">Test entity context formatting with named entity, unnamed entity, and null entity</idea>
+      <idea ac="4">Test similarity context formatting with 0, 1, and multiple similar events</idea>
+      <idea ac="5">Test time pattern context for typical and unusual activity times</idea>
+      <idea ac="6">Test threshold filtering excludes low-confidence matches below 0.7</idea>
+      <idea ac="7">Integration test: Full pipeline with AI description including context</idea>
+      <idea ac="8">Performance test: Measure context gathering time with 1000+ events</idea>
+      <idea ac="9">Test enable_context_enhanced_prompts setting toggle</idea>
+      <idea ac="10">Test graceful degradation when EntityService or SimilarityService fail</idea>
+      <idea ac="11">Test logging output includes context components and timing</idea>
+      <idea ac="12">Test A/B test percentage randomly skips context for configured %</idea>
+    </ideas>
+  </tests>
+</story-context>

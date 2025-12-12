@@ -689,3 +689,163 @@ class TestPerformance:
 
         avg_time = sum(times) / len(times)
         assert avg_time < 50, f"Average matching time {avg_time:.2f}ms, expected <50ms"
+
+
+class TestMatchEntityOnly:
+    """Tests for match_entity_only method (Story P4-3.4: Context-Enhanced AI Prompts)."""
+
+    def setup_method(self):
+        """Setup test service."""
+        reset_entity_service()
+        self.service = EntityService()
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_entities_exist(self):
+        """Test returns None when no entities in cache."""
+        mock_db = MagicMock()
+        mock_db.query.return_value.all.return_value = []
+
+        self.service._entity_cache = {}
+        self.service._cache_loaded = True
+
+        result = await self.service.match_entity_only(
+            db=mock_db,
+            embedding=[0.1] * 512,
+            threshold=0.75,
+        )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_match_when_above_threshold(self):
+        """Test returns match when similarity above threshold."""
+        mock_db = MagicMock()
+
+        # Create existing entity embedding
+        existing_embedding = [0.1] * 512
+
+        # Pre-load cache
+        self.service._entity_cache = {"existing-entity-id": existing_embedding}
+        self.service._cache_loaded = True
+
+        # Mock entity lookup
+        mock_entity = MagicMock()
+        mock_entity.id = "existing-entity-id"
+        mock_entity.entity_type = "person"
+        mock_entity.name = "Known Person"
+        mock_entity.first_seen_at = datetime.now(timezone.utc) - timedelta(days=7)
+        mock_entity.last_seen_at = datetime.now(timezone.utc)
+        mock_entity.occurrence_count = 5
+
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_entity
+
+        # Test with identical embedding
+        result = await self.service.match_entity_only(
+            db=mock_db,
+            embedding=[0.1] * 512,
+            threshold=0.75,
+        )
+
+        assert result is not None
+        assert result.entity_id == "existing-entity-id"
+        assert result.name == "Known Person"
+        assert result.is_new is False
+        assert result.similarity_score >= 0.75
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_below_threshold(self):
+        """Test returns None when no match above threshold."""
+        mock_db = MagicMock()
+
+        # Create existing entity with very different embedding
+        existing_embedding = [0.9, 0.1] + [0.0] * 510
+
+        self.service._entity_cache = {"existing-entity-id": existing_embedding}
+        self.service._cache_loaded = True
+
+        # Test with very different embedding
+        result = await self.service.match_entity_only(
+            db=mock_db,
+            embedding=[0.0, 0.0, 0.9] + [0.1] * 509,
+            threshold=0.75,
+        )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_does_not_modify_database(self):
+        """Test that match_entity_only is read-only."""
+        mock_db = MagicMock()
+
+        existing_embedding = [0.1] * 512
+        self.service._entity_cache = {"existing-entity-id": existing_embedding}
+        self.service._cache_loaded = True
+
+        mock_entity = MagicMock()
+        mock_entity.id = "existing-entity-id"
+        mock_entity.entity_type = "person"
+        mock_entity.name = None
+        mock_entity.first_seen_at = datetime.now(timezone.utc)
+        mock_entity.last_seen_at = datetime.now(timezone.utc)
+        mock_entity.occurrence_count = 1
+
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_entity
+
+        result = await self.service.match_entity_only(
+            db=mock_db,
+            embedding=[0.1] * 512,
+            threshold=0.75,
+        )
+
+        # Verify no add() or commit() calls
+        mock_db.add.assert_not_called()
+        mock_db.commit.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_respects_custom_threshold(self):
+        """Test that custom threshold is respected."""
+        mock_db = MagicMock()
+
+        # Create existing entity
+        existing_embedding = [1.0, 0.0] + [0.0] * 510
+        self.service._entity_cache = {"existing-entity-id": existing_embedding}
+        self.service._cache_loaded = True
+
+        # Test embedding with moderate similarity (~0.7)
+        test_embedding = [0.7, 0.7] + [0.0] * 510
+
+        # Should NOT match with high threshold
+        result_high = await self.service.match_entity_only(
+            db=mock_db,
+            embedding=test_embedding,
+            threshold=0.95,
+        )
+        assert result_high is None
+
+    @pytest.mark.asyncio
+    async def test_returns_entity_occurrence_count_unchanged(self):
+        """Test that occurrence count reflects current state, not incremented."""
+        mock_db = MagicMock()
+
+        existing_embedding = [0.1] * 512
+        self.service._entity_cache = {"existing-entity-id": existing_embedding}
+        self.service._cache_loaded = True
+
+        mock_entity = MagicMock()
+        mock_entity.id = "existing-entity-id"
+        mock_entity.entity_type = "person"
+        mock_entity.name = "Test"
+        mock_entity.first_seen_at = datetime.now(timezone.utc) - timedelta(days=5)
+        mock_entity.last_seen_at = datetime.now(timezone.utc) - timedelta(days=1)
+        mock_entity.occurrence_count = 10  # Current count
+
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_entity
+
+        result = await self.service.match_entity_only(
+            db=mock_db,
+            embedding=[0.1] * 512,
+            threshold=0.75,
+        )
+
+        # Should return current count, not incremented
+        assert result.occurrence_count == 10

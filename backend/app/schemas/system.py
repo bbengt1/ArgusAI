@@ -248,6 +248,20 @@ class SystemSettingsUpdate(BaseModel):
     # Story P3-7.5: Key Frames Storage Setting
     store_analysis_frames: Optional[bool] = Field(None, description="Store key frames used for AI analysis (default: true)")
 
+    # Story P4-3.4: Context-Enhanced AI Prompts Settings
+    enable_context_enhanced_prompts: Optional[bool] = Field(
+        None, description="Enable historical context in AI prompts (default: true)"
+    )
+    context_ab_test_percentage: Optional[int] = Field(
+        None, ge=0, le=100, description="Percentage of events to skip context for A/B testing (0 = disabled)"
+    )
+    context_similarity_threshold: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Minimum similarity threshold for context inclusion (default: 0.7)"
+    )
+    context_time_window_days: Optional[int] = Field(
+        None, ge=1, le=365, description="Days of history to use for context (default: 30)"
+    )
+
 
 # Story P3-7.1: AI Usage Response Schemas for Cost Tracking
 

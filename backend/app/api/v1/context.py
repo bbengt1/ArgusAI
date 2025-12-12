@@ -1,11 +1,12 @@
 """
-Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3)
+Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3, P4-3.5)
 
 Provides endpoints for:
 - Batch processing of embeddings for existing events
 - Embedding status retrieval
 - Similarity search for finding visually similar past events (P4-3.2)
 - Entity management for recurring visitor detection (P4-3.3)
+- Activity pattern retrieval for cameras (P4-3.5)
 """
 import base64
 import logging
@@ -23,6 +24,8 @@ from app.models.event_embedding import EventEmbedding
 from app.services.embedding_service import get_embedding_service, EmbeddingService
 from app.services.similarity_service import get_similarity_service, SimilarityService
 from app.services.entity_service import get_entity_service, EntityService
+from app.services.pattern_service import get_pattern_service, PatternService
+from app.models.camera import Camera
 
 logger = logging.getLogger(__name__)
 
@@ -655,3 +658,205 @@ async def delete_entity(
         raise HTTPException(status_code=404, detail="Entity not found")
 
     # Return 204 No Content on success (implicit)
+
+
+# Story P4-3.5: Pattern Detection Response Models
+class PatternResponse(BaseModel):
+    """Response model for camera activity patterns."""
+    camera_id: str = Field(description="UUID of the camera")
+    hourly_distribution: dict[str, int] = Field(
+        description="Events per hour (0-23) across all days"
+    )
+    daily_distribution: dict[str, int] = Field(
+        description="Events per day-of-week (0=Monday, 6=Sunday)"
+    )
+    peak_hours: list[str] = Field(
+        description="Hours with above-average activity (zero-padded, e.g., '09', '14', '17')"
+    )
+    quiet_hours: list[str] = Field(
+        description="Hours with minimal activity (zero-padded, e.g., '02', '03', '04')"
+    )
+    average_events_per_day: float = Field(description="Mean daily event count")
+    last_calculated_at: datetime = Field(description="When patterns were last calculated")
+    calculation_window_days: int = Field(description="Number of days used for calculation")
+    insufficient_data: bool = Field(
+        default=False,
+        description="True if camera has insufficient history for meaningful patterns"
+    )
+
+
+class RecalculatePatternResponse(BaseModel):
+    """Response model for pattern recalculation."""
+    camera_id: str = Field(description="UUID of the camera")
+    success: bool = Field(description="Whether recalculation succeeded")
+    message: str = Field(description="Status message")
+    insufficient_data: bool = Field(
+        default=False,
+        description="True if camera has insufficient history"
+    )
+
+
+class BatchPatternResponse(BaseModel):
+    """Response model for batch pattern calculation."""
+    total_cameras: int = Field(description="Total cameras processed")
+    patterns_calculated: int = Field(description="Patterns successfully calculated")
+    patterns_skipped: int = Field(description="Patterns skipped (insufficient data)")
+    elapsed_ms: float = Field(description="Total processing time in milliseconds")
+
+
+@router.get("/patterns/{camera_id}", response_model=PatternResponse)
+async def get_camera_patterns(
+    camera_id: str,
+    db: Session = Depends(get_db),
+    pattern_service: PatternService = Depends(get_pattern_service),
+):
+    """
+    Get activity patterns for a camera.
+
+    Story P4-3.5: Pattern Detection (AC10, AC11)
+
+    Returns pre-calculated time-based activity patterns including hourly and
+    daily distributions, peak hours, quiet hours, and average events per day.
+
+    Patterns are recalculated hourly and enable AI descriptions to include
+    timing context like "Typical activity time" or "Unusual timing".
+
+    Args:
+        camera_id: UUID of the camera
+        db: Database session
+        pattern_service: Pattern service instance
+
+    Returns:
+        PatternResponse with activity patterns
+
+    Raises:
+        404: If camera not found or no patterns available
+    """
+    # Verify camera exists
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    # Get patterns
+    pattern_data = await pattern_service.get_patterns(db, camera_id)
+
+    if not pattern_data:
+        # Camera exists but no patterns (insufficient data)
+        raise HTTPException(
+            status_code=404,
+            detail="No activity patterns available for this camera. Patterns require at least 10 events over 7+ days."
+        )
+
+    return PatternResponse(
+        camera_id=pattern_data.camera_id,
+        hourly_distribution=pattern_data.hourly_distribution,
+        daily_distribution=pattern_data.daily_distribution,
+        peak_hours=pattern_data.peak_hours,
+        quiet_hours=pattern_data.quiet_hours,
+        average_events_per_day=pattern_data.average_events_per_day,
+        last_calculated_at=pattern_data.last_calculated_at,
+        calculation_window_days=pattern_data.calculation_window_days,
+        insufficient_data=pattern_data.insufficient_data,
+    )
+
+
+@router.post("/patterns/{camera_id}/recalculate", response_model=RecalculatePatternResponse)
+async def recalculate_camera_patterns(
+    camera_id: str,
+    window_days: int = Query(
+        default=30,
+        ge=7,
+        le=365,
+        description="Number of days to analyze"
+    ),
+    db: Session = Depends(get_db),
+    pattern_service: PatternService = Depends(get_pattern_service),
+):
+    """
+    Force recalculation of activity patterns for a camera.
+
+    Story P4-3.5: Pattern Detection (AC15)
+
+    Immediately recalculates patterns regardless of when they were last
+    calculated. Useful for testing or after significant event activity changes.
+
+    Args:
+        camera_id: UUID of the camera
+        window_days: Number of days to analyze (7-365, default 30)
+        db: Database session
+        pattern_service: Pattern service instance
+
+    Returns:
+        RecalculatePatternResponse with status
+
+    Raises:
+        404: If camera not found
+    """
+    # Verify camera exists
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    # Force recalculation
+    pattern = await pattern_service.recalculate_patterns(
+        db=db,
+        camera_id=camera_id,
+        window_days=window_days,
+        force=True
+    )
+
+    if pattern:
+        return RecalculatePatternResponse(
+            camera_id=camera_id,
+            success=True,
+            message=f"Patterns recalculated using {window_days}-day window",
+            insufficient_data=False,
+        )
+    else:
+        return RecalculatePatternResponse(
+            camera_id=camera_id,
+            success=False,
+            message="Insufficient data for pattern calculation. Requires at least 10 events over 7+ days.",
+            insufficient_data=True,
+        )
+
+
+@router.post("/patterns/batch", response_model=BatchPatternResponse)
+async def batch_recalculate_patterns(
+    window_days: int = Query(
+        default=30,
+        ge=7,
+        le=365,
+        description="Number of days to analyze"
+    ),
+    db: Session = Depends(get_db),
+    pattern_service: PatternService = Depends(get_pattern_service),
+):
+    """
+    Recalculate activity patterns for all enabled cameras.
+
+    Story P4-3.5: Pattern Detection (AC9)
+
+    Triggers batch pattern recalculation for all enabled cameras. This
+    operation respects the rate limiting (skips cameras calculated within
+    the last hour unless forced).
+
+    Args:
+        window_days: Number of days to analyze (7-365, default 30)
+        db: Database session
+        pattern_service: Pattern service instance
+
+    Returns:
+        BatchPatternResponse with calculation statistics
+    """
+    result = await pattern_service.recalculate_all_patterns(
+        db=db,
+        window_days=window_days
+    )
+
+    return BatchPatternResponse(
+        total_cameras=result["total_cameras"],
+        patterns_calculated=result["patterns_calculated"],
+        patterns_skipped=result["patterns_skipped"],
+        elapsed_ms=result["elapsed_ms"],
+    )

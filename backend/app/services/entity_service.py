@@ -249,6 +249,109 @@ class EntityService:
             )
             return result
 
+    async def match_entity_only(
+        self,
+        db: Session,
+        embedding: list[float],
+        threshold: float = DEFAULT_THRESHOLD,
+    ) -> Optional[EntityMatchResult]:
+        """
+        Match embedding to existing entity without creating any links (Story P4-3.4).
+
+        This is a read-only operation used for context building during AI prompt
+        generation BEFORE the event is stored in the database.
+
+        Args:
+            db: SQLAlchemy database session
+            embedding: CLIP embedding vector (512-dim)
+            threshold: Minimum similarity score for matching (default 0.75)
+
+        Returns:
+            EntityMatchResult if a match is found above threshold, None otherwise
+
+        Note:
+            - Does NOT create entity-event links
+            - Does NOT update occurrence counts
+            - Does NOT create new entities
+            - Pure read operation for context lookup
+        """
+        from app.models.recognized_entity import RecognizedEntity
+
+        start_time = time.time()
+
+        # Load cache if needed
+        if not self._cache_loaded:
+            self._load_entity_cache(db)
+
+        # If no entities exist, nothing to match
+        if not self._entity_cache:
+            return None
+
+        # Calculate similarity with all existing entities
+        entity_ids = list(self._entity_cache.keys())
+        entity_embeddings = [self._entity_cache[eid] for eid in entity_ids]
+
+        similarities = batch_cosine_similarity(embedding, entity_embeddings)
+
+        # Find best match above threshold
+        best_idx = -1
+        best_score = -1.0
+        for i, score in enumerate(similarities):
+            if score >= threshold and score > best_score:
+                best_idx = i
+                best_score = score
+
+        match_time_ms = (time.time() - start_time) * 1000
+
+        if best_idx >= 0:
+            # Match found - get entity details (read-only)
+            matched_entity_id = entity_ids[best_idx]
+
+            entity = db.query(RecognizedEntity).filter(
+                RecognizedEntity.id == matched_entity_id
+            ).first()
+
+            if not entity:
+                logger.warning(
+                    f"Entity {matched_entity_id} in cache but not in DB",
+                    extra={"entity_id": matched_entity_id}
+                )
+                return None
+
+            logger.debug(
+                f"Entity match found for context (read-only)",
+                extra={
+                    "event_type": "entity_match_context",
+                    "entity_id": matched_entity_id,
+                    "entity_name": entity.name,
+                    "similarity_score": round(best_score, 4),
+                    "occurrence_count": entity.occurrence_count,
+                    "match_time_ms": round(match_time_ms, 2),
+                }
+            )
+
+            return EntityMatchResult(
+                entity_id=entity.id,
+                entity_type=entity.entity_type,
+                name=entity.name,
+                first_seen_at=entity.first_seen_at,
+                last_seen_at=entity.last_seen_at,
+                occurrence_count=entity.occurrence_count,
+                similarity_score=best_score,
+                is_new=False,
+            )
+        else:
+            logger.debug(
+                f"No entity match found for context (best score: {max(similarities) if similarities else 0:.4f})",
+                extra={
+                    "event_type": "entity_no_match_context",
+                    "best_score": round(max(similarities) if similarities else 0, 4),
+                    "threshold": threshold,
+                    "match_time_ms": round(match_time_ms, 2),
+                }
+            )
+            return None
+
     async def _create_new_entity(
         self,
         db: Session,

@@ -1,0 +1,235 @@
+<story-context id="p4-3-5-pattern-detection" v="1.0">
+  <metadata>
+    <epicId>P4-3</epicId>
+    <storyId>5</storyId>
+    <title>Pattern Detection</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-11</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-3-5-pattern-detection.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security system user</asA>
+    <iWant>the system to analyze time-based activity patterns for each camera, detecting typical hours, day-of-week regularity, and unusual timing</iWant>
+    <soThat>the AI can provide context like "This is typical activity for this time" or "Unusual - this camera is normally quiet at this hour" in event descriptions</soThat>
+    <tasks>
+      <task id="1" ac="6">Create CameraActivityPattern database model with hourly_distribution, daily_distribution, peak_hours, quiet_hours, average_events_per_day fields</task>
+      <task id="2" ac="1,2,3,4,5,7">Implement PatternService core calculations: hourly distribution, daily distribution, peak hours, quiet hours, average events per day</task>
+      <task id="3" ac="8">Implement timing analysis: is_typical_timing() returning TimingAnalysisResult with is_typical, confidence, reason</task>
+      <task id="4" ac="9,15">Implement pattern calculation scheduler with configurable interval and time window</task>
+      <task id="5" ac="10,11">Create GET /api/v1/context/patterns/{camera_id} endpoint with PatternResponse schema</task>
+      <task id="6" ac="14">Handle edge cases: cameras with insufficient history, provide sensible defaults</task>
+      <task id="7" ac="12">Integrate with ContextEnhancedPromptService - replace inline time pattern logic with PatternService.is_typical_timing()</task>
+      <task id="8" ac="13">Optimize performance: ensure pattern lookup completes in &lt;50ms using persisted data</task>
+      <task id="9" ac="1,2,3,4,5,7,8">Write unit tests for distribution calculations, peak/quiet identification, timing analysis</task>
+      <task id="10" ac="6,12">Write integration tests for database persistence and context service integration</task>
+      <task id="11" ac="10,11,14">Write API tests for patterns endpoint, schema validation, error responses</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">System calculates hourly activity distribution per camera (events per hour across all days)</criterion>
+    <criterion id="2">System calculates daily activity distribution per camera (events per day-of-week)</criterion>
+    <criterion id="3">System identifies peak activity hours for each camera (hours with above-average activity)</criterion>
+    <criterion id="4">System calculates average events per day metric for each camera</criterion>
+    <criterion id="5">System identifies quiet hours (below-threshold activity) for each camera</criterion>
+    <criterion id="6">Pattern data persisted in camera_activity_patterns table, updated periodically</criterion>
+    <criterion id="7">PatternService.get_patterns(camera_id) returns activity patterns for a camera</criterion>
+    <criterion id="8">PatternService.is_typical_timing(camera_id, timestamp) returns True/False with confidence</criterion>
+    <criterion id="9">Pattern recalculation scheduled to run periodically (configurable, default: hourly)</criterion>
+    <criterion id="10">API endpoint GET /api/v1/context/patterns/{camera_id} returns pattern data</criterion>
+    <criterion id="11">Pattern data includes: hourly_distribution, daily_distribution, peak_hours, quiet_hours, average_events_per_day</criterion>
+    <criterion id="12">Pattern context integrated with ContextEnhancedPromptService for AI descriptions</criterion>
+    <criterion id="13">Performance: Pattern lookup completes in &lt;50ms (uses cached/persisted data)</criterion>
+    <criterion id="14">Graceful handling of cameras with insufficient history (&lt;7 days data) - returns null/defaults</criterion>
+    <criterion id="15">Pattern data considers configurable time window (default: 30 days rolling)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase4.md</path>
+        <title>Phase 4 Epics</title>
+        <section>Epic P4-3: Temporal Context Engine, Story P4-3.5</section>
+        <snippet>Pattern Detection: Analyze time-of-day patterns, detect day-of-week regularity, identify unusual timing anomalies, create pattern summary data.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase4.md</path>
+        <title>Phase 4 PRD</title>
+        <section>Functional Requirements FR3</section>
+        <snippet>System detects time-based patterns (daily, weekly). Context lookup adds &lt;500ms to event processing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>GET /api/v1/context/patterns/{camera_id}</section>
+        <snippet>Returns hourly_distribution, daily_distribution, peak_hours, average_events_per_day for a camera.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-3-4-context-enhanced-ai-prompts.md</path>
+        <title>Previous Story: Context-Enhanced AI Prompts</title>
+        <section>Dev Notes, Architecture Alignment</section>
+        <snippet>ContextEnhancedPromptService has _format_time_pattern_context() method that currently queries events inline - this story moves logic to PatternService with persistence.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-3-3-recurring-visitor-detection.md</path>
+        <title>Previous Story: Recurring Visitor Detection</title>
+        <section>Key Implementation Details</section>
+        <snippet>EntityService pattern shows service structure with factory function, UUID primary key, JSON for complex fields, foreign keys with CASCADE.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/context_prompt_service.py</path>
+        <kind>service</kind>
+        <symbol>ContextEnhancedPromptService</symbol>
+        <lines>1-649</lines>
+        <reason>MODIFY: Contains _get_time_pattern_context() method (lines 367-450) that performs inline event queries. Replace with PatternService.is_typical_timing() call.</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/context.py</path>
+        <kind>router</kind>
+        <symbol>router</symbol>
+        <lines>1-658</lines>
+        <reason>ADD: New patterns endpoint GET /api/v1/context/patterns/{camera_id}. Follow existing patterns from entities and similarity endpoints.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/recognized_entity.py</path>
+        <kind>model</kind>
+        <symbol>RecognizedEntity, EntityEvent</symbol>
+        <lines>1-184</lines>
+        <reason>REFERENCE: Model pattern - UUID primary key, JSON Text columns, ForeignKey with CASCADE, indexes, datetime with timezone. Follow for CameraActivityPattern.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>1-108</lines>
+        <reason>Query this model for historical event data by camera_id and timestamp. Key fields: camera_id, timestamp, created_at.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <lines>1-143</lines>
+        <reason>CameraActivityPattern will have ForeignKey to cameras.id. Understand existing relationships (events).</reason>
+      </file>
+      <file>
+        <path>backend/app/models/__init__.py</path>
+        <kind>module</kind>
+        <symbol>__all__</symbol>
+        <lines>1-35</lines>
+        <reason>ADD: Export new CameraActivityPattern model after creation.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/entity_service.py</path>
+        <kind>service</kind>
+        <symbol>EntityService, get_entity_service</symbol>
+        <reason>REFERENCE: Service pattern with factory function, singleton pattern, async methods. Follow for PatternService.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_entity_service.py</path>
+        <kind>test</kind>
+        <symbol>TestEntityService</symbol>
+        <reason>REFERENCE: Unit test pattern for services - pytest fixtures, async tests, mock data. Follow for test_pattern_service.py.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_context_prompt_service.py</path>
+        <kind>test</kind>
+        <symbol>TestContextPromptService</symbol>
+        <reason>UPDATE: May need integration test updates after PatternService integration.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0">Web framework for API endpoints</package>
+        <package name="sqlalchemy" version=">=2.0.36">ORM for database models and queries</package>
+        <package name="alembic" version=">=1.14.0">Database migrations for new table</package>
+        <package name="pydantic" version=">=2.10.0">Request/response schemas for API</package>
+        <package name="apscheduler" version=">=3.10.4">Task scheduling for periodic pattern recalculation</package>
+        <package name="pytest" version="7.4.3">Testing framework</package>
+        <package name="pytest-asyncio" version="0.21.1">Async test support</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="performance">Pattern lookup must complete in &lt;50ms - use persisted data, not on-demand calculation</constraint>
+    <constraint type="performance">Pattern recalculation should be efficient - scheduled hourly, not blocking event processing</constraint>
+    <constraint type="architecture">Follow existing service pattern: factory function, singleton, async methods</constraint>
+    <constraint type="architecture">JSON storage in Text columns for hourly_distribution, daily_distribution, peak_hours, quiet_hours</constraint>
+    <constraint type="architecture">ForeignKey to cameras.id with ondelete CASCADE</constraint>
+    <constraint type="architecture">Integrate with existing ContextEnhancedPromptService, don't create separate AI prompt path</constraint>
+    <constraint type="testing">Unit tests for calculations, integration tests for DB persistence, API tests for endpoint</constraint>
+    <constraint type="edge-case">Handle cameras with &lt;7 days of data - return insufficient_data flag, neutral timing analysis</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>GET /api/v1/context/patterns/{camera_id}</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/context/patterns/{camera_id} -> PatternResponse</signature>
+      <path>backend/app/api/v1/context.py</path>
+    </interface>
+    <interface>
+      <name>PatternService.get_patterns</name>
+      <kind>async method</kind>
+      <signature>async def get_patterns(self, db: Session, camera_id: str) -> Optional[PatternResponse]</signature>
+      <path>backend/app/services/pattern_service.py (TO CREATE)</path>
+    </interface>
+    <interface>
+      <name>PatternService.is_typical_timing</name>
+      <kind>async method</kind>
+      <signature>async def is_typical_timing(self, db: Session, camera_id: str, timestamp: datetime) -> TimingAnalysisResult</signature>
+      <path>backend/app/services/pattern_service.py (TO CREATE)</path>
+    </interface>
+    <interface>
+      <name>PatternService.recalculate_patterns</name>
+      <kind>async method</kind>
+      <signature>async def recalculate_patterns(self, db: Session, camera_id: str, window_days: int = 30) -> Optional[CameraActivityPattern]</signature>
+      <path>backend/app/services/pattern_service.py (TO CREATE)</path>
+    </interface>
+    <interface>
+      <name>ContextEnhancedPromptService._get_time_pattern_context</name>
+      <kind>async method</kind>
+      <signature>async def _get_time_pattern_context(db, camera_id, event_time, time_window_days) -> Optional[str]</signature>
+      <path>backend/app/services/context_prompt_service.py</path>
+      <note>REPLACE implementation with PatternService.is_typical_timing() call</note>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Use pytest with pytest-asyncio for async tests. Follow existing test patterns in backend/tests/test_services/.
+      Mock database sessions using SQLite in-memory for unit tests.
+      Use fixtures for test data (events, cameras).
+      Target 80%+ coverage for new code.
+      Include performance benchmark test to verify &lt;50ms pattern lookup.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_pattern_service.py</location>
+      <location>backend/tests/test_integration/test_pattern_integration.py</location>
+      <location>backend/tests/test_api/test_pattern_api.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test hourly distribution calculation with events spread across different hours</idea>
+      <idea ac="2">Test daily distribution calculation with events spread across different days of week</idea>
+      <idea ac="3">Test peak hour identification - hours with events > mean + 0.5*std_dev</idea>
+      <idea ac="4">Test average events per day calculation with known event count and day range</idea>
+      <idea ac="5">Test quiet hour identification - hours with events < 0.1 * max_hour</idea>
+      <idea ac="6">Test pattern persistence: create, update, retrieve from database</idea>
+      <idea ac="7">Test get_patterns returns correct PatternResponse structure</idea>
+      <idea ac="8">Test is_typical_timing returns correct boolean and confidence for peak, quiet, and normal hours</idea>
+      <idea ac="9">Test recalculation respects last_calculated_at and skips if recent</idea>
+      <idea ac="10">Test API returns 200 with valid data for existing camera with patterns</idea>
+      <idea ac="11">Test API response includes all required fields in correct format</idea>
+      <idea ac="12">Test ContextEnhancedPromptService uses PatternService and includes timing context in prompt</idea>
+      <idea ac="13">Performance benchmark: pattern lookup completes in &lt;50ms with populated data</idea>
+      <idea ac="14">Test API returns insufficient_data flag for camera with &lt;7 days history</idea>
+      <idea ac="15">Test different time window settings (7 days, 30 days, 60 days)</idea>
+    </ideas>
+  </tests>
+</story-context>
