@@ -17,6 +17,7 @@ import { AIProviderBadge } from './AIProviderBadge';
 import { ConfidenceIndicator } from './ConfidenceIndicator';
 import { ReAnalyzeButton } from './ReAnalyzeButton';
 import { ReanalyzedIndicator } from './ReanalyzedIndicator';
+import { FeedbackButtons } from './FeedbackButtons';
 import { cn } from '@/lib/utils';
 
 interface EventCardProps {
@@ -207,6 +208,14 @@ export const EventCard = memo(function EventCard({
               onEventClick={onCorrelatedEventClick}
             />
           )}
+
+          {/* Story P4-5.1: Feedback Buttons (AC1, AC2, AC8, AC9, AC10) */}
+          <div className="flex justify-end mt-2">
+            <FeedbackButtons
+              eventId={event.id}
+              existingFeedback={event.feedback}
+            />
+          </div>
         </div>
       </div>
     </Card>

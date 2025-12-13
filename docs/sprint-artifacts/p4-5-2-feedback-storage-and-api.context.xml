@@ -1,0 +1,201 @@
+<story-context id="p4-5-2-feedback-storage-and-api" v="1.0">
+  <metadata>
+    <epicId>P4-5</epicId>
+    <storyId>P4-5.2</storyId>
+    <title>Feedback Storage &amp; API</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-5-2-feedback-storage-and-api.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security administrator</asA>
+    <iWant>aggregate feedback statistics tracked by event, camera, and time period</iWant>
+    <soThat>I can analyze AI description accuracy trends and identify cameras needing calibration</soThat>
+    <tasks>
+      <task id="1" ac="6,7">Add camera_id to EventFeedback model - Create migration, backfill existing records</task>
+      <task id="2" ac="1,2,3,8,9,10">Create feedback statistics schemas (FeedbackStatsResponse, CameraFeedbackStats, DailyFeedbackStats, CorrectionSummary)</task>
+      <task id="3" ac="1,2,3,4,5,8,9,10,11">Implement GET /api/v1/feedback/stats endpoint with filters and aggregations</task>
+      <task id="4" ac="7">Update create_feedback to auto-populate camera_id from event</task>
+      <task id="5" ac="12">Add frontend API client feedback.getStats() method</task>
+      <task id="6" ac="1-11">Write backend tests for stats endpoint</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">GET /api/v1/feedback/stats endpoint returns aggregate feedback statistics</criterion>
+    <criterion id="2">Statistics include total feedback count, helpful count, not_helpful count</criterion>
+    <criterion id="3">Statistics include accuracy rate (helpful / total * 100)</criterion>
+    <criterion id="4">Stats endpoint supports camera_id filter to get per-camera accuracy</criterion>
+    <criterion id="5">Stats endpoint supports time range filters (start_date, end_date)</criterion>
+    <criterion id="6">EventFeedback model includes camera_id field (denormalized for efficient aggregation)</criterion>
+    <criterion id="7">Feedback API automatically populates camera_id from event on creation</criterion>
+    <criterion id="8">Stats include breakdown by camera (events_by_camera with accuracy per camera)</criterion>
+    <criterion id="9">Stats include trend data (feedback counts by day for last 30 days)</criterion>
+    <criterion id="10">Stats include top corrections (most common correction patterns)</criterion>
+    <criterion id="11">Stats endpoint is performant (&lt;200ms for 10,000 feedback records)</criterion>
+    <criterion id="12">Frontend API client includes feedback.getStats() method</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase4.md</path>
+        <title>Phase 4 Epics</title>
+        <section>Epic P4-5: User Feedback &amp; Learning - Story P4-5.2</section>
+        <snippet>Track feedback by event, user, camera. Aggregate feedback statistics. Foundation for accuracy dashboard and prompt improvement.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase4.md</path>
+        <title>Phase 4 PRD</title>
+        <section>FR24 - System tracks accuracy metrics per camera</section>
+        <snippet>System tracks accuracy metrics per camera. GET /api/v1/feedback/stats endpoint for aggregate statistics. User feedback loop improves description accuracy.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>API Additions - Phase 4</section>
+        <snippet>GET /api/v1/feedback/stats - Accuracy metrics endpoint. EventFeedback table with event_id, rating, correction. SQLAlchemy ORM patterns for aggregation.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-5-1-feedback-collection-ui.md</path>
+        <title>Previous Story P4-5.1</title>
+        <section>Dev Agent Record - File List</section>
+        <snippet>EventFeedback model created at backend/app/models/event_feedback.py. Feedback schemas at backend/app/schemas/feedback.py. API endpoints at backend/app/api/v1/events.py lines 1618-1869.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/models/event_feedback.py</path>
+        <kind>model</kind>
+        <symbol>EventFeedback</symbol>
+        <lines>1-60</lines>
+        <reason>Existing feedback model to extend with camera_id column</reason>
+      </file>
+      <file>
+        <path>backend/app/schemas/feedback.py</path>
+        <kind>schema</kind>
+        <symbol>FeedbackCreate, FeedbackUpdate, FeedbackResponse</symbol>
+        <lines>1-46</lines>
+        <reason>Existing schemas to extend with stats response schemas</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/events.py</path>
+        <kind>router</kind>
+        <symbol>create_feedback, get_feedback, update_feedback, delete_feedback</symbol>
+        <lines>1618-1869</lines>
+        <reason>Existing feedback endpoints - modify create_feedback to populate camera_id</reason>
+      </file>
+      <file>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <reason>Event model contains camera_id to lookup for feedback denormalization</reason>
+      </file>
+      <file>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera</symbol>
+        <reason>Camera model for joining camera names in per-camera stats</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_api/test_feedback.py</path>
+        <kind>test</kind>
+        <symbol>test_create_feedback, test_get_feedback, etc.</symbol>
+        <reason>Existing feedback tests - follow pattern for stats tests</reason>
+      </file>
+      <file>
+        <path>frontend/lib/api-client.ts</path>
+        <kind>client</kind>
+        <symbol>apiClient.events.submitFeedback, etc.</symbol>
+        <lines>409-462</lines>
+        <reason>API client with existing feedback methods - add getStats method</reason>
+      </file>
+      <file>
+        <path>frontend/types/event.ts</path>
+        <kind>types</kind>
+        <symbol>IEventFeedback</symbol>
+        <reason>Existing feedback types - add IFeedbackStats interface</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115+" />
+        <package name="sqlalchemy" version="2.0+" />
+        <package name="alembic" version="1.13+" />
+        <package name="pydantic" version="2.0+" />
+        <package name="pytest" version="8.0+" />
+      </python>
+      <node>
+        <package name="next" version="15.x" />
+        <package name="react" version="19.x" />
+        <package name="@tanstack/react-query" version="5.x" />
+        <package name="typescript" version="5.x" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">SQLAlchemy ORM: Use func.count, func.sum with case() for aggregate queries</constraint>
+    <constraint type="pattern">Alembic migrations: Create 036_add_camera_id_to_feedback.py following existing migration patterns</constraint>
+    <constraint type="pattern">Pydantic schemas: Use model_config = {"from_attributes": True} for ORM compatibility</constraint>
+    <constraint type="pattern">API routing: Create new router at /api/v1/feedback for stats (separate from events router)</constraint>
+    <constraint type="performance">Stats queries must complete in &lt;200ms for 10,000 records</constraint>
+    <constraint type="testing">Follow pytest patterns from test_feedback.py, use TestClient and fixtures</constraint>
+    <constraint type="frontend">Follow api-client.ts patterns, use apiFetch wrapper, define TypeScript interfaces</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>GET /api/v1/feedback/stats</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/feedback/stats?camera_id={uuid}&amp;start_date={YYYY-MM-DD}&amp;end_date={YYYY-MM-DD}</signature>
+      <path>backend/app/api/v1/feedback.py (new file)</path>
+    </interface>
+    <interface>
+      <name>FeedbackStatsResponse</name>
+      <kind>Pydantic schema</kind>
+      <signature>class FeedbackStatsResponse(BaseModel): total_count: int, helpful_count: int, not_helpful_count: int, accuracy_rate: float, feedback_by_camera: Dict[str, CameraFeedbackStats], daily_trend: List[DailyFeedbackStats], top_corrections: List[CorrectionSummary]</signature>
+      <path>backend/app/schemas/feedback.py</path>
+    </interface>
+    <interface>
+      <name>EventFeedback.camera_id</name>
+      <kind>SQLAlchemy column</kind>
+      <signature>camera_id = Column(String, ForeignKey('cameras.id'), nullable=True, index=True)</signature>
+      <path>backend/app/models/event_feedback.py</path>
+    </interface>
+    <interface>
+      <name>apiClient.feedback.getStats</name>
+      <kind>TypeScript function</kind>
+      <signature>getStats: (params?: { camera_id?: string; start_date?: string; end_date?: string }) =&gt; Promise&lt;IFeedbackStats&gt;</signature>
+      <path>frontend/lib/api-client.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend uses pytest with pytest-asyncio for async tests. TestClient from FastAPI for API testing.
+      Fixtures defined in conftest.py create test database sessions and sample data.
+      Frontend tests use Jest + React Testing Library (currently minimal - TD-001 addressed this).
+      API tests should cover: success cases, error cases (404, 400), filter combinations, edge cases (empty data).
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_feedback_stats.py (new file)</location>
+      <location>backend/tests/conftest.py (fixtures)</location>
+    </locations>
+    <ideas>
+      <idea ac="1,2,3">Test GET /feedback/stats returns all required fields with correct types</idea>
+      <idea ac="3">Test accuracy_rate calculation: helpful=80, total=100 should return 80.0</idea>
+      <idea ac="4">Test camera_id filter: stats only include feedback for specified camera</idea>
+      <idea ac="5">Test date range filters: start_date and end_date filter feedback correctly</idea>
+      <idea ac="8">Test per-camera breakdown: feedback_by_camera contains all cameras with feedback</idea>
+      <idea ac="9">Test daily_trend: returns correct counts per day for last 30 days</idea>
+      <idea ac="10">Test top_corrections: groups similar corrections and counts occurrences</idea>
+      <idea ac="11">Performance test: mock 10,000 records, verify response time &lt;200ms</idea>
+      <idea ac="6,7">Test camera_id auto-population: create feedback, verify camera_id matches event's camera</idea>
+    </ideas>
+  </tests>
+</story-context>

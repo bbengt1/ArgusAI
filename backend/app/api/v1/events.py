@@ -37,6 +37,8 @@ from app.schemas.event import (
 )
 from app.schemas.system import CleanupResponse
 from app.services.cleanup_service import get_cleanup_service
+from app.models.event_feedback import EventFeedback
+from app.schemas.feedback import FeedbackCreate, FeedbackUpdate, FeedbackResponse
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger(f"{__name__}.audit")  # Dedicated audit logger for compliance
@@ -1167,6 +1169,10 @@ async def get_event(
         except Exception as entity_error:
             logger.debug(f"Could not get entity for event {event_id}: {entity_error}")
 
+        # Story P4-5.1: Add feedback if exists
+        if event.feedback:
+            event_dict["feedback"] = FeedbackResponse.model_validate(event.feedback)
+
         return EventResponse(**event_dict)
 
     except HTTPException:
@@ -1606,4 +1612,259 @@ def get_event_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get event statistics"
+        )
+
+
+# ============================================================================
+# Story P4-5.1: Event Feedback Endpoints
+# ============================================================================
+
+@router.post("/{event_id}/feedback", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
+async def create_feedback(
+    event_id: str,
+    feedback_data: FeedbackCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create feedback for an event (Story P4-5.1)
+
+    Allows users to rate AI descriptions as helpful/not helpful and optionally
+    provide correction text.
+
+    Args:
+        event_id: Event UUID
+        feedback_data: Rating and optional correction
+        db: Database session
+
+    Returns:
+        Created feedback with ID and timestamps
+
+    Raises:
+        404: Event not found
+        409: Feedback already exists for this event
+        500: Database error
+
+    Example:
+        POST /events/123/feedback
+        {"rating": "helpful"}
+
+        POST /events/123/feedback
+        {"rating": "not_helpful", "correction": "This was actually a delivery driver"}
+    """
+    try:
+        # Verify event exists
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        # Check if feedback already exists
+        existing = db.query(EventFeedback).filter(EventFeedback.event_id == event_id).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Feedback already exists for this event. Use PUT to update."
+            )
+
+        # Create feedback with camera_id auto-populated from event (Story P4-5.2, AC7)
+        feedback = EventFeedback(
+            event_id=event_id,
+            camera_id=event.camera_id,  # Denormalized for efficient aggregate queries
+            rating=feedback_data.rating,
+            correction=feedback_data.correction
+        )
+        db.add(feedback)
+        db.commit()
+        db.refresh(feedback)
+
+        logger.info(
+            f"Created feedback for event {event_id}: rating={feedback_data.rating}, camera_id={event.camera_id}",
+            extra={"event_id": event_id, "camera_id": event.camera_id, "rating": feedback_data.rating}
+        )
+
+        return FeedbackResponse.model_validate(feedback)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create feedback for event {event_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create feedback"
+        )
+
+
+@router.get("/{event_id}/feedback", response_model=FeedbackResponse)
+async def get_feedback(
+    event_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get feedback for an event (Story P4-5.1)
+
+    Args:
+        event_id: Event UUID
+        db: Database session
+
+    Returns:
+        Feedback data if exists
+
+    Raises:
+        404: Event or feedback not found
+
+    Example:
+        GET /events/123/feedback
+    """
+    try:
+        # Verify event exists
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        feedback = db.query(EventFeedback).filter(EventFeedback.event_id == event_id).first()
+        if not feedback:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No feedback found for event {event_id}"
+            )
+
+        return FeedbackResponse.model_validate(feedback)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get feedback for event {event_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get feedback"
+        )
+
+
+@router.put("/{event_id}/feedback", response_model=FeedbackResponse)
+async def update_feedback(
+    event_id: str,
+    feedback_data: FeedbackUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update existing feedback for an event (Story P4-5.1)
+
+    Args:
+        event_id: Event UUID
+        feedback_data: Updated rating and/or correction
+        db: Database session
+
+    Returns:
+        Updated feedback
+
+    Raises:
+        404: Event or feedback not found
+        500: Database error
+
+    Example:
+        PUT /events/123/feedback
+        {"rating": "not_helpful", "correction": "Wrong description"}
+    """
+    try:
+        # Verify event exists
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        feedback = db.query(EventFeedback).filter(EventFeedback.event_id == event_id).first()
+        if not feedback:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No feedback found for event {event_id}"
+            )
+
+        # Update fields if provided
+        if feedback_data.rating is not None:
+            feedback.rating = feedback_data.rating
+        if feedback_data.correction is not None:
+            feedback.correction = feedback_data.correction
+
+        db.commit()
+        db.refresh(feedback)
+
+        logger.info(
+            f"Updated feedback for event {event_id}",
+            extra={"event_id": event_id, "rating": feedback.rating}
+        )
+
+        return FeedbackResponse.model_validate(feedback)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update feedback for event {event_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update feedback"
+        )
+
+
+@router.delete("/{event_id}/feedback", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_feedback(
+    event_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete feedback for an event (Story P4-5.1)
+
+    Args:
+        event_id: Event UUID
+        db: Database session
+
+    Returns:
+        204 No Content on success
+
+    Raises:
+        404: Event or feedback not found
+        500: Database error
+
+    Example:
+        DELETE /events/123/feedback
+    """
+    try:
+        # Verify event exists
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        feedback = db.query(EventFeedback).filter(EventFeedback.event_id == event_id).first()
+        if not feedback:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No feedback found for event {event_id}"
+            )
+
+        db.delete(feedback)
+        db.commit()
+
+        logger.info(f"Deleted feedback for event {event_id}")
+
+        return None
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete feedback for event {event_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete feedback"
         )

@@ -1,0 +1,306 @@
+<story-context id="p4-5-1" v="1.0">
+  <metadata>
+    <epicId>P4-5</epicId>
+    <storyId>P4-5.1</storyId>
+    <title>Feedback Collection UI</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-5-1-feedback-collection-ui.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>to provide quick feedback on AI event descriptions using thumbs up/down buttons</iWant>
+    <soThat>the system can learn from my corrections and improve description accuracy over time</soThat>
+    <tasks>
+      <task id="1" title="Create EventFeedback database model">
+        <subtask>Add EventFeedback model with id, event_id (FK), rating (enum), correction (Text), timestamps</subtask>
+        <subtask>Add unique constraint on event_id (one feedback per event)</subtask>
+        <subtask>Add relationship to Event model</subtask>
+        <subtask>Create Alembic migration</subtask>
+      </task>
+      <task id="2" title="Create feedback API schemas">
+        <subtask>Create FeedbackCreate schema with rating and optional correction</subtask>
+        <subtask>Create FeedbackResponse schema</subtask>
+        <subtask>Create FeedbackUpdate schema</subtask>
+      </task>
+      <task id="3" title="Implement feedback API endpoints">
+        <subtask>POST /api/v1/events/{event_id}/feedback - create feedback</subtask>
+        <subtask>GET /api/v1/events/{event_id}/feedback - get feedback</subtask>
+        <subtask>PUT /api/v1/events/{event_id}/feedback - update feedback</subtask>
+        <subtask>DELETE /api/v1/events/{event_id}/feedback - remove feedback</subtask>
+      </task>
+      <task id="4" title="Add feedback to Event response">
+        <subtask>Extend EventResponse schema to include feedback</subtask>
+        <subtask>Update events API to eagerly load feedback</subtask>
+      </task>
+      <task id="5" title="Add frontend API client methods">
+        <subtask>Add events.submitFeedback() method</subtask>
+        <subtask>Add events.updateFeedback() method</subtask>
+        <subtask>Add events.deleteFeedback() method</subtask>
+        <subtask>Define TypeScript types</subtask>
+      </task>
+      <task id="6" title="Create FeedbackButtons component">
+        <subtask>Add ThumbsUp and ThumbsDown icon buttons</subtask>
+        <subtask>Implement click handlers</subtask>
+        <subtask>Add visual feedback for selected state</subtask>
+        <subtask>Add loading state and success toast</subtask>
+        <subtask>Add accessibility attributes</subtask>
+      </task>
+      <task id="7" title="Create CorrectionInput component">
+        <subtask>Create expandable textarea for correction</subtask>
+        <subtask>Add character counter (0/500)</subtask>
+        <subtask>Make correction optional</subtask>
+      </task>
+      <task id="8" title="Integrate feedback into EventCard">
+        <subtask>Import FeedbackButtons into EventCard</subtask>
+        <subtask>Position buttons appropriately</subtask>
+        <subtask>Handle optimistic updates</subtask>
+      </task>
+      <task id="9" title="Create useFeedback hook">
+        <subtask>Create TanStack Query mutations</subtask>
+        <subtask>Add cache invalidation</subtask>
+        <subtask>Handle optimistic updates</subtask>
+      </task>
+      <task id="10" title="Write backend tests">
+        <subtask>Test CRUD operations</subtask>
+        <subtask>Test validation</subtask>
+        <subtask>Test edge cases</subtask>
+      </task>
+      <task id="11" title="Write frontend tests">
+        <subtask>Test component interactions</subtask>
+        <subtask>Test accessibility</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Event cards display thumbs up/down feedback buttons</criterion>
+    <criterion id="2">Buttons are single-tap actionable (no confirmation dialog)</criterion>
+    <criterion id="3">Clicking thumbs up sends rating: 'helpful' to backend</criterion>
+    <criterion id="4">Clicking thumbs down sends rating: 'not_helpful' to backend</criterion>
+    <criterion id="5">Thumbs down shows optional correction text input (expandable)</criterion>
+    <criterion id="6">Correction text is optional, can be submitted empty</criterion>
+    <criterion id="7">Correction text input has character limit (500 chars)</criterion>
+    <criterion id="8">Feedback submission shows confirmation toast on success</criterion>
+    <criterion id="9">Button state updates to show which feedback was given</criterion>
+    <criterion id="10">Previously submitted feedback is shown when viewing event again</criterion>
+    <criterion id="11">User can change their feedback (update existing)</criterion>
+    <criterion id="12">Backend POST /api/v1/events/{id}/feedback endpoint accepts feedback data</criterion>
+    <criterion id="13">Backend stores feedback with event_id, rating, correction, timestamp</criterion>
+    <criterion id="14">Feedback buttons are accessible (keyboard navigation, ARIA labels)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD-phase4.md</path>
+        <title>Phase 4 PRD</title>
+        <section>User Feedback &amp; Learning</section>
+        <snippet>FR22: Users can rate event descriptions (helpful/not helpful). FR23: Users can submit description corrections. FR24: System tracks accuracy metrics per camera.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase4.md</path>
+        <title>Phase 4 Epics</title>
+        <section>Epic P4-5: User Feedback &amp; Learning</section>
+        <snippet>Story P4-5.1: Feedback Collection UI - Add thumbs up/down to event cards, quick feedback button (single tap), optional correction text input, feedback confirmation toast.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Database Schema</section>
+        <snippet>Event feedback table proposed with id, event_id, user_id, rating, correction, created_at. One feedback per event for MVP.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>9-108</lines>
+        <reason>Event model to add feedback relationship. Has existing relationships pattern to follow.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/__init__.py</path>
+        <kind>module</kind>
+        <symbol>models</symbol>
+        <reason>Must export new EventFeedback model here after creation.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/api/v1/events.py</path>
+        <kind>router</kind>
+        <symbol>events router</symbol>
+        <reason>Add feedback sub-routes under /events/{id}/feedback. Follow existing router patterns.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/schemas/event.py</path>
+        <kind>schema</kind>
+        <symbol>EventResponse</symbol>
+        <reason>Extend EventResponse to include optional feedback field.</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/events/EventCard.tsx</path>
+        <kind>component</kind>
+        <symbol>EventCard</symbol>
+        <lines>1-215</lines>
+        <reason>Main component to integrate FeedbackButtons. Already has badges pattern (AnalysisModeBadge, etc.)</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/lib/api-client.ts</path>
+        <kind>service</kind>
+        <symbol>apiFetch, events</symbol>
+        <reason>Add feedback methods to events namespace. Follow existing pattern with typed responses.</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/types/event.ts</path>
+        <kind>types</kind>
+        <symbol>IEvent</symbol>
+        <lines>34-73</lines>
+        <reason>Add feedback field to IEvent interface. Define IEventFeedback interface.</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/events/ReAnalyzeButton.tsx</path>
+        <kind>component</kind>
+        <symbol>ReAnalyzeButton</symbol>
+        <reason>Reference pattern for small action button on EventCard with loading state and toast.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/tests/test_api/test_summaries.py</path>
+        <kind>test</kind>
+        <symbol>TestOnDemandSummaryGeneration</symbol>
+        <reason>Reference pattern for API endpoint tests with class-based test organization.</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/__tests__/components/summaries/GenerateSummaryDialog.test.tsx</path>
+        <kind>test</kind>
+        <symbol>GenerateSummaryDialog tests</symbol>
+        <reason>Reference pattern for component tests with Vitest and Testing Library.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <backend>
+        <package>fastapi==0.115.0</package>
+        <package>sqlalchemy>=2.0.36</package>
+        <package>alembic>=1.14.0</package>
+        <package>pydantic>=2.10.0</package>
+        <package>pytest==7.4.3</package>
+        <package>pytest-asyncio==0.21.1</package>
+        <package>httpx==0.25.2</package>
+      </backend>
+      <frontend>
+        <package>react@19.2.0</package>
+        <package>next@^16.0.10</package>
+        <package>@tanstack/react-query@^5.90.10</package>
+        <package>lucide-react@^0.553.0</package>
+        <package>sonner@^2.0.7</package>
+        <package>vitest@^4.0.15</package>
+        <package>@testing-library/react@^16.3.0</package>
+      </frontend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>One feedback per event (unique constraint on event_id)</constraint>
+    <constraint>Rating must be either 'helpful' or 'not_helpful' (enum/literal)</constraint>
+    <constraint>Correction text max length: 500 characters</constraint>
+    <constraint>Feedback buttons must be accessible (keyboard nav, ARIA labels)</constraint>
+    <constraint>Use TanStack Query mutations for API calls with cache invalidation</constraint>
+    <constraint>Use existing toast system (sonner) for success/error feedback</constraint>
+    <constraint>Follow existing model/schema/API patterns established in codebase</constraint>
+    <constraint>Use Alembic for database migrations</constraint>
+    <constraint>Backend tests use pytest-asyncio with TestClient</constraint>
+    <constraint>Frontend tests use Vitest with Testing Library</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>POST /api/v1/events/{event_id}/feedback</name>
+      <kind>REST endpoint</kind>
+      <signature>POST /api/v1/events/{event_id}/feedback - Body: {"rating": "helpful"|"not_helpful", "correction": string|null} - Returns: 201 with FeedbackResponse</signature>
+      <path>backend/app/api/v1/events.py</path>
+    </interface>
+    <interface>
+      <name>GET /api/v1/events/{event_id}/feedback</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/events/{event_id}/feedback - Returns: 200 with FeedbackResponse or 404</signature>
+      <path>backend/app/api/v1/events.py</path>
+    </interface>
+    <interface>
+      <name>PUT /api/v1/events/{event_id}/feedback</name>
+      <kind>REST endpoint</kind>
+      <signature>PUT /api/v1/events/{event_id}/feedback - Body: {"rating": string, "correction": string|null} - Returns: 200 with FeedbackResponse</signature>
+      <path>backend/app/api/v1/events.py</path>
+    </interface>
+    <interface>
+      <name>DELETE /api/v1/events/{event_id}/feedback</name>
+      <kind>REST endpoint</kind>
+      <signature>DELETE /api/v1/events/{event_id}/feedback - Returns: 204 No Content</signature>
+      <path>backend/app/api/v1/events.py</path>
+    </interface>
+    <interface>
+      <name>FeedbackCreate</name>
+      <kind>Pydantic schema</kind>
+      <signature>class FeedbackCreate(BaseModel): rating: Literal['helpful', 'not_helpful']; correction: Optional[str] = Field(None, max_length=500)</signature>
+      <path>backend/app/schemas/feedback.py</path>
+    </interface>
+    <interface>
+      <name>FeedbackResponse</name>
+      <kind>Pydantic schema</kind>
+      <signature>class FeedbackResponse(BaseModel): id: str; event_id: str; rating: str; correction: Optional[str]; created_at: datetime; updated_at: Optional[datetime]</signature>
+      <path>backend/app/schemas/feedback.py</path>
+    </interface>
+    <interface>
+      <name>IEventFeedback</name>
+      <kind>TypeScript interface</kind>
+      <signature>interface IEventFeedback { id: string; event_id: string; rating: 'helpful' | 'not_helpful'; correction: string | null; created_at: string; }</signature>
+      <path>frontend/types/event.ts</path>
+    </interface>
+    <interface>
+      <name>events.submitFeedback</name>
+      <kind>API client method</kind>
+      <signature>async submitFeedback(eventId: string, data: { rating: 'helpful' | 'not_helpful'; correction?: string }): Promise&lt;IEventFeedback&gt;</signature>
+      <path>frontend/lib/api-client.ts</path>
+    </interface>
+    <interface>
+      <name>useSubmitFeedback</name>
+      <kind>React hook</kind>
+      <signature>useSubmitFeedback(): UseMutationResult&lt;IEventFeedback, Error, { eventId: string; rating: string; correction?: string }&gt;</signature>
+      <path>frontend/hooks/useFeedback.ts</path>
+    </interface>
+    <interface>
+      <name>FeedbackButtons</name>
+      <kind>React component</kind>
+      <signature>function FeedbackButtons({ eventId, existingFeedback, onFeedbackChange }: { eventId: string; existingFeedback?: IEventFeedback | null; onFeedbackChange?: (feedback: IEventFeedback) => void }): JSX.Element</signature>
+      <path>frontend/components/events/FeedbackButtons.tsx</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend: Use pytest with pytest-asyncio for async tests. Use TestClient from httpx for API tests. Organize tests in class-based structure (e.g., TestEventFeedbackEndpoints). Use fixtures from conftest.py for db session and test client. Aim for 70%+ coverage on new code.
+
+      Frontend: Use Vitest with @testing-library/react. Use userEvent for interactions. Mock API calls with vi.mock(). Test component states (loading, error, success). Test accessibility with screen.getByRole and aria attributes.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_feedback.py</location>
+      <location>backend/tests/test_models/test_event_feedback.py</location>
+      <location>frontend/__tests__/components/events/FeedbackButtons.test.tsx</location>
+      <location>frontend/__tests__/hooks/useFeedback.test.ts</location>
+    </locations>
+    <ideas>
+      <idea ac="1,9">Test FeedbackButtons renders thumbs up/down icons with correct visual state</idea>
+      <idea ac="2">Test button click immediately triggers API call without confirmation dialog</idea>
+      <idea ac="3,4">Test thumbs up sends 'helpful', thumbs down sends 'not_helpful' rating</idea>
+      <idea ac="5,6">Test correction input appears on thumbs down, allows empty submission</idea>
+      <idea ac="7">Test correction input enforces 500 character max length</idea>
+      <idea ac="8">Test success toast appears after feedback submission</idea>
+      <idea ac="10">Test existing feedback is displayed correctly on component mount</idea>
+      <idea ac="11">Test clicking different button updates existing feedback</idea>
+      <idea ac="12,13">Test backend POST creates feedback record with all required fields</idea>
+      <idea ac="14">Test buttons have aria-label attributes and keyboard navigation works</idea>
+      <idea ac="12">Test backend returns 404 for non-existent event_id</idea>
+      <idea ac="12">Test backend validation rejects invalid rating values</idea>
+    </ideas>
+  </tests>
+</story-context>

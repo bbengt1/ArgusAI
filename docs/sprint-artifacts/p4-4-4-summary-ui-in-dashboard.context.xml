@@ -1,0 +1,191 @@
+<story-context id="p4-4-4-summary-ui-in-dashboard" v="1.0">
+  <metadata>
+    <epicId>P4-4</epicId>
+    <storyId>P4-4.4</storyId>
+    <title>Summary UI in Dashboard</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-4-4-summary-ui-in-dashboard.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>a summary card on my dashboard showing today's and yesterday's activity summaries with quick stats and highlights</iWant>
+    <soThat>I can quickly understand my home's recent activity at a glance without navigating away from the main dashboard</soThat>
+    <tasks>
+      <task id="1" title="Create API endpoint for recent summaries" ac="10">
+        <subtask>Add GET /api/v1/summaries/recent endpoint to backend/app/api/v1/digests.py</subtask>
+        <subtask>Return today's summary if exists, plus yesterday's summary</subtask>
+        <subtask>Include event_count, camera_count, alert_count, doorbell_count in response</subtask>
+        <subtask>Handle cases where no summaries exist (return empty array)</subtask>
+        <subtask>Add Pydantic schemas for RecentSummariesResponse</subtask>
+      </task>
+      <task id="2" title="Create SummaryCard component" ac="1,3,9">
+        <subtask>Create frontend/components/dashboard/SummaryCard.tsx</subtask>
+        <subtask>Add Card component from shadcn/ui</subtask>
+        <subtask>Create header with title "Activity Summary"</subtask>
+        <subtask>Add date selector (Today/Yesterday tabs or toggle)</subtask>
+        <subtask>Display quick stats grid: Total Events, Cameras Active, Alerts Triggered, Doorbell Rings</subtask>
+        <subtask>Style using Tailwind CSS with consistent dashboard theme</subtask>
+      </task>
+      <task id="3" title="Add summary text display" ac="5,6">
+        <subtask>Display summary text excerpt (max 200 chars + "...")</subtask>
+        <subtask>Add "View Full Summary" button/link</subtask>
+        <subtask>Link navigates to /summaries?date={date.toISOString()}</subtask>
+        <subtask>Handle long summaries gracefully with truncation</subtask>
+      </task>
+      <task id="4" title="Implement loading and empty states" ac="7,8">
+        <subtask>Create loading skeleton using shadcn/ui Skeleton component</subtask>
+        <subtask>Show skeleton while data is loading (isLoading state)</subtask>
+        <subtask>Create empty state with message "No activity summaries yet"</subtask>
+        <subtask>Add icon for empty state (e.g., ClipboardList from lucide-react)</subtask>
+      </task>
+      <task id="5" title="Add highlight badges" ac="13">
+        <subtask>Create badge for "High Activity" when total_events > 20</subtask>
+        <subtask>Create badge for "Person Detected" when person_count >= 5</subtask>
+        <subtask>Create badge for "Doorbell Rings" when doorbell_count > 0</subtask>
+        <subtask>Style badges with appropriate colors (info, warning, etc.)</subtask>
+      </task>
+      <task id="6" title="Implement data fetching with TanStack Query" ac="11">
+        <subtask>Create frontend/hooks/useSummaries.ts with useRecentSummaries hook</subtask>
+        <subtask>Configure TanStack Query with 5-minute refetchInterval (300000ms)</subtask>
+        <subtask>Add staleTime of 1 minute to reduce unnecessary fetches</subtask>
+        <subtask>Handle error states gracefully</subtask>
+      </task>
+      <task id="7" title="Integrate SummaryCard into Dashboard" ac="2,12">
+        <subtask>Import SummaryCard into dashboard page (frontend/app/page.tsx)</subtask>
+        <subtask>Position SummaryCard in dashboard layout (below DashboardStats)</subtask>
+        <subtask>Ensure responsive grid layout (full-width on mobile, sidebar on desktop)</subtask>
+        <subtask>Add appropriate spacing and margins</subtask>
+      </task>
+      <task id="8" title="Write frontend tests" ac="1-9,11,13">
+        <subtask>Create frontend/__tests__/components/dashboard/SummaryCard.test.tsx</subtask>
+        <subtask>Test component renders correctly with mock data</subtask>
+        <subtask>Test loading state displays skeleton</subtask>
+        <subtask>Test empty state displays message</subtask>
+        <subtask>Test date toggle switches between today/yesterday</subtask>
+        <subtask>Test stats display correct values</subtask>
+        <subtask>Test highlight badges appear conditionally</subtask>
+        <subtask>Test link href is correct</subtask>
+      </task>
+      <task id="9" title="Write backend tests" ac="10">
+        <subtask>Add tests to backend/tests/test_api/test_digests.py</subtask>
+        <subtask>Test GET /api/v1/summaries/recent returns correct structure</subtask>
+        <subtask>Test endpoint with no summaries returns empty array</subtask>
+        <subtask>Test endpoint with only today's summary</subtask>
+        <subtask>Test endpoint with both today's and yesterday's summaries</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1" description="SummaryCard component exists at frontend/components/dashboard/SummaryCard.tsx" verification="Unit test: component renders without errors"/>
+    <criterion id="2" description="Dashboard page includes SummaryCard component" verification="Visual verification: card visible on dashboard"/>
+    <criterion id="3" description="SummaryCard displays Today summary with event count, camera count, alerts count, doorbell rings" verification="Unit test: verify stats display"/>
+    <criterion id="4" description="SummaryCard displays Yesterday summary toggle/tab" verification="Unit test: verify date toggle functionality"/>
+    <criterion id="5" description="SummaryCard shows summary text excerpt (first 200 chars) from ActivitySummary" verification="Unit test: verify text truncation"/>
+    <criterion id="6" description="View Full Summary link navigates to /summaries?date={date}" verification="Unit test: verify link href"/>
+    <criterion id="7" description="SummaryCard shows loading skeleton while fetching data" verification="Unit test: verify loading state"/>
+    <criterion id="8" description="SummaryCard shows empty state when no summaries exist" verification="Unit test: verify empty state message"/>
+    <criterion id="9" description="Quick stats include: Total Events, Cameras Active, Alerts Triggered, Doorbell Rings" verification="Unit test: verify all 4 stats display"/>
+    <criterion id="10" description="API endpoint GET /api/v1/summaries/recent returns today's and yesterday's summaries" verification="Integration test: verify endpoint returns correct data"/>
+    <criterion id="11" description="SummaryCard refreshes data every 5 minutes using TanStack Query" verification="Unit test: verify refetchInterval configuration"/>
+    <criterion id="12" description="SummaryCard is responsive - displays well on mobile and desktop" verification="Visual verification: test at different breakpoints"/>
+    <criterion id="13" description="Highlight badges show for significant events (5+ persons, doorbell rings > 0)" verification="Unit test: verify badge visibility logic"/>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics-phase4.md" title="Phase 4 Epics" section="Epic P4-4: Activity Summaries &amp; Digests" snippet="Story P4-4.4: Summary UI in Dashboard - Add summary card to dashboard showing today/yesterday summary with quick stats and highlights"/>
+      <doc path="docs/architecture.md" title="Architecture Document" section="Frontend Stack" snippet="Next.js 15.x with App Router, TypeScript 5.x, Tailwind CSS + shadcn/ui components, TanStack Query for server state"/>
+      <doc path="docs/sprint-artifacts/p4-4-3-digest-delivery.md" title="Story P4-4.3 Digest Delivery" section="Dev Agent Record" snippet="ActivitySummary model has columns for summary_text, digest_type, delivery_status, period_start, period_end. DigestResponse schema in digests.py for API responses."/>
+    </docs>
+    <code>
+      <file path="backend/app/models/activity_summary.py" kind="model" symbol="ActivitySummary" lines="17-160" reason="Database model for summaries - has summary_text, period_start, period_end, event_count, digest_type, to_dict() method"/>
+      <file path="backend/app/api/v1/digests.py" kind="router" symbol="router" lines="65-312" reason="Existing digest API endpoints - add /summaries/recent endpoint here. Follow DigestResponse schema pattern."/>
+      <file path="backend/app/services/summary_service.py" kind="service" symbol="SummaryService" reason="SummaryService for generating summaries - SummaryResult dataclass has event_count, alert_count stats"/>
+      <file path="frontend/app/page.tsx" kind="page" symbol="DashboardPage" lines="1-72" reason="Dashboard page to add SummaryCard component - currently has DashboardStats, CameraGrid, RecentActivity"/>
+      <file path="frontend/components/dashboard/DashboardStats.tsx" kind="component" symbol="DashboardStats" lines="1-132" reason="Example dashboard component - follow pattern for TanStack Query, Card components, stats grid layout"/>
+      <file path="frontend/components/ui/card.tsx" kind="ui" symbol="Card" reason="shadcn/ui Card component - use CardHeader, CardContent, CardTitle, CardDescription"/>
+      <file path="frontend/components/ui/skeleton.tsx" kind="ui" symbol="Skeleton" reason="shadcn/ui Skeleton component for loading states"/>
+      <file path="frontend/components/ui/badge.tsx" kind="ui" symbol="Badge" reason="shadcn/ui Badge component for highlight badges"/>
+      <file path="frontend/components/ui/tabs.tsx" kind="ui" symbol="Tabs" reason="shadcn/ui Tabs component for Today/Yesterday toggle"/>
+      <file path="frontend/lib/api-client.ts" kind="client" symbol="apiClient" lines="180-200" reason="API client pattern - add digests.recent method following existing patterns"/>
+      <file path="backend/tests/test_api/test_digests.py" kind="test" reason="Add integration tests for /summaries/recent endpoint here"/>
+    </code>
+    <dependencies>
+      <node>
+        <package name="@tanstack/react-query" version="^5.90.10" purpose="Server state management with caching"/>
+        <package name="lucide-react" version="^0.553.0" purpose="Icons for stats and empty state"/>
+        <package name="date-fns" version="^4.1.0" purpose="Date formatting"/>
+        <package name="tailwind-merge" version="^3.4.0" purpose="Tailwind class merging"/>
+      </node>
+      <python>
+        <package name="fastapi" version="==0.115.0" purpose="API framework"/>
+        <package name="sqlalchemy" version=">=2.0.36" purpose="ORM for database queries"/>
+        <package name="pydantic" version=">=2.10.0" purpose="Request/response validation"/>
+        <package name="pytest" version="==7.4.3" purpose="Testing"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture">Follow service layer pattern - business logic in services, API routes thin</constraint>
+    <constraint source="architecture">Use Pydantic schemas for all API request/response validation</constraint>
+    <constraint source="architecture">TanStack Query for all frontend data fetching with appropriate caching</constraint>
+    <constraint source="architecture">TypeScript strict mode - all types must be explicit</constraint>
+    <constraint source="dev-notes">Reuse existing DigestResponse schema pattern from digests.py</constraint>
+    <constraint source="dev-notes">Follow DashboardStats component pattern for stats grid layout</constraint>
+    <constraint source="testing">Unit tests for React components using Vitest + React Testing Library</constraint>
+    <constraint source="testing">Integration tests for API endpoints using pytest + httpx</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="GET /api/v1/summaries/recent" kind="REST endpoint">
+      <signature>GET /api/v1/summaries/recent -> RecentSummariesResponse</signature>
+      <path>backend/app/api/v1/digests.py</path>
+      <description>Returns today's and yesterday's activity summaries for dashboard display</description>
+    </interface>
+    <interface name="DigestResponse" kind="Pydantic schema">
+      <signature>class DigestResponse(BaseModel): id, summary_text, period_start, period_end, event_count, generated_at, digest_type, ai_cost, provider_used, delivery_status</signature>
+      <path>backend/app/api/v1/digests.py:87-98</path>
+      <description>Existing response schema for digest data - extend or reuse</description>
+    </interface>
+    <interface name="ActivitySummary" kind="SQLAlchemy model">
+      <signature>class ActivitySummary(Base): id, summary_text, period_start, period_end, event_count, camera_ids, generated_at, ai_cost, provider_used, digest_type, delivery_status</signature>
+      <path>backend/app/models/activity_summary.py:17-160</path>
+      <description>Database model for storing activity summaries</description>
+    </interface>
+    <interface name="useQuery" kind="TanStack Query hook">
+      <signature>useQuery({ queryKey, queryFn, staleTime, refetchInterval })</signature>
+      <path>frontend/components/dashboard/DashboardStats.tsx:32-50</path>
+      <description>Pattern for data fetching with caching - follow for useRecentSummaries</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Frontend: Vitest + React Testing Library for unit/integration tests. Use @testing-library/user-event for interactions. Mock API calls with vi.mock().
+      Backend: pytest + pytest-asyncio for async tests. Use httpx.AsyncClient for API tests. Mock database with test fixtures.
+      Coverage target: 70%+ for new code.
+    </standards>
+    <locations>
+      <location>frontend/__tests__/components/dashboard/SummaryCard.test.tsx</location>
+      <location>backend/tests/test_api/test_digests.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test SummaryCard renders without errors with mock summary data</idea>
+      <idea ac="3,9">Test stats grid displays all 4 stat values correctly</idea>
+      <idea ac="4">Test Today/Yesterday tabs switch displayed summary</idea>
+      <idea ac="5">Test summary text truncation at 200 characters</idea>
+      <idea ac="6">Test "View Full Summary" link has correct href</idea>
+      <idea ac="7">Test loading skeleton appears during isLoading state</idea>
+      <idea ac="8">Test empty state message when no summaries available</idea>
+      <idea ac="10">Test /summaries/recent returns today and yesterday summaries</idea>
+      <idea ac="10">Test /summaries/recent returns empty array when no summaries</idea>
+      <idea ac="11">Test useRecentSummaries hook has 5-minute refetchInterval</idea>
+      <idea ac="13">Test highlight badges visibility based on thresholds</idea>
+    </ideas>
+  </tests>
+</story-context>

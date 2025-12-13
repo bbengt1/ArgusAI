@@ -13,6 +13,13 @@ import type {
   IEvent,
   IEventFilters,
   IEventsResponse,
+  IEventFeedback,  // Story P4-5.1
+  IFeedbackStats,  // Story P4-5.2
+  IPromptInsightsResponse,  // Story P4-5.4
+  IApplySuggestionRequest,  // Story P4-5.4
+  IApplySuggestionResponse,  // Story P4-5.4
+  IABTestResultsResponse,  // Story P4-5.4
+  IPromptHistoryResponse,  // Story P4-5.4
 } from '@/types/event';
 import type {
   SystemSettings,
@@ -403,6 +410,155 @@ export const apiClient = {
         method: 'POST',
         body: JSON.stringify({ analysis_mode: analysisMode }),
       });
+    },
+
+    /**
+     * Submit feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @param data Feedback data with rating and optional correction
+     * @returns Created feedback object
+     * @throws ApiError with 404 if event not found
+     * @throws ApiError with 409 if feedback already exists
+     */
+    submitFeedback: async (eventId: string, data: {
+      rating: 'helpful' | 'not_helpful';
+      correction?: string;
+    }): Promise<IEventFeedback> => {
+      return apiFetch<IEventFeedback>(`/events/${eventId}/feedback`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * Get feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @returns Feedback object if exists
+     * @throws ApiError with 404 if event or feedback not found
+     */
+    getFeedback: async (eventId: string): Promise<IEventFeedback> => {
+      return apiFetch<IEventFeedback>(`/events/${eventId}/feedback`);
+    },
+
+    /**
+     * Update feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @param data Updated feedback data
+     * @returns Updated feedback object
+     * @throws ApiError with 404 if event or feedback not found
+     */
+    updateFeedback: async (eventId: string, data: {
+      rating?: 'helpful' | 'not_helpful';
+      correction?: string;
+    }): Promise<IEventFeedback> => {
+      return apiFetch<IEventFeedback>(`/events/${eventId}/feedback`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * Delete feedback for an event (Story P4-5.1)
+     * @param eventId Event UUID
+     * @throws ApiError with 404 if event or feedback not found
+     */
+    deleteFeedback: async (eventId: string): Promise<void> => {
+      await apiFetch<void>(`/events/${eventId}/feedback`, {
+        method: 'DELETE',
+      });
+    },
+  },
+
+  /**
+   * Feedback Statistics API client (Story P4-5.2)
+   */
+  feedback: {
+    /**
+     * Get aggregate feedback statistics for AI description accuracy monitoring
+     * @param params Optional filters: camera_id, start_date, end_date
+     * @returns Aggregate feedback statistics including accuracy rates, per-camera breakdown, daily trends, and top corrections
+     */
+    getStats: async (params?: {
+      camera_id?: string;
+      start_date?: string;
+      end_date?: string;
+    }): Promise<IFeedbackStats> => {
+      const queryParams = new URLSearchParams();
+      if (params?.camera_id) queryParams.append('camera_id', params.camera_id);
+      if (params?.start_date) queryParams.append('start_date', params.start_date);
+      if (params?.end_date) queryParams.append('end_date', params.end_date);
+
+      const queryString = queryParams.toString();
+      const endpoint = `/feedback/stats${queryString ? `?${queryString}` : ''}`;
+
+      return apiFetch<IFeedbackStats>(endpoint);
+    },
+
+    /**
+     * Get prompt improvement suggestions based on feedback analysis (Story P4-5.4)
+     * @param params Optional filter: camera_id
+     * @returns Prompt insights with suggestions and camera-specific analysis
+     */
+    getPromptInsights: async (params?: {
+      camera_id?: string;
+    }): Promise<IPromptInsightsResponse> => {
+      const queryParams = new URLSearchParams();
+      if (params?.camera_id) queryParams.append('camera_id', params.camera_id);
+
+      const queryString = queryParams.toString();
+      const endpoint = `/feedback/prompt-insights${queryString ? `?${queryString}` : ''}`;
+
+      return apiFetch<IPromptInsightsResponse>(endpoint);
+    },
+
+    /**
+     * Apply a prompt suggestion (Story P4-5.4)
+     * @param data Suggestion ID and optional camera ID
+     * @returns Result with new prompt and version
+     */
+    applySuggestion: async (data: IApplySuggestionRequest): Promise<IApplySuggestionResponse> => {
+      return apiFetch<IApplySuggestionResponse>('/feedback/prompt-insights/apply', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * Get A/B test results (Story P4-5.4)
+     * @param params Optional date range filters
+     * @returns A/B test statistics with winner determination
+     */
+    getABTestResults: async (params?: {
+      start_date?: string;
+      end_date?: string;
+    }): Promise<IABTestResultsResponse> => {
+      const queryParams = new URLSearchParams();
+      if (params?.start_date) queryParams.append('start_date', params.start_date);
+      if (params?.end_date) queryParams.append('end_date', params.end_date);
+
+      const queryString = queryParams.toString();
+      const endpoint = `/feedback/ab-test/results${queryString ? `?${queryString}` : ''}`;
+
+      return apiFetch<IABTestResultsResponse>(endpoint);
+    },
+
+    /**
+     * Get prompt history (Story P4-5.4)
+     * @param params Optional filter: camera_id, limit
+     * @returns Prompt history entries
+     */
+    getPromptHistory: async (params?: {
+      camera_id?: string;
+      limit?: number;
+    }): Promise<IPromptHistoryResponse> => {
+      const queryParams = new URLSearchParams();
+      if (params?.camera_id) queryParams.append('camera_id', params.camera_id);
+      if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+      const queryString = queryParams.toString();
+      const endpoint = `/feedback/prompt-history${queryString ? `?${queryString}` : ''}`;
+
+      return apiFetch<IPromptHistoryResponse>(endpoint);
     },
   },
 
@@ -1600,6 +1756,227 @@ export const apiClient = {
       });
     },
   },
+
+  // ============================================================================
+  // HomeKit Integration (Story P4-6.1)
+  // ============================================================================
+  homekit: {
+    /**
+     * Get current HomeKit status
+     * @returns HomeKit status including enabled, running, paired state, and setup code
+     */
+    getStatus: async (): Promise<{
+      enabled: boolean;
+      running: boolean;
+      paired: boolean;
+      accessory_count: number;
+      bridge_name: string;
+      setup_code: string | null;
+      qr_code_data: string | null;
+      port: number;
+      error: string | null;
+      available: boolean;
+    }> => {
+      return apiFetch('/integrations/homekit/status');
+    },
+
+    /**
+     * Enable or disable HomeKit integration
+     * @param enabled Whether to enable HomeKit
+     * @returns Updated HomeKit status
+     */
+    setEnabled: async (enabled: boolean): Promise<{
+      enabled: boolean;
+      running: boolean;
+      paired: boolean;
+      accessory_count: number;
+      bridge_name: string;
+      setup_code: string | null;
+      qr_code_data: string | null;
+      port: number;
+      error: string | null;
+      available: boolean;
+    }> => {
+      return apiFetch('/integrations/homekit/enable', {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      });
+    },
+
+    /**
+     * Reset HomeKit pairing
+     * Removes existing pairing state, requiring re-pairing with Home app
+     * @returns Reset result with new setup code
+     */
+    resetPairing: async (): Promise<{
+      success: boolean;
+      message: string;
+      new_setup_code: string | null;
+    }> => {
+      return apiFetch('/integrations/homekit/reset', {
+        method: 'POST',
+      });
+    },
+  },
+
+  // ============================================================================
+  // Entity Management (Story P4-3.6)
+  // ============================================================================
+  entities: {
+    /**
+     * Get all recognized entities with pagination and filtering
+     * @param params Query parameters (limit, offset, entity_type, named_only)
+     * @returns List of entities with total count
+     */
+    list: async (params?: {
+      limit?: number;
+      offset?: number;
+      entity_type?: 'person' | 'vehicle' | 'unknown';
+      named_only?: boolean;
+    }): Promise<{
+      entities: Array<{
+        id: string;
+        entity_type: string;
+        name: string | null;
+        first_seen_at: string;
+        last_seen_at: string;
+        occurrence_count: number;
+      }>;
+      total: number;
+    }> => {
+      const searchParams = new URLSearchParams();
+      if (params?.limit) searchParams.set('limit', String(params.limit));
+      if (params?.offset) searchParams.set('offset', String(params.offset));
+      if (params?.entity_type) searchParams.set('entity_type', params.entity_type);
+      if (params?.named_only) searchParams.set('named_only', 'true');
+
+      const queryString = searchParams.toString();
+      return apiFetch(`/context/entities${queryString ? `?${queryString}` : ''}`);
+    },
+
+    /**
+     * Get a single entity with recent events
+     * @param entityId UUID of the entity
+     * @param eventLimit Maximum number of recent events to include (default 10)
+     * @returns Entity detail with recent events
+     * @throws ApiError with 404 if not found
+     */
+    getById: async (entityId: string, eventLimit?: number): Promise<{
+      id: string;
+      entity_type: string;
+      name: string | null;
+      first_seen_at: string;
+      last_seen_at: string;
+      occurrence_count: number;
+      created_at: string;
+      updated_at: string;
+      recent_events: Array<{
+        id: string;
+        timestamp: string;
+        description: string;
+        thumbnail_url: string | null;
+        camera_id: string;
+        similarity_score: number;
+      }>;
+    }> => {
+      const params = eventLimit ? `?event_limit=${eventLimit}` : '';
+      return apiFetch(`/context/entities/${entityId}${params}`);
+    },
+
+    /**
+     * Update an entity's name
+     * @param entityId UUID of the entity
+     * @param data Update data with name
+     * @returns Updated entity
+     * @throws ApiError with 404 if not found
+     */
+    update: async (entityId: string, data: { name: string | null }): Promise<{
+      id: string;
+      entity_type: string;
+      name: string | null;
+      first_seen_at: string;
+      last_seen_at: string;
+      occurrence_count: number;
+    }> => {
+      return apiFetch(`/context/entities/${entityId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * Delete an entity
+     * Unlinks all associated events (events are not deleted)
+     * @param entityId UUID of the entity
+     * @throws ApiError with 404 if not found
+     */
+    delete: async (entityId: string): Promise<void> => {
+      const url = `${API_BASE_URL}${API_V1_PREFIX}/context/entities/${entityId}`;
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const token = getAuthToken();
+      if (token) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const errorMessage = data?.detail || `HTTP ${response.status}: ${response.statusText}`;
+        throw new ApiError(errorMessage, response.status, data);
+      }
+      // 204 No Content - no body to parse
+    },
+  },
+
+  // ============================================================================
+  // Activity Summaries (Story P4-4.4, P4-4.5)
+  // ============================================================================
+  summaries: {
+    /**
+     * Get recent summaries for dashboard display
+     * Returns today's and yesterday's activity summaries if they exist
+     * @returns Recent summaries with event statistics
+     */
+    recent: async (): Promise<RecentSummariesResponse> => {
+      return apiFetch<RecentSummariesResponse>('/summaries/recent');
+    },
+
+    /**
+     * Generate an on-demand summary for a time period (Story P4-4.5)
+     *
+     * Accepts EITHER:
+     * - hours_back: Shorthand for "last N hours" (e.g., hours_back: 3 for last 3 hours)
+     * - OR start_time + end_time: Explicit time range
+     *
+     * @param params Generation parameters
+     * @returns Generated summary with stats
+     */
+    generate: async (params: SummaryGenerateRequest): Promise<SummaryGenerateResponse> => {
+      return apiFetch<SummaryGenerateResponse>('/summaries/generate', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      });
+    },
+
+    /**
+     * List all summaries with pagination
+     * @param limit Maximum number to return (default 20)
+     * @param offset Pagination offset (default 0)
+     * @returns List of summaries
+     */
+    list: async (limit = 20, offset = 0): Promise<SummaryListResponse> => {
+      const params = new URLSearchParams({
+        limit: String(limit),
+        offset: String(offset),
+      });
+      return apiFetch<SummaryListResponse>(`/summaries?${params}`);
+    },
+  },
 };
 
 // Story P2-2.1: Camera Discovery Types
@@ -1660,3 +2037,83 @@ export type {
   IPushSubscriptionsListResponse,
   IPushTestResponse,
 } from '@/types/push';
+
+// Story P4-3.6: Entity Types (re-exported from types/entity.ts)
+export type {
+  IEntity,
+  IEntityDetail,
+  IEntityListResponse,
+  IEntityQueryParams,
+  IEntityUpdateRequest,
+  EntityType,
+} from '@/types/entity';
+
+// Story P4-4.4 & P4-4.5: Activity Summary Types
+
+/** Summary item from recent summaries endpoint */
+export interface RecentSummaryItem {
+  id: string;
+  date: string;
+  summary_text: string;
+  event_count: number;
+  camera_count: number;
+  alert_count: number;
+  doorbell_count: number;
+  person_count: number;
+  vehicle_count: number;
+  generated_at: string;
+}
+
+/** Response from GET /api/v1/summaries/recent */
+export interface RecentSummariesResponse {
+  summaries: RecentSummaryItem[];
+}
+
+/** Statistical breakdown of events in summary (Story P4-4.5) */
+export interface SummaryStats {
+  total_events: number;
+  by_type: Record<string, number>;
+  by_camera: Record<string, number>;
+  alerts_triggered: number;
+  doorbell_rings: number;
+}
+
+/**
+ * Request for on-demand summary generation (Story P4-4.5)
+ *
+ * Either hours_back OR (start_time AND end_time) must be provided, not both.
+ */
+export interface SummaryGenerateRequest {
+  /** Generate summary for last N hours (1-168). Mutually exclusive with start_time/end_time. */
+  hours_back?: number;
+  /** Start of time period (ISO 8601). Required if hours_back not provided. */
+  start_time?: string;
+  /** End of time period (ISO 8601). Required if hours_back not provided. */
+  end_time?: string;
+  /** List of camera UUIDs to include (null = all cameras) */
+  camera_ids?: string[] | null;
+}
+
+/** Response from POST /api/v1/summaries/generate (Story P4-4.5) */
+export interface SummaryGenerateResponse {
+  id: string;
+  summary_text: string;
+  period_start: string;
+  period_end: string;
+  event_count: number;
+  generated_at: string;
+  stats: SummaryStats | null;
+  ai_cost: number;
+  provider_used: string | null;
+  camera_count: number;
+  alert_count: number;
+  doorbell_count: number;
+  person_count: number;
+  vehicle_count: number;
+}
+
+/** Response from GET /api/v1/summaries (Story P4-4.5) */
+export interface SummaryListResponse {
+  summaries: SummaryGenerateResponse[];
+  total: number;
+}

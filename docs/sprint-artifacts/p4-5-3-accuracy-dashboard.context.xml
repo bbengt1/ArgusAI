@@ -1,0 +1,125 @@
+<story-context id="p4-5-3-accuracy-dashboard" v="1.0">
+  <metadata>
+    <epicId>P4-5</epicId>
+    <storyId>P4-5.3</storyId>
+    <title>Accuracy Dashboard</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-5-3-accuracy-dashboard.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security administrator</asA>
+    <iWant>a visual dashboard showing AI description accuracy metrics, trends, and per-camera performance</iWant>
+    <soThat>I can monitor system performance, identify cameras needing attention, and track improvement over time</soThat>
+    <tasks>
+      <task id="1">Create AccuracyDashboard component - main container with stats cards, loading/empty states</task>
+      <task id="2">Create CameraAccuracyTable component - sortable per-camera breakdown table</task>
+      <task id="3">Create AccuracyTrendChart component - line chart using recharts for daily accuracy</task>
+      <task id="4">Create TopCorrections component - list of common correction patterns</task>
+      <task id="5">Add filter controls - camera dropdown and date range picker</task>
+      <task id="6">Implement CSV export functionality</task>
+      <task id="7">Create useFeedbackStats hook with TanStack Query</task>
+      <task id="8">Responsive layout for mobile/tablet</task>
+      <task id="9">Write component tests</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">New "AI Accuracy" tab added to Settings page</criterion>
+    <criterion id="2">Dashboard displays overall accuracy rate as percentage with visual indicator</criterion>
+    <criterion id="3">Dashboard shows total feedback count, helpful count, not helpful count</criterion>
+    <criterion id="4">Per-camera accuracy breakdown shown as sortable table</criterion>
+    <criterion id="5">Trend chart shows daily accuracy over last 30 days</criterion>
+    <criterion id="6">Top corrections section shows common correction patterns</criterion>
+    <criterion id="7">Camera filter allows viewing stats for specific camera</criterion>
+    <criterion id="8">Date range selector allows custom time period analysis</criterion>
+    <criterion id="9">Export button downloads feedback data as CSV</criterion>
+    <criterion id="10">Loading states shown while fetching data</criterion>
+    <criterion id="11">Empty state shown when no feedback exists</criterion>
+    <criterion id="12">Dashboard is responsive (works on mobile/tablet)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics-phase4.md" title="Phase 4 Epics" section="Story P4-5.3: Accuracy Dashboard" snippet="Show feedback statistics in settings, per-camera accuracy metrics, trend analysis over time, export feedback data" />
+      <doc path="docs/PRD-phase4.md" title="Phase 4 PRD" section="FR24" snippet="System tracks accuracy metrics per camera. Users can rate event descriptions (helpful/not helpful)" />
+      <doc path="docs/sprint-artifacts/p4-5-2-feedback-storage-and-api.md" title="Previous Story P4-5.2" section="Dev Agent Record" snippet="Stats API at GET /api/v1/feedback/stats with camera_id, start_date, end_date filters. Returns FeedbackStatsResponse with feedback_by_camera, daily_trend, top_corrections" />
+    </docs>
+    <code>
+      <file path="frontend/app/settings/page.tsx" kind="page" symbol="SettingsPage" lines="1-700" reason="Settings page with existing tabs pattern - add AI Accuracy tab" />
+      <file path="frontend/components/settings/CostDashboard.tsx" kind="component" symbol="CostDashboard" lines="1-150" reason="Reference implementation for dashboard with recharts, similar stats card layout, filtering pattern" />
+      <file path="frontend/types/event.ts" kind="types" symbol="IFeedbackStats, ICameraFeedbackStats, IDailyFeedbackStats, ICorrectionSummary" lines="47-86" reason="TypeScript types for feedback statistics API response" />
+      <file path="frontend/lib/api-client.ts" kind="client" symbol="apiClient.feedback.getStats" lines="470-491" reason="API client method for fetching feedback stats - already implemented in P4-5.2" />
+      <file path="frontend/hooks/useFeedback.ts" kind="hook" symbol="useSubmitFeedback, useUpdateFeedback, useDeleteFeedback" lines="1-88" reason="Existing feedback hooks pattern using TanStack Query mutations" />
+      <file path="backend/app/api/v1/feedback.py" kind="api" symbol="get_feedback_stats" lines="29-74" reason="Backend API endpoint returning stats - already implemented in P4-5.2" />
+    </code>
+    <dependencies>
+      <npm>
+        <package name="recharts" version="^3.5.1" reason="Chart library for trend visualization - already installed" />
+        <package name="@tanstack/react-query" version="^5.90.10" reason="Data fetching and caching" />
+        <package name="date-fns" version="^4.1.0" reason="Date formatting and manipulation" />
+        <package name="lucide-react" version="^0.553.0" reason="Icons for UI" />
+        <package name="@radix-ui/react-tabs" version="^1.1.13" reason="Tab components for settings page" />
+        <package name="@radix-ui/react-select" version="^2.2.6" reason="Dropdown select for camera filter" />
+      </npm>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow existing CostDashboard component pattern for stats cards and chart layout</constraint>
+    <constraint type="pattern">Use ErrorBoundary wrapper around dashboard component (P2-6.3 pattern)</constraint>
+    <constraint type="pattern">Use TanStack Query useQuery hook for data fetching with query keys</constraint>
+    <constraint type="pattern">Use shadcn/ui components: Card, Tabs, Select, Button, Skeleton, Table</constraint>
+    <constraint type="style">Use Tailwind CSS responsive breakpoints (sm:, md:, lg:)</constraint>
+    <constraint type="style">Color coding: green >80% accuracy, yellow 60-80%, red &lt;60%</constraint>
+    <constraint type="api">Stats API already implemented at GET /api/v1/feedback/stats</constraint>
+    <constraint type="testing">Component tests using vitest and @testing-library/react</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Feedback Stats API" kind="REST endpoint">
+      <signature>GET /api/v1/feedback/stats?camera_id=&amp;start_date=&amp;end_date=</signature>
+      <path>backend/app/api/v1/feedback.py:29</path>
+    </interface>
+    <interface name="apiClient.feedback.getStats" kind="function">
+      <signature>getStats(params?: { camera_id?: string; start_date?: string; end_date?: string }): Promise&lt;IFeedbackStats&gt;</signature>
+      <path>frontend/lib/api-client.ts:476</path>
+    </interface>
+    <interface name="IFeedbackStats" kind="TypeScript interface">
+      <signature>interface IFeedbackStats { total_count: number; helpful_count: number; not_helpful_count: number; accuracy_rate: number; feedback_by_camera: Record&lt;string, ICameraFeedbackStats&gt;; daily_trend: IDailyFeedbackStats[]; top_corrections: ICorrectionSummary[]; }</signature>
+      <path>frontend/types/event.ts:78</path>
+    </interface>
+    <interface name="Settings Page Tabs" kind="React pattern">
+      <signature>Tabs with TabsList, TabsTrigger, TabsContent - add value="accuracy" for AI Accuracy tab</signature>
+      <path>frontend/app/settings/page.tsx:251</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use vitest as test runner with @testing-library/react for component testing.
+      Follow existing patterns in frontend/__tests__/components/settings/ directory.
+      Use userEvent for interactions, screen queries for assertions.
+      Mock API calls with vi.mock for apiClient.
+    </standards>
+    <locations>
+      <location>frontend/__tests__/components/settings/AccuracyDashboard.test.tsx</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test that AI Accuracy tab is visible and clickable in Settings page</idea>
+      <idea ac="2">Test accuracy rate displays with correct color (green/yellow/red)</idea>
+      <idea ac="3">Test stat cards show total, helpful, not_helpful counts</idea>
+      <idea ac="4">Test camera table renders and sorts correctly</idea>
+      <idea ac="5">Test trend chart renders with daily data points</idea>
+      <idea ac="6">Test top corrections list renders items</idea>
+      <idea ac="7">Test camera filter updates dashboard data</idea>
+      <idea ac="8">Test date range selection updates dashboard data</idea>
+      <idea ac="9">Test export button triggers CSV download</idea>
+      <idea ac="10">Test loading skeleton displays while data fetching</idea>
+      <idea ac="11">Test empty state message when no feedback data</idea>
+      <idea ac="12">Test responsive layout at different screen sizes</idea>
+    </ideas>
+  </tests>
+</story-context>

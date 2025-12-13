@@ -91,11 +91,14 @@ class Event(Base):
     # Story P3-7.5: Key frames storage for event detail gallery
     key_frames_base64 = Column(Text, nullable=True)  # JSON array of base64-encoded frame thumbnails (null = not stored)
     frame_timestamps = Column(Text, nullable=True)  # JSON array of float seconds from video start (null = not stored)
+    # Story P4-5.4: A/B testing - tracks which prompt variant was used
+    prompt_variant = Column(String(20), nullable=True, index=True)  # 'control', 'experiment' (null = no A/B test active)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     camera = relationship("Camera", back_populates="events")
     embedding = relationship("EventEmbedding", back_populates="event", uselist=False, cascade="all, delete-orphan")
+    feedback = relationship("EventFeedback", back_populates="event", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint('confidence >= 0 AND confidence <= 100', name='check_confidence_range'),

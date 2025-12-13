@@ -1,0 +1,282 @@
+<story-context id="bmm/workflows/4-implementation/story-context" v="1.0">
+  <metadata>
+    <epicId>P4-4</epicId>
+    <storyId>P4-4.5</storyId>
+    <title>On-Demand Summary Generation</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-4-5-on-demand-summary-generation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>to generate activity summaries on-demand for custom time periods</iWant>
+    <soThat>I can quickly get an AI-generated overview of what happened during specific timeframes like "the last 3 hours" or "this morning" without waiting for the daily digest</soThat>
+    <tasks>
+      <task id="1">Create backend POST endpoint with hours_back and start_datetime/end_datetime parameters</task>
+      <task id="2">Implement on-demand generation logic using SummaryService.generate_summary()</task>
+      <task id="3">Add frontend API client method summaries.generate()</task>
+      <task id="4">Create GenerateSummaryDialog component with time period selection</task>
+      <task id="5">Add save to history functionality</task>
+      <task id="6">Integrate into summaries page (create page if not exists)</task>
+      <task id="7">Write backend tests for new endpoint</task>
+      <task id="8">Write frontend tests for dialog component</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Backend endpoint POST /api/v1/summaries/generate accepts time range parameters</criterion>
+    <criterion id="2">Endpoint accepts "hours_back" shorthand parameter (e.g., hours_back=3 for last 3 hours)</criterion>
+    <criterion id="3">Endpoint accepts explicit "start_datetime" and "end_datetime" ISO format parameters</criterion>
+    <criterion id="4">Endpoint returns generated summary with summary_text, event_count, and time range</criterion>
+    <criterion id="5">Summary generation uses existing SummaryService.generate_summary() method</criterion>
+    <criterion id="6">Frontend has "Generate Summary" button/dialog on summaries page</criterion>
+    <criterion id="7">Frontend dialog allows selecting time period via dropdown (Last 1 hour, Last 3 hours, Last 6 hours, Last 12 hours, Custom)</criterion>
+    <criterion id="8">Custom time period allows date/time picker for start and end</criterion>
+    <criterion id="9">Loading state shows progress indicator during generation</criterion>
+    <criterion id="10">Error state displays user-friendly message on failure</criterion>
+    <criterion id="11">Generated summary displays in dialog/modal with stats and full text</criterion>
+    <criterion id="12">User can save generated summary to history</criterion>
+    <criterion id="13">Generation completes within 30 seconds (NFR)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase4.md</path>
+        <title>Phase 4 Epics</title>
+        <section>Story P4-4.5: On-Demand Summary Generation</section>
+        <snippet>"Summarize last X hours" feature with custom time period selection and immediate summary generation with loading state and error handling.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase4.md</path>
+        <title>Phase 4 PRD</title>
+        <section>FR9 - Activity Summaries</section>
+        <snippet>Users can query activity for any time period. Includes API endpoint POST /api/v1/summaries/generate for triggering manual generation.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>Event-Driven Architecture</section>
+        <snippet>SummaryService generates natural language summaries using AI providers with automatic fallback chain (OpenAI → Grok → Claude → Gemini).</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-4-4-summary-ui-in-dashboard.md</path>
+        <title>Previous Story P4-4.4</title>
+        <section>Dev Agent Record</section>
+        <snippet>SummaryService.generate_summary() returns SummaryResult with all stats. ActivitySummary model stores generated summaries with digest_type field.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>backend/app/api/v1/summaries.py</path>
+        <kind>api-router</kind>
+        <symbol>POST /generate endpoint (existing)</symbol>
+        <lines>323-412</lines>
+        <reason>Existing generate endpoint uses start_time/end_time. MODIFY to add hours_back shorthand parameter and on_demand digest_type.</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/summaries.py</path>
+        <kind>schema</kind>
+        <symbol>SummaryGenerateRequest</symbol>
+        <lines>36-52</lines>
+        <reason>Request schema to extend with optional hours_back parameter as alternative to explicit datetime range.</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/summaries.py</path>
+        <kind>schema</kind>
+        <symbol>RecentSummaryItem, RecentSummariesResponse</symbol>
+        <lines>87-104</lines>
+        <reason>Response schema patterns to follow for on-demand summary response. Reuse or extend.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/summary_service.py</path>
+        <kind>service</kind>
+        <symbol>SummaryService.generate_summary()</symbol>
+        <lines>669-831</lines>
+        <reason>Core method to reuse - accepts db, start_time, end_time, camera_ids and returns SummaryResult.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/summary_service.py</path>
+        <kind>dataclass</kind>
+        <symbol>SummaryResult</symbol>
+        <lines>62-76</lines>
+        <reason>Return type from generate_summary() - contains summary_text, stats, ai_cost, provider_used.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/activity_summary.py</path>
+        <kind>model</kind>
+        <symbol>ActivitySummary</symbol>
+        <reason>Database model with digest_type field - use 'on_demand' for user-initiated summaries.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_api/test_summaries.py</path>
+        <kind>test</kind>
+        <symbol>TestGenerateSummaryEndpoint</symbol>
+        <lines>98-</lines>
+        <reason>Existing test class pattern to extend for hours_back parameter tests.</reason>
+      </file>
+      <file>
+        <path>frontend/hooks/useSummaries.ts</path>
+        <kind>hook</kind>
+        <symbol>useRecentSummaries</symbol>
+        <lines>20-29</lines>
+        <reason>Existing TanStack Query hook pattern. Add useMutation hook for generate endpoint.</reason>
+      </file>
+      <file>
+        <path>frontend/lib/api-client.ts</path>
+        <kind>api-client</kind>
+        <symbol>apiClient.summaries</symbol>
+        <lines>1721-1730</lines>
+        <reason>Summaries API client section. Add generate() method that POSTs to /summaries/generate.</reason>
+      </file>
+      <file>
+        <path>frontend/lib/api-client.ts</path>
+        <kind>types</kind>
+        <symbol>RecentSummaryItem, RecentSummariesResponse</symbol>
+        <lines>1804-1821</lines>
+        <reason>Existing summary types. Add SummaryGenerateRequest and SummaryGenerateResponse types.</reason>
+      </file>
+      <file>
+        <path>frontend/components/dashboard/SummaryCard.tsx</path>
+        <kind>component</kind>
+        <reason>Reference for summary display patterns, loading skeletons, and stats grid layout.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>@tanstack/react-query</package>
+        <version>^5.x</version>
+        <usage>useMutation for POST request</usage>
+      </node>
+      <node>
+        <package>date-fns</package>
+        <version>^3.x</version>
+        <usage>Date calculations and formatting for time period selection</usage>
+      </node>
+      <shadcn>
+        <component>Dialog</component>
+        <usage>Modal for generate summary flow</usage>
+      </shadcn>
+      <shadcn>
+        <component>Select</component>
+        <usage>Time period dropdown selection</usage>
+      </shadcn>
+      <shadcn>
+        <component>Button</component>
+        <usage>Trigger button and action buttons</usage>
+      </shadcn>
+      <shadcn>
+        <component>Card</component>
+        <usage>Summary result display</usage>
+      </shadcn>
+      <shadcn>
+        <component>Skeleton</component>
+        <usage>Loading state</usage>
+      </shadcn>
+      <python>
+        <package>pydantic</package>
+        <usage>Request/response validation with Optional and Field validators</usage>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Reuse existing SummaryService.generate_summary() - do NOT reimplement generation logic</constraint>
+    <constraint type="pattern">Follow existing API router patterns in summaries.py</constraint>
+    <constraint type="pattern">Use TanStack Query useMutation for POST requests</constraint>
+    <constraint type="pattern">Store on-demand summaries with digest_type='on_demand' in ActivitySummary table</constraint>
+    <constraint type="validation">Either hours_back OR (start_datetime AND end_datetime) must be provided, not both</constraint>
+    <constraint type="validation">hours_back must be 1-168 (max 1 week)</constraint>
+    <constraint type="nfr">Summary generation must complete within 30 seconds (NFR from PRD)</constraint>
+    <constraint type="layer">Frontend components in frontend/components/summaries/</constraint>
+    <constraint type="layer">API routes remain in backend/app/api/v1/summaries.py</constraint>
+    <constraint type="testing">Backend tests use pytest with mock_db and mock_summary_service fixtures</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>POST /api/v1/summaries/generate (extended)</name>
+      <kind>REST endpoint</kind>
+      <signature>
+        Request Body (extended):
+        {
+          "hours_back": int | null,  // NEW: 1-168, last N hours
+          "start_time": datetime | null,  // Existing: ISO 8601
+          "end_time": datetime | null,  // Existing: ISO 8601
+          "camera_ids": string[] | null  // Existing: optional filter
+        }
+
+        Response (existing SummaryResponse):
+        {
+          "id": string,  // NEW: summary UUID for save reference
+          "summary_text": string,
+          "period_start": datetime,
+          "period_end": datetime,
+          "event_count": int,
+          "generated_at": datetime,
+          "stats": SummaryStats | null,
+          "ai_cost": float,
+          "provider_used": string | null
+        }
+      </signature>
+      <path>backend/app/api/v1/summaries.py</path>
+    </interface>
+    <interface>
+      <name>SummaryService.generate_summary</name>
+      <kind>service method</kind>
+      <signature>
+        async def generate_summary(
+            self,
+            db: Session,
+            start_time: datetime,
+            end_time: datetime,
+            camera_ids: Optional[List[str]] = None
+        ) -> SummaryResult
+      </signature>
+      <path>backend/app/services/summary_service.py:669</path>
+    </interface>
+    <interface>
+      <name>apiClient.summaries.generate</name>
+      <kind>frontend API method</kind>
+      <signature>
+        generate: async (params: SummaryGenerateRequest): Promise&lt;SummaryGenerateResponse&gt;
+
+        interface SummaryGenerateRequest {
+          hours_back?: number;
+          start_time?: string;  // ISO 8601
+          end_time?: string;    // ISO 8601
+          camera_ids?: string[];
+        }
+      </signature>
+      <path>frontend/lib/api-client.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Backend tests use pytest with FastAPI TestClient, mock database sessions, and mock service dependencies. Frontend tests use Vitest with React Testing Library. Follow existing test patterns in test_summaries.py and component test files. Mock API calls for frontend tests.</standards>
+    <locations>
+      <location>backend/tests/test_api/test_summaries.py</location>
+      <location>frontend/__tests__/components/summaries/</location>
+      <location>frontend/__tests__/hooks/</location>
+    </locations>
+    <ideas>
+      <idea ac="1,2">Test POST with hours_back=3 returns summary for last 3 hours</idea>
+      <idea ac="2">Test hours_back validation (1-168 range, reject 0 and 169+)</idea>
+      <idea ac="3">Test POST with start_datetime/end_datetime explicit range</idea>
+      <idea ac="2,3">Test validation error when both hours_back AND explicit times provided</idea>
+      <idea ac="2,3">Test validation error when neither hours_back nor explicit times provided</idea>
+      <idea ac="4">Test response includes id, summary_text, period_start, period_end, event_count</idea>
+      <idea ac="5">Verify generate_summary service is called (mock check)</idea>
+      <idea ac="12">Test saved summary has digest_type='on_demand'</idea>
+      <idea ac="13">Test timeout handling for long generation</idea>
+      <idea ac="6">Test GenerateSummaryDialog renders trigger button</idea>
+      <idea ac="7">Test time period dropdown options</idea>
+      <idea ac="8">Test custom date picker appears when "Custom" selected</idea>
+      <idea ac="9">Test loading spinner during generation</idea>
+      <idea ac="10">Test error message displays on API failure</idea>
+      <idea ac="11">Test summary result displays after generation</idea>
+    </ideas>
+  </tests>
+</story-context>

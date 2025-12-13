@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CameraGrid } from "@/components/cameras/CameraGrid";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
+import { SummaryCard } from "@/components/dashboard/SummaryCard";
 
 export const metadata = {
   title: "Dashboard - ArgusAI",
@@ -25,6 +26,9 @@ export default function DashboardPage() {
 
       {/* Stats Grid - Real data */}
       <DashboardStats />
+
+      {/* Activity Summary Card (Story P4-4.4) */}
+      <SummaryCard />
 
       {/* Live Camera Preview Grid */}
       <CameraGrid />

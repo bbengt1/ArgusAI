@@ -246,31 +246,31 @@ development_status:
   p4-3-3-recurring-visitor-detection: done
   p4-3-4-context-enhanced-ai-prompts: done
   p4-3-5-pattern-detection: done
-  p4-3-6-entity-management-ui: ready-for-dev
+  p4-3-6-entity-management-ui: done
   epic-p4-3-retrospective: optional
 
   # Epic P4-4: Activity Summaries & Digests
   epic-p4-4: backlog
-  p4-4-1-summary-generation-service: backlog
-  p4-4-2-daily-digest-scheduler: backlog
-  p4-4-3-digest-delivery: backlog
-  p4-4-4-summary-ui-in-dashboard: backlog
-  p4-4-5-on-demand-summary-generation: backlog
+  p4-4-1-summary-generation-service: done
+  p4-4-2-daily-digest-scheduler: done
+  p4-4-3-digest-delivery: done
+  p4-4-4-summary-ui-in-dashboard: done
+  p4-4-5-on-demand-summary-generation: done
   epic-p4-4-retrospective: optional
 
   # Epic P4-5: User Feedback & Learning
   epic-p4-5: backlog
-  p4-5-1-feedback-collection-ui: backlog
-  p4-5-2-feedback-storage-and-api: backlog
-  p4-5-3-accuracy-dashboard: backlog
-  p4-5-4-feedback-informed-prompts: backlog
+  p4-5-1-feedback-collection-ui: done
+  p4-5-2-feedback-storage-and-api: done
+  p4-5-3-accuracy-dashboard: done
+  p4-5-4-feedback-informed-prompts: done
   epic-p4-5-retrospective: optional
 
   # Epic P4-6: Voice Assistant Integration (Growth)
   epic-p4-6: backlog
-  p4-6-1-homekit-accessory-server: backlog
-  p4-6-2-homekit-motion-events: backlog
-  p4-6-3-voice-query-api: backlog
+  p4-6-1-homekit-accessory-server: done
+  p4-6-2-homekit-motion-events: done
+  p4-6-3-voice-query-api: done
   epic-p4-6-retrospective: optional
 
   # Epic P4-7: Behavioral Anomaly Detection (Growth)
