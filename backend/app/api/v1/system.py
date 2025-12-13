@@ -523,6 +523,10 @@ async def update_settings(
             'person_match_threshold',
             'auto_create_persons',
             'update_appearance_on_high_match',
+            # Story P4-8.3: Vehicle Recognition Settings
+            'vehicle_recognition_enabled',
+            'vehicle_match_threshold',
+            'auto_create_vehicles',
         }
 
         for field_name, value in update_data.items():

@@ -103,6 +103,8 @@ class Event(Base):
     feedback = relationship("EventFeedback", back_populates="event", uselist=False, cascade="all, delete-orphan")
     # Story P4-8.1: Face embeddings (one event can have multiple faces)
     face_embeddings = relationship("FaceEmbedding", back_populates="event", cascade="all, delete-orphan")
+    # Story P4-8.3: Vehicle embeddings (one event can have multiple vehicles)
+    vehicle_embeddings = relationship("VehicleEmbedding", back_populates="event", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint('confidence >= 0 AND confidence <= 100', name='check_confidence_range'),

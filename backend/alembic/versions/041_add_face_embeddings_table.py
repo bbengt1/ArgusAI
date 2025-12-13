@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '041_add_face_embeddings'
-down_revision = '040_add_anomaly_score_to_events'
+down_revision = '040_add_anomaly_score'
 branch_labels = None
 depends_on = None
 

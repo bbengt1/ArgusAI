@@ -1137,6 +1137,65 @@ class EventProcessor:
                     extra={"error": str(face_error), "event_id": event_id}
                 )
 
+            # Step 14: Process vehicle embeddings (Story P4-8.3)
+            # Only process vehicles if vehicle_recognition_enabled is true (privacy control)
+            # Also check if event contains vehicle detections
+            try:
+                from app.models.system_setting import SystemSetting
+
+                # Check if vehicle recognition is enabled
+                with SessionLocal() as settings_db:
+                    setting = settings_db.query(SystemSetting).filter(
+                        SystemSetting.key == "vehicle_recognition_enabled"
+                    ).first()
+                    vehicle_recognition_enabled = (
+                        setting.value.lower() == "true" if setting else False
+                    )
+
+                # Check if this event might contain vehicles
+                has_vehicle = False
+                if objects_json:
+                    try:
+                        objects_list = json.loads(objects_json)
+                        has_vehicle = "vehicle" in objects_list
+                    except json.JSONDecodeError:
+                        pass
+                # Also check smart detection type for Protect events
+                if smart_detection_type == "vehicle":
+                    has_vehicle = True
+
+                if vehicle_recognition_enabled and thumbnail_base64 and has_vehicle:
+                    # Fire and forget - use asyncio.create_task for non-blocking
+                    asyncio.create_task(
+                        self._process_vehicles(
+                            event_id,
+                            thumbnail_base64,
+                            ai_result.description if ai_result else None
+                        )
+                    )
+                    logger.debug(
+                        f"Vehicle processing task created for event {event_id}",
+                        extra={"event_id": event_id, "camera_id": event.camera_id}
+                    )
+                else:
+                    if not vehicle_recognition_enabled:
+                        logger.debug(
+                            f"Vehicle recognition disabled, skipping vehicle processing for event {event_id}",
+                            extra={"event_id": event_id}
+                        )
+                    elif not has_vehicle:
+                        logger.debug(
+                            f"No vehicle detected, skipping vehicle processing for event {event_id}",
+                            extra={"event_id": event_id}
+                        )
+
+            except Exception as vehicle_error:
+                # Vehicle processing failures must not block event processing
+                logger.warning(
+                    f"Failed to create vehicle processing task: {vehicle_error}",
+                    extra={"error": str(vehicle_error), "event_id": event_id}
+                )
+
             logger.info(
                 f"Event processed successfully for camera {event.camera_name}",
                 extra={
@@ -1608,6 +1667,135 @@ class EventProcessor:
                 f"Face/person processing failed for event {event_id}: {e}",
                 extra={
                     "event_type": "face_person_processing_error",
+                    "event_id": event_id,
+                    "error": str(e)
+                }
+            )
+
+    async def _process_vehicles(
+        self,
+        event_id: str,
+        thumbnail_base64: str,
+        event_description: Optional[str] = None
+    ) -> None:
+        """
+        Process vehicle detection, embedding, and matching for an event.
+
+        Story P4-8.3: Vehicle detection and embedding storage with matching
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Uses its own database session since the caller's session may be closed.
+
+        Args:
+            event_id: UUID of the event to process
+            thumbnail_base64: Base64-encoded thumbnail image
+            event_description: AI-generated description for characteristics extraction
+
+        Note:
+            - Non-blocking, runs as background task
+            - Only runs when vehicle_recognition_enabled is true
+            - Errors don't propagate to caller
+        """
+        try:
+            from app.services.vehicle_embedding_service import get_vehicle_embedding_service
+            from app.services.vehicle_matching_service import get_vehicle_matching_service
+            from app.models.system_setting import SystemSetting
+            import base64
+
+            vehicle_service = get_vehicle_embedding_service()
+            matching_service = get_vehicle_matching_service()
+
+            # Strip data URI prefix if present
+            b64_str = thumbnail_base64
+            if b64_str.startswith("data:"):
+                comma_idx = b64_str.find(",")
+                if comma_idx != -1:
+                    b64_str = b64_str[comma_idx + 1:]
+
+            thumbnail_bytes = base64.b64decode(b64_str)
+
+            # Use own session since caller's may be closed
+            db = SessionLocal()
+            try:
+                # Step 14a: Vehicle Detection and Embedding Storage (P4-8.3)
+                vehicle_ids = await vehicle_service.process_event_vehicles(
+                    db=db,
+                    event_id=event_id,
+                    thumbnail_bytes=thumbnail_bytes,
+                )
+
+                if vehicle_ids:
+                    logger.info(
+                        f"Vehicle processing complete for event {event_id}",
+                        extra={
+                            "event_type": "vehicle_processing_complete",
+                            "event_id": event_id,
+                            "vehicle_count": len(vehicle_ids),
+                        }
+                    )
+
+                    # Step 14b: Vehicle Matching (P4-8.3)
+                    # Get settings for vehicle matching
+                    threshold_setting = db.query(SystemSetting).filter(
+                        SystemSetting.key == "vehicle_match_threshold"
+                    ).first()
+                    auto_create_setting = db.query(SystemSetting).filter(
+                        SystemSetting.key == "auto_create_vehicles"
+                    ).first()
+
+                    threshold = float(threshold_setting.value) if threshold_setting else 0.65
+                    auto_create = auto_create_setting.value.lower() == "true" if auto_create_setting else True
+
+                    match_results = await matching_service.match_vehicles_to_entities(
+                        db=db,
+                        vehicle_embedding_ids=vehicle_ids,
+                        event_description=event_description,
+                        auto_create=auto_create,
+                        threshold=threshold,
+                    )
+
+                    # Log vehicle matches
+                    matched = [r for r in match_results if r.vehicle_id]
+                    named = [r for r in matched if r.vehicle_name]
+
+                    if named:
+                        logger.info(
+                            f"Vehicle matching complete for event {event_id}: {[r.vehicle_name for r in named]}",
+                            extra={
+                                "event_type": "vehicle_matching_complete",
+                                "event_id": event_id,
+                                "matched_vehicles": len(matched),
+                                "named_vehicles": [r.vehicle_name for r in named],
+                                "new_vehicles": sum(1 for r in matched if r.is_new_vehicle),
+                            }
+                        )
+                    elif matched:
+                        logger.debug(
+                            f"Vehicle matching complete for event {event_id}: {len(matched)} unnamed matches",
+                            extra={
+                                "event_type": "vehicle_matching_complete",
+                                "event_id": event_id,
+                                "matched_vehicles": len(matched),
+                                "new_vehicles": sum(1 for r in matched if r.is_new_vehicle),
+                            }
+                        )
+                else:
+                    logger.debug(
+                        f"No vehicles found in event {event_id}",
+                        extra={
+                            "event_type": "no_vehicles_found",
+                            "event_id": event_id,
+                        }
+                    )
+            finally:
+                db.close()
+
+        except Exception as e:
+            # Vehicle processing errors must not propagate
+            logger.warning(
+                f"Vehicle processing failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "vehicle_processing_error",
                     "event_id": event_id,
                     "error": str(e)
                 }

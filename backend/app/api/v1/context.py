@@ -1457,3 +1457,457 @@ async def update_person(
         last_seen_at=person["last_seen_at"],
         occurrence_count=person["occurrence_count"],
     )
+
+
+# =============================================================================
+# Vehicle Recognition Endpoints (Story P4-8.3)
+# =============================================================================
+
+from app.services.vehicle_matching_service import get_vehicle_matching_service, VehicleMatchingService
+from app.services.vehicle_embedding_service import get_vehicle_embedding_service, VehicleEmbeddingService
+
+
+class VehicleListItem(BaseModel):
+    """Single vehicle in list response."""
+    id: str = Field(description="Vehicle UUID")
+    name: Optional[str] = Field(default=None, description="User-assigned name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    embedding_count: int = Field(description="Number of vehicle embeddings linked")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type (car, truck, etc.)")
+    primary_color: Optional[str] = Field(default=None, description="Primary color if detected")
+
+
+class VehicleListResponse(BaseModel):
+    """Response for GET /vehicles endpoint."""
+    vehicles: list[VehicleListItem] = Field(description="List of vehicles")
+    total: int = Field(description="Total number of vehicles")
+    limit: int = Field(description="Maximum returned")
+    offset: int = Field(description="Pagination offset")
+
+
+class VehicleDetectionItem(BaseModel):
+    """Vehicle detection linked to a vehicle entity."""
+    id: str = Field(description="Vehicle embedding UUID")
+    event_id: str = Field(description="Event UUID")
+    bounding_box: Optional[dict] = Field(default=None, description="Vehicle bounding box coordinates")
+    confidence: float = Field(description="Vehicle detection confidence")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    created_at: datetime = Field(description="When vehicle was detected")
+    event_timestamp: Optional[datetime] = Field(default=None, description="Event timestamp")
+    thumbnail_url: Optional[str] = Field(default=None, description="Event thumbnail URL")
+
+
+class VehicleDetailResponse(BaseModel):
+    """Response for GET /vehicles/{id} endpoint."""
+    id: str = Field(description="Vehicle UUID")
+    name: Optional[str] = Field(default=None, description="User-assigned name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    created_at: datetime = Field(description="Record creation timestamp")
+    updated_at: datetime = Field(description="Last update timestamp")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    primary_color: Optional[str] = Field(default=None, description="Primary color if detected")
+    metadata: dict = Field(default={}, description="Additional metadata (colors, make, etc.)")
+    recent_detections: list[VehicleDetectionItem] = Field(default=[], description="Recent detections")
+
+
+class VehicleUpdateRequest(BaseModel):
+    """Request for PUT /vehicles/{id} endpoint."""
+    name: Optional[str] = Field(default=None, description="New name for the vehicle (None to clear)")
+    metadata: Optional[dict] = Field(default=None, description="Optional metadata updates")
+
+
+class VehicleUpdateResponse(BaseModel):
+    """Response for PUT /vehicles/{id} endpoint."""
+    id: str = Field(description="Vehicle UUID")
+    name: Optional[str] = Field(default=None, description="Updated name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    primary_color: Optional[str] = Field(default=None, description="Primary color")
+
+
+class VehicleEmbeddingResponse(BaseModel):
+    """Response model for a single vehicle embedding."""
+    id: str = Field(description="UUID of the vehicle embedding")
+    event_id: str = Field(description="UUID of the associated event")
+    entity_id: Optional[str] = Field(default=None, description="UUID of linked vehicle entity")
+    bounding_box: dict = Field(description="Vehicle bounding box: {x, y, width, height}")
+    confidence: float = Field(ge=0.0, le=1.0, description="Vehicle detection confidence")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    model_version: str = Field(description="Model version used for embedding")
+    created_at: str = Field(description="When the vehicle embedding was created (ISO 8601)")
+
+
+class VehicleEmbeddingsResponse(BaseModel):
+    """Response model for vehicle embeddings list."""
+    event_id: str = Field(description="UUID of the event")
+    vehicle_count: int = Field(description="Number of vehicle embeddings")
+    vehicles: list[VehicleEmbeddingResponse] = Field(description="List of vehicle embeddings")
+
+
+class DeleteVehiclesResponse(BaseModel):
+    """Response model for vehicle deletion."""
+    deleted_count: int = Field(description="Number of vehicle embeddings deleted")
+    message: str = Field(description="Status message")
+
+
+class VehicleStatsResponse(BaseModel):
+    """Response model for vehicle embedding statistics."""
+    total_vehicle_embeddings: int = Field(description="Total vehicle embeddings in database")
+    vehicle_recognition_enabled: bool = Field(description="Whether vehicle recognition is enabled")
+    model_version: str = Field(description="Current vehicle embedding model version")
+
+
+@router.get("/vehicles", response_model=VehicleListResponse)
+async def list_vehicles(
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of vehicles to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    named_only: bool = Query(default=False, description="Only return named vehicles"),
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleMatchingService = Depends(get_vehicle_matching_service),
+):
+    """
+    List all known vehicles.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns vehicles (RecognizedEntity with entity_type='vehicle') sorted by
+    last_seen_at descending. Includes embedding_count for each vehicle.
+
+    Args:
+        limit: Maximum number of vehicles to return (1-100)
+        offset: Pagination offset
+        named_only: If True, only return vehicles with names assigned
+        db: Database session
+        vehicle_service: Vehicle matching service instance
+
+    Returns:
+        VehicleListResponse with list of vehicles and pagination info
+    """
+    vehicles, total = await vehicle_service.get_vehicles(
+        db,
+        limit=limit,
+        offset=offset,
+        named_only=named_only,
+    )
+
+    return VehicleListResponse(
+        vehicles=[
+            VehicleListItem(
+                id=v["id"],
+                name=v["name"],
+                first_seen_at=v["first_seen_at"],
+                last_seen_at=v["last_seen_at"],
+                occurrence_count=v["occurrence_count"],
+                embedding_count=v["embedding_count"],
+                vehicle_type=v.get("vehicle_type"),
+                primary_color=v.get("primary_color"),
+            )
+            for v in vehicles
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/vehicles/{vehicle_id}", response_model=VehicleDetailResponse)
+async def get_vehicle(
+    vehicle_id: str,
+    include_detections: bool = Query(default=True, description="Include recent detections"),
+    detection_limit: int = Query(default=10, ge=1, le=50, description="Maximum detections to include"),
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleMatchingService = Depends(get_vehicle_matching_service),
+):
+    """
+    Get vehicle details.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns detailed information about a specific vehicle including
+    recent detections linked to it.
+
+    Args:
+        vehicle_id: UUID of the vehicle
+        include_detections: Whether to include recent detections
+        detection_limit: Maximum number of detections to include
+        db: Database session
+        vehicle_service: Vehicle matching service instance
+
+    Returns:
+        VehicleDetailResponse with vehicle details and detections
+
+    Raises:
+        HTTPException 404: If vehicle not found
+    """
+    vehicle = await vehicle_service.get_vehicle(
+        db,
+        vehicle_id,
+        include_embeddings=include_detections,
+        embedding_limit=detection_limit,
+    )
+
+    if not vehicle:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Vehicle {vehicle_id} not found"
+        )
+
+    recent_detections = []
+    if "recent_detections" in vehicle:
+        recent_detections = [
+            VehicleDetectionItem(
+                id=d["id"],
+                event_id=d["event_id"],
+                bounding_box=d["bounding_box"],
+                confidence=d["confidence"],
+                vehicle_type=d["vehicle_type"],
+                created_at=d["created_at"],
+                event_timestamp=d["event_timestamp"],
+                thumbnail_url=d["thumbnail_url"],
+            )
+            for d in vehicle["recent_detections"]
+        ]
+
+    return VehicleDetailResponse(
+        id=vehicle["id"],
+        name=vehicle["name"],
+        first_seen_at=vehicle["first_seen_at"],
+        last_seen_at=vehicle["last_seen_at"],
+        occurrence_count=vehicle["occurrence_count"],
+        created_at=vehicle["created_at"],
+        updated_at=vehicle["updated_at"],
+        vehicle_type=vehicle.get("vehicle_type"),
+        primary_color=vehicle.get("primary_color"),
+        metadata=vehicle.get("metadata", {}),
+        recent_detections=recent_detections,
+    )
+
+
+@router.put("/vehicles/{vehicle_id}", response_model=VehicleUpdateResponse)
+async def update_vehicle(
+    vehicle_id: str,
+    request: VehicleUpdateRequest,
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleMatchingService = Depends(get_vehicle_matching_service),
+):
+    """
+    Update a vehicle's name and/or metadata.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Allows users to name recognized vehicles for personalized alerts
+    like "Your car arrived".
+
+    Args:
+        vehicle_id: UUID of the vehicle
+        request: Update request with new name and/or metadata
+        db: Database session
+        vehicle_service: Vehicle matching service instance
+
+    Returns:
+        VehicleUpdateResponse with updated vehicle info
+
+    Raises:
+        HTTPException 404: If vehicle not found
+    """
+    # Update name if provided
+    if request.name is not None:
+        vehicle = await vehicle_service.update_vehicle_name(
+            db,
+            vehicle_id,
+            name=request.name,
+        )
+    else:
+        # Just get current vehicle data
+        vehicle = await vehicle_service.get_vehicle(db, vehicle_id, include_embeddings=False)
+
+    if not vehicle:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Vehicle {vehicle_id} not found"
+        )
+
+    # Update metadata if provided
+    if request.metadata is not None:
+        vehicle = await vehicle_service.update_vehicle_metadata(
+            db,
+            vehicle_id,
+            metadata_updates=request.metadata,
+        )
+
+    return VehicleUpdateResponse(
+        id=vehicle["id"],
+        name=vehicle["name"],
+        first_seen_at=vehicle["first_seen_at"],
+        last_seen_at=vehicle["last_seen_at"],
+        occurrence_count=vehicle["occurrence_count"],
+        vehicle_type=vehicle.get("vehicle_type"),
+        primary_color=vehicle.get("primary_color"),
+    )
+
+
+@router.get("/vehicle-embeddings/{event_id}", response_model=VehicleEmbeddingsResponse)
+async def get_vehicle_embeddings(
+    event_id: str,
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Get all vehicle embeddings for an event.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns vehicle embeddings detected in the event thumbnail, including
+    bounding box coordinates and confidence scores.
+
+    Args:
+        event_id: UUID of the event
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        VehicleEmbeddingsResponse with list of vehicle embeddings
+
+    Raises:
+        404: If event not found
+    """
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    vehicles = await vehicle_service.get_vehicle_embeddings(db, event_id)
+
+    return VehicleEmbeddingsResponse(
+        event_id=event_id,
+        vehicle_count=len(vehicles),
+        vehicles=[
+            VehicleEmbeddingResponse(
+                id=v["id"],
+                event_id=v["event_id"],
+                entity_id=v.get("entity_id"),
+                bounding_box=v["bounding_box"],
+                confidence=v["confidence"],
+                vehicle_type=v.get("vehicle_type"),
+                model_version=v["model_version"],
+                created_at=v["created_at"],
+            )
+            for v in vehicles
+        ],
+    )
+
+
+@router.delete("/vehicle-embeddings/{event_id}", response_model=DeleteVehiclesResponse)
+async def delete_event_vehicles(
+    event_id: str,
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Delete all vehicle embeddings for an event.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Removes vehicle embedding data for a specific event. Event itself is not deleted.
+
+    Args:
+        event_id: UUID of the event
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        DeleteVehiclesResponse with count of deleted embeddings
+
+    Raises:
+        404: If event not found
+    """
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    count = await vehicle_service.delete_event_vehicles(db, event_id)
+
+    return DeleteVehiclesResponse(
+        deleted_count=count,
+        message=f"Deleted {count} vehicle embedding(s) for event {event_id}"
+    )
+
+
+@router.delete("/vehicle-embeddings", response_model=DeleteVehiclesResponse)
+async def delete_all_vehicles(
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Delete all vehicle embeddings from the database.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Privacy control endpoint - allows users to clear all stored vehicle data.
+    This is an admin-level operation that removes ALL vehicle embeddings.
+
+    Args:
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        DeleteVehiclesResponse with count of deleted embeddings
+    """
+    count = await vehicle_service.delete_all_vehicles(db)
+
+    logger.info(
+        "All vehicle embeddings deleted via API",
+        extra={
+            "event_type": "all_vehicles_deleted_api",
+            "count": count,
+        }
+    )
+
+    return DeleteVehiclesResponse(
+        deleted_count=count,
+        message=f"Deleted all {count} vehicle embedding(s) from database"
+    )
+
+
+@router.get("/vehicle-embeddings/stats", response_model=VehicleStatsResponse)
+async def get_vehicle_stats(
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Get vehicle embedding statistics.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns statistics about vehicle embeddings including total count
+    and current settings.
+
+    Args:
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        VehicleStatsResponse with statistics
+    """
+    from app.models.system_setting import SystemSetting
+
+    total_vehicles = await vehicle_service.get_total_vehicle_count(db)
+
+    # Get vehicle_recognition_enabled setting
+    setting = db.query(SystemSetting).filter(
+        SystemSetting.key == "vehicle_recognition_enabled"
+    ).first()
+    enabled = setting.value.lower() == "true" if setting else False
+
+    return VehicleStatsResponse(
+        total_vehicle_embeddings=total_vehicles,
+        vehicle_recognition_enabled=enabled,
+        model_version=vehicle_service.get_model_version(),
+    )
