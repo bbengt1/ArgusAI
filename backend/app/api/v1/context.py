@@ -1,5 +1,5 @@
 """
-Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3, P4-3.5, P4-7.2)
+Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3, P4-3.5, P4-7.2, P4-8.2)
 
 Provides endpoints for:
 - Batch processing of embeddings for existing events
@@ -8,6 +8,7 @@ Provides endpoints for:
 - Entity management for recurring visitor detection (P4-3.3)
 - Activity pattern retrieval for cameras (P4-3.5)
 - Anomaly scoring for events (P4-7.2)
+- Person matching for face recognition (P4-8.2)
 """
 import base64
 import logging
@@ -27,6 +28,7 @@ from app.services.similarity_service import get_similarity_service, SimilaritySe
 from app.services.entity_service import get_entity_service, EntityService
 from app.services.pattern_service import get_pattern_service, PatternService
 from app.services.anomaly_scoring_service import get_anomaly_scoring_service, AnomalyScoringService, AnomalyScoreResult
+from app.services.person_matching_service import get_person_matching_service, PersonMatchingService
 from app.models.camera import Camera
 
 logger = logging.getLogger(__name__)
@@ -525,6 +527,131 @@ async def list_entities(
     return EntityListResponse(
         entities=[EntityResponse(**e) for e in entities],
         total=total,
+    )
+
+
+# =============================================================================
+# VIP and Blocked Entity List Endpoints (Story P4-8.4)
+# IMPORTANT: These routes MUST be defined before /entities/{entity_id}
+# =============================================================================
+
+
+class EntityListItem(BaseModel):
+    """Single entity in VIP/blocked list."""
+    id: str = Field(description="Entity UUID")
+    entity_type: str = Field(description="Entity type: 'person' or 'vehicle'")
+    name: Optional[str] = Field(default=None, description="Entity name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    is_vip: bool = Field(default=False, description="VIP status")
+    is_blocked: bool = Field(default=False, description="Blocked status")
+
+
+class VipBlockedEntityListResponse(BaseModel):
+    """Response for VIP/blocked entity list endpoints."""
+    entities: list[EntityListItem] = Field(description="List of entities")
+    total: int = Field(description="Total count matching filter")
+    limit: int = Field(description="Page size")
+    offset: int = Field(description="Pagination offset")
+
+
+@router.get("/entities/vip", response_model=VipBlockedEntityListResponse)
+async def list_vip_entities(
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum entities to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    db: Session = Depends(get_db),
+):
+    """
+    List all VIP entities (persons and vehicles).
+
+    Story P4-8.4: Named Entity Alerts
+
+    Returns all entities marked as VIP, sorted by last_seen_at descending.
+    VIP entities trigger priority notifications with distinct styling.
+
+    Args:
+        limit: Maximum number of entities to return (1-100)
+        offset: Pagination offset
+        db: Database session
+
+    Returns:
+        VipBlockedEntityListResponse with list of VIP entities
+    """
+    from app.services.entity_alert_service import get_entity_alert_service
+
+    entity_service = get_entity_alert_service()
+    entities, total = await entity_service.get_all_vip_entities(
+        db=db, limit=limit, offset=offset
+    )
+
+    return VipBlockedEntityListResponse(
+        entities=[
+            EntityListItem(
+                id=e["id"],
+                entity_type=e["entity_type"],
+                name=e["name"],
+                first_seen_at=e["first_seen_at"],
+                last_seen_at=e["last_seen_at"],
+                occurrence_count=e["occurrence_count"],
+                is_vip=e["is_vip"],
+                is_blocked=e["is_blocked"],
+            )
+            for e in entities
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/entities/blocked", response_model=VipBlockedEntityListResponse)
+async def list_blocked_entities(
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum entities to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    db: Session = Depends(get_db),
+):
+    """
+    List all blocked entities (persons and vehicles).
+
+    Story P4-8.4: Named Entity Alerts
+
+    Returns all entities on the blocklist, sorted by last_seen_at descending.
+    Blocked entities have their notifications suppressed, but events are
+    still recorded in the system.
+
+    Args:
+        limit: Maximum number of entities to return (1-100)
+        offset: Pagination offset
+        db: Database session
+
+    Returns:
+        VipBlockedEntityListResponse with list of blocked entities
+    """
+    from app.services.entity_alert_service import get_entity_alert_service
+
+    entity_service = get_entity_alert_service()
+    entities, total = await entity_service.get_all_blocked_entities(
+        db=db, limit=limit, offset=offset
+    )
+
+    return VipBlockedEntityListResponse(
+        entities=[
+            EntityListItem(
+                id=e["id"],
+                entity_type=e["entity_type"],
+                name=e["name"],
+                first_seen_at=e["first_seen_at"],
+                last_seen_at=e["last_seen_at"],
+                occurrence_count=e["occurrence_count"],
+                is_vip=e["is_vip"],
+                is_blocked=e["is_blocked"],
+            )
+            for e in entities
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -1032,4 +1159,930 @@ async def calculate_anomaly_score(
         object_score=result.object_score,
         severity=result.severity,
         has_baseline=result.has_baseline,
+    )
+
+
+# Story P4-8.1: Face Embedding API Endpoints
+from app.services.face_embedding_service import get_face_embedding_service, FaceEmbeddingService
+
+
+class FaceEmbeddingResponse(BaseModel):
+    """Response model for a single face embedding."""
+    id: str = Field(description="UUID of the face embedding")
+    event_id: str = Field(description="UUID of the associated event")
+    entity_id: Optional[str] = Field(default=None, description="UUID of linked entity (if any)")
+    bounding_box: dict = Field(description="Face bounding box: {x, y, width, height}")
+    confidence: float = Field(ge=0.0, le=1.0, description="Face detection confidence")
+    model_version: str = Field(description="Model version used for embedding")
+    created_at: str = Field(description="When the face embedding was created (ISO 8601)")
+
+
+class FaceEmbeddingsResponse(BaseModel):
+    """Response model for face embeddings list."""
+    event_id: str = Field(description="UUID of the event")
+    face_count: int = Field(description="Number of face embeddings")
+    faces: list[FaceEmbeddingResponse] = Field(description="List of face embeddings")
+
+
+class DeleteFacesResponse(BaseModel):
+    """Response model for face deletion."""
+    deleted_count: int = Field(description="Number of face embeddings deleted")
+    message: str = Field(description="Status message")
+
+
+class FaceStatsResponse(BaseModel):
+    """Response model for face embedding statistics."""
+    total_face_embeddings: int = Field(description="Total face embeddings in database")
+    face_recognition_enabled: bool = Field(description="Whether face recognition is enabled")
+    model_version: str = Field(description="Current face embedding model version")
+
+
+@router.get("/faces/{event_id}", response_model=FaceEmbeddingsResponse)
+async def get_face_embeddings(
+    event_id: str,
+    db: Session = Depends(get_db),
+    face_service: FaceEmbeddingService = Depends(get_face_embedding_service),
+):
+    """
+    Get all face embeddings for an event.
+
+    Story P4-8.1: Face Embedding Storage (AC7)
+
+    Returns face embeddings detected in the event thumbnail, including
+    bounding box coordinates and confidence scores.
+
+    Args:
+        event_id: UUID of the event
+        db: Database session
+        face_service: Face embedding service instance
+
+    Returns:
+        FaceEmbeddingsResponse with list of face embeddings
+
+    Raises:
+        404: If event not found
+    """
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    faces = await face_service.get_face_embeddings(db, event_id)
+
+    return FaceEmbeddingsResponse(
+        event_id=event_id,
+        face_count=len(faces),
+        faces=[
+            FaceEmbeddingResponse(
+                id=f["id"],
+                event_id=f["event_id"],
+                entity_id=f.get("entity_id"),
+                bounding_box=f["bounding_box"],
+                confidence=f["confidence"],
+                model_version=f["model_version"],
+                created_at=f["created_at"],
+            )
+            for f in faces
+        ],
+    )
+
+
+@router.delete("/faces/{event_id}", response_model=DeleteFacesResponse)
+async def delete_event_faces(
+    event_id: str,
+    db: Session = Depends(get_db),
+    face_service: FaceEmbeddingService = Depends(get_face_embedding_service),
+):
+    """
+    Delete all face embeddings for an event.
+
+    Story P4-8.1: Face Embedding Storage (AC7)
+
+    Removes face embedding data for a specific event. Event itself is not deleted.
+
+    Args:
+        event_id: UUID of the event
+        db: Database session
+        face_service: Face embedding service instance
+
+    Returns:
+        DeleteFacesResponse with count of deleted embeddings
+
+    Raises:
+        404: If event not found
+    """
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    count = await face_service.delete_event_faces(db, event_id)
+
+    return DeleteFacesResponse(
+        deleted_count=count,
+        message=f"Deleted {count} face embedding(s) for event {event_id}"
+    )
+
+
+@router.delete("/faces", response_model=DeleteFacesResponse)
+async def delete_all_faces(
+    db: Session = Depends(get_db),
+    face_service: FaceEmbeddingService = Depends(get_face_embedding_service),
+):
+    """
+    Delete all face embeddings from the database.
+
+    Story P4-8.1: Face Embedding Storage (AC5)
+
+    Privacy control endpoint - allows users to clear all stored face data.
+    This is an admin-level operation that removes ALL face embeddings.
+
+    Args:
+        db: Database session
+        face_service: Face embedding service instance
+
+    Returns:
+        DeleteFacesResponse with count of deleted embeddings
+    """
+    count = await face_service.delete_all_faces(db)
+
+    logger.info(
+        "All face embeddings deleted via API",
+        extra={
+            "event_type": "all_faces_deleted_api",
+            "count": count,
+        }
+    )
+
+    return DeleteFacesResponse(
+        deleted_count=count,
+        message=f"Deleted all {count} face embedding(s) from database"
+    )
+
+
+@router.get("/faces/stats", response_model=FaceStatsResponse)
+async def get_face_stats(
+    db: Session = Depends(get_db),
+    face_service: FaceEmbeddingService = Depends(get_face_embedding_service),
+):
+    """
+    Get face embedding statistics.
+
+    Story P4-8.1: Face Embedding Storage
+
+    Returns statistics about face embeddings including total count
+    and current settings.
+
+    Args:
+        db: Database session
+        face_service: Face embedding service instance
+
+    Returns:
+        FaceStatsResponse with statistics
+    """
+    from app.models.system_setting import SystemSetting
+
+    total_faces = await face_service.get_total_face_count(db)
+
+    # Get face_recognition_enabled setting
+    setting = db.query(SystemSetting).filter(
+        SystemSetting.key == "face_recognition_enabled"
+    ).first()
+    enabled = setting.value.lower() == "true" if setting else False
+
+    return FaceStatsResponse(
+        total_face_embeddings=total_faces,
+        face_recognition_enabled=enabled,
+        model_version=face_service.get_model_version(),
+    )
+
+
+# =============================================================================
+# Person Matching Endpoints (Story P4-8.2)
+# =============================================================================
+
+class PersonListItem(BaseModel):
+    """Single person in list response."""
+    id: str = Field(description="Person UUID")
+    name: Optional[str] = Field(default=None, description="User-assigned name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    face_count: int = Field(description="Number of face embeddings linked to this person")
+
+
+class PersonListResponse(BaseModel):
+    """Response for GET /persons endpoint."""
+    persons: list[PersonListItem] = Field(description="List of persons")
+    total: int = Field(description="Total number of persons")
+    limit: int = Field(description="Maximum returned")
+    offset: int = Field(description="Pagination offset")
+
+
+class PersonFaceItem(BaseModel):
+    """Face embedding linked to a person."""
+    id: str = Field(description="Face embedding UUID")
+    event_id: str = Field(description="Event UUID")
+    bounding_box: Optional[dict] = Field(default=None, description="Face bounding box coordinates")
+    confidence: float = Field(description="Face detection confidence")
+    created_at: datetime = Field(description="When face was detected")
+    event_timestamp: Optional[datetime] = Field(default=None, description="Event timestamp")
+    thumbnail_url: Optional[str] = Field(default=None, description="Event thumbnail URL")
+
+
+class PersonDetailResponse(BaseModel):
+    """Response for GET /persons/{id} endpoint."""
+    id: str = Field(description="Person UUID")
+    name: Optional[str] = Field(default=None, description="User-assigned name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    created_at: datetime = Field(description="Record creation timestamp")
+    updated_at: datetime = Field(description="Last update timestamp")
+    recent_faces: list[PersonFaceItem] = Field(default=[], description="Recent face detections")
+
+
+class PersonUpdateRequest(BaseModel):
+    """Request for PUT /persons/{id} endpoint."""
+    name: Optional[str] = Field(default=None, description="New name for the person (None to clear)")
+    is_vip: Optional[bool] = Field(default=None, description="Mark as VIP for priority alerts (Story P4-8.4)")
+    is_blocked: Optional[bool] = Field(default=None, description="Block alerts for this person (Story P4-8.4)")
+
+
+class PersonUpdateResponse(BaseModel):
+    """Response for PUT /persons/{id} endpoint."""
+    id: str = Field(description="Person UUID")
+    name: Optional[str] = Field(default=None, description="Updated name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    is_vip: bool = Field(default=False, description="VIP status (Story P4-8.4)")
+    is_blocked: bool = Field(default=False, description="Blocked status (Story P4-8.4)")
+
+
+@router.get("/persons", response_model=PersonListResponse)
+async def list_persons(
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of persons to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    named_only: bool = Query(default=False, description="Only return named persons"),
+    db: Session = Depends(get_db),
+    person_service: PersonMatchingService = Depends(get_person_matching_service),
+):
+    """
+    List all known persons.
+
+    Story P4-8.2: Person Matching
+
+    Returns persons (RecognizedEntity with entity_type='person') sorted by
+    last_seen_at descending. Includes face_count for each person.
+
+    Args:
+        limit: Maximum number of persons to return (1-100)
+        offset: Pagination offset
+        named_only: If True, only return persons with names assigned
+        db: Database session
+        person_service: Person matching service instance
+
+    Returns:
+        PersonListResponse with list of persons and pagination info
+    """
+    persons, total = await person_service.get_persons(
+        db,
+        limit=limit,
+        offset=offset,
+        named_only=named_only,
+    )
+
+    return PersonListResponse(
+        persons=[
+            PersonListItem(
+                id=p["id"],
+                name=p["name"],
+                first_seen_at=p["first_seen_at"],
+                last_seen_at=p["last_seen_at"],
+                occurrence_count=p["occurrence_count"],
+                face_count=p["face_count"],
+            )
+            for p in persons
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/persons/{person_id}", response_model=PersonDetailResponse)
+async def get_person(
+    person_id: str,
+    include_faces: bool = Query(default=True, description="Include recent face detections"),
+    face_limit: int = Query(default=10, ge=1, le=50, description="Maximum faces to include"),
+    db: Session = Depends(get_db),
+    person_service: PersonMatchingService = Depends(get_person_matching_service),
+):
+    """
+    Get person details.
+
+    Story P4-8.2: Person Matching
+
+    Returns detailed information about a specific person including
+    recent face detections linked to them.
+
+    Args:
+        person_id: UUID of the person
+        include_faces: Whether to include recent face detections
+        face_limit: Maximum number of faces to include
+        db: Database session
+        person_service: Person matching service instance
+
+    Returns:
+        PersonDetailResponse with person details and faces
+
+    Raises:
+        HTTPException 404: If person not found
+    """
+    person = await person_service.get_person(
+        db,
+        person_id,
+        include_faces=include_faces,
+        face_limit=face_limit,
+    )
+
+    if not person:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Person {person_id} not found"
+        )
+
+    recent_faces = []
+    if "recent_faces" in person:
+        recent_faces = [
+            PersonFaceItem(
+                id=f["id"],
+                event_id=f["event_id"],
+                bounding_box=f["bounding_box"],
+                confidence=f["confidence"],
+                created_at=f["created_at"],
+                event_timestamp=f["event_timestamp"],
+                thumbnail_url=f["thumbnail_url"],
+            )
+            for f in person["recent_faces"]
+        ]
+
+    return PersonDetailResponse(
+        id=person["id"],
+        name=person["name"],
+        first_seen_at=person["first_seen_at"],
+        last_seen_at=person["last_seen_at"],
+        occurrence_count=person["occurrence_count"],
+        created_at=person["created_at"],
+        updated_at=person["updated_at"],
+        recent_faces=recent_faces,
+    )
+
+
+@router.put("/persons/{person_id}", response_model=PersonUpdateResponse)
+async def update_person(
+    person_id: str,
+    request: PersonUpdateRequest,
+    db: Session = Depends(get_db),
+    person_service: PersonMatchingService = Depends(get_person_matching_service),
+):
+    """
+    Update a person's name, VIP status, or blocked status.
+
+    Story P4-8.2: Person Matching
+    Story P4-8.4: Named Entity Alerts (VIP and blocked)
+
+    Allows users to:
+    - Name recognized persons for personalized alerts like "John is at the door"
+    - Mark persons as VIP for priority notifications
+    - Block persons to suppress alerts (events still recorded)
+
+    Args:
+        person_id: UUID of the person
+        request: Update request with new values
+        db: Database session
+        person_service: Person matching service instance
+
+    Returns:
+        PersonUpdateResponse with updated person info
+
+    Raises:
+        HTTPException 404: If person not found
+    """
+    from app.services.entity_alert_service import get_entity_alert_service
+
+    # Update name via person service (handles face matching updates)
+    person = await person_service.update_person_name(
+        db,
+        person_id,
+        name=request.name,
+    )
+
+    if not person:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Person {person_id} not found"
+        )
+
+    # Story P4-8.4: Update VIP/blocked status if provided
+    if request.is_vip is not None or request.is_blocked is not None:
+        entity_service = get_entity_alert_service()
+        updated_entity = await entity_service.update_entity_alert_settings(
+            db=db,
+            entity_id=person_id,
+            is_vip=request.is_vip,
+            is_blocked=request.is_blocked,
+        )
+        if updated_entity:
+            person["is_vip"] = updated_entity.get("is_vip", False)
+            person["is_blocked"] = updated_entity.get("is_blocked", False)
+
+    return PersonUpdateResponse(
+        id=person["id"],
+        name=person["name"],
+        first_seen_at=person["first_seen_at"],
+        last_seen_at=person["last_seen_at"],
+        occurrence_count=person["occurrence_count"],
+        is_vip=person.get("is_vip", False),
+        is_blocked=person.get("is_blocked", False),
+    )
+
+
+# =============================================================================
+# Vehicle Recognition Endpoints (Story P4-8.3)
+# =============================================================================
+
+from app.services.vehicle_matching_service import get_vehicle_matching_service, VehicleMatchingService
+from app.services.vehicle_embedding_service import get_vehicle_embedding_service, VehicleEmbeddingService
+
+
+class VehicleListItem(BaseModel):
+    """Single vehicle in list response."""
+    id: str = Field(description="Vehicle UUID")
+    name: Optional[str] = Field(default=None, description="User-assigned name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    embedding_count: int = Field(description="Number of vehicle embeddings linked")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type (car, truck, etc.)")
+    primary_color: Optional[str] = Field(default=None, description="Primary color if detected")
+
+
+class VehicleListResponse(BaseModel):
+    """Response for GET /vehicles endpoint."""
+    vehicles: list[VehicleListItem] = Field(description="List of vehicles")
+    total: int = Field(description="Total number of vehicles")
+    limit: int = Field(description="Maximum returned")
+    offset: int = Field(description="Pagination offset")
+
+
+class VehicleDetectionItem(BaseModel):
+    """Vehicle detection linked to a vehicle entity."""
+    id: str = Field(description="Vehicle embedding UUID")
+    event_id: str = Field(description="Event UUID")
+    bounding_box: Optional[dict] = Field(default=None, description="Vehicle bounding box coordinates")
+    confidence: float = Field(description="Vehicle detection confidence")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    created_at: datetime = Field(description="When vehicle was detected")
+    event_timestamp: Optional[datetime] = Field(default=None, description="Event timestamp")
+    thumbnail_url: Optional[str] = Field(default=None, description="Event thumbnail URL")
+
+
+class VehicleDetailResponse(BaseModel):
+    """Response for GET /vehicles/{id} endpoint."""
+    id: str = Field(description="Vehicle UUID")
+    name: Optional[str] = Field(default=None, description="User-assigned name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    created_at: datetime = Field(description="Record creation timestamp")
+    updated_at: datetime = Field(description="Last update timestamp")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    primary_color: Optional[str] = Field(default=None, description="Primary color if detected")
+    metadata: dict = Field(default={}, description="Additional metadata (colors, make, etc.)")
+    recent_detections: list[VehicleDetectionItem] = Field(default=[], description="Recent detections")
+
+
+class VehicleUpdateRequest(BaseModel):
+    """Request for PUT /vehicles/{id} endpoint."""
+    name: Optional[str] = Field(default=None, description="New name for the vehicle (None to clear)")
+    metadata: Optional[dict] = Field(default=None, description="Optional metadata updates")
+    is_vip: Optional[bool] = Field(default=None, description="Mark as VIP for priority alerts (Story P4-8.4)")
+    is_blocked: Optional[bool] = Field(default=None, description="Block alerts for this vehicle (Story P4-8.4)")
+
+
+class VehicleUpdateResponse(BaseModel):
+    """Response for PUT /vehicles/{id} endpoint."""
+    id: str = Field(description="Vehicle UUID")
+    name: Optional[str] = Field(default=None, description="Updated name")
+    first_seen_at: datetime = Field(description="First occurrence timestamp")
+    last_seen_at: datetime = Field(description="Most recent occurrence timestamp")
+    occurrence_count: int = Field(description="Number of times seen")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    primary_color: Optional[str] = Field(default=None, description="Primary color")
+    is_vip: bool = Field(default=False, description="VIP status (Story P4-8.4)")
+    is_blocked: bool = Field(default=False, description="Blocked status (Story P4-8.4)")
+
+
+class VehicleEmbeddingResponse(BaseModel):
+    """Response model for a single vehicle embedding."""
+    id: str = Field(description="UUID of the vehicle embedding")
+    event_id: str = Field(description="UUID of the associated event")
+    entity_id: Optional[str] = Field(default=None, description="UUID of linked vehicle entity")
+    bounding_box: dict = Field(description="Vehicle bounding box: {x, y, width, height}")
+    confidence: float = Field(ge=0.0, le=1.0, description="Vehicle detection confidence")
+    vehicle_type: Optional[str] = Field(default=None, description="Detected vehicle type")
+    model_version: str = Field(description="Model version used for embedding")
+    created_at: str = Field(description="When the vehicle embedding was created (ISO 8601)")
+
+
+class VehicleEmbeddingsResponse(BaseModel):
+    """Response model for vehicle embeddings list."""
+    event_id: str = Field(description="UUID of the event")
+    vehicle_count: int = Field(description="Number of vehicle embeddings")
+    vehicles: list[VehicleEmbeddingResponse] = Field(description="List of vehicle embeddings")
+
+
+class DeleteVehiclesResponse(BaseModel):
+    """Response model for vehicle deletion."""
+    deleted_count: int = Field(description="Number of vehicle embeddings deleted")
+    message: str = Field(description="Status message")
+
+
+class VehicleStatsResponse(BaseModel):
+    """Response model for vehicle embedding statistics."""
+    total_vehicle_embeddings: int = Field(description="Total vehicle embeddings in database")
+    vehicle_recognition_enabled: bool = Field(description="Whether vehicle recognition is enabled")
+    model_version: str = Field(description="Current vehicle embedding model version")
+
+
+@router.get("/vehicles", response_model=VehicleListResponse)
+async def list_vehicles(
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of vehicles to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    named_only: bool = Query(default=False, description="Only return named vehicles"),
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleMatchingService = Depends(get_vehicle_matching_service),
+):
+    """
+    List all known vehicles.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns vehicles (RecognizedEntity with entity_type='vehicle') sorted by
+    last_seen_at descending. Includes embedding_count for each vehicle.
+
+    Args:
+        limit: Maximum number of vehicles to return (1-100)
+        offset: Pagination offset
+        named_only: If True, only return vehicles with names assigned
+        db: Database session
+        vehicle_service: Vehicle matching service instance
+
+    Returns:
+        VehicleListResponse with list of vehicles and pagination info
+    """
+    vehicles, total = await vehicle_service.get_vehicles(
+        db,
+        limit=limit,
+        offset=offset,
+        named_only=named_only,
+    )
+
+    return VehicleListResponse(
+        vehicles=[
+            VehicleListItem(
+                id=v["id"],
+                name=v["name"],
+                first_seen_at=v["first_seen_at"],
+                last_seen_at=v["last_seen_at"],
+                occurrence_count=v["occurrence_count"],
+                embedding_count=v["embedding_count"],
+                vehicle_type=v.get("vehicle_type"),
+                primary_color=v.get("primary_color"),
+            )
+            for v in vehicles
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/vehicles/{vehicle_id}", response_model=VehicleDetailResponse)
+async def get_vehicle(
+    vehicle_id: str,
+    include_detections: bool = Query(default=True, description="Include recent detections"),
+    detection_limit: int = Query(default=10, ge=1, le=50, description="Maximum detections to include"),
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleMatchingService = Depends(get_vehicle_matching_service),
+):
+    """
+    Get vehicle details.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns detailed information about a specific vehicle including
+    recent detections linked to it.
+
+    Args:
+        vehicle_id: UUID of the vehicle
+        include_detections: Whether to include recent detections
+        detection_limit: Maximum number of detections to include
+        db: Database session
+        vehicle_service: Vehicle matching service instance
+
+    Returns:
+        VehicleDetailResponse with vehicle details and detections
+
+    Raises:
+        HTTPException 404: If vehicle not found
+    """
+    vehicle = await vehicle_service.get_vehicle(
+        db,
+        vehicle_id,
+        include_embeddings=include_detections,
+        embedding_limit=detection_limit,
+    )
+
+    if not vehicle:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Vehicle {vehicle_id} not found"
+        )
+
+    recent_detections = []
+    if "recent_detections" in vehicle:
+        recent_detections = [
+            VehicleDetectionItem(
+                id=d["id"],
+                event_id=d["event_id"],
+                bounding_box=d["bounding_box"],
+                confidence=d["confidence"],
+                vehicle_type=d["vehicle_type"],
+                created_at=d["created_at"],
+                event_timestamp=d["event_timestamp"],
+                thumbnail_url=d["thumbnail_url"],
+            )
+            for d in vehicle["recent_detections"]
+        ]
+
+    return VehicleDetailResponse(
+        id=vehicle["id"],
+        name=vehicle["name"],
+        first_seen_at=vehicle["first_seen_at"],
+        last_seen_at=vehicle["last_seen_at"],
+        occurrence_count=vehicle["occurrence_count"],
+        created_at=vehicle["created_at"],
+        updated_at=vehicle["updated_at"],
+        vehicle_type=vehicle.get("vehicle_type"),
+        primary_color=vehicle.get("primary_color"),
+        metadata=vehicle.get("metadata", {}),
+        recent_detections=recent_detections,
+    )
+
+
+@router.put("/vehicles/{vehicle_id}", response_model=VehicleUpdateResponse)
+async def update_vehicle(
+    vehicle_id: str,
+    request: VehicleUpdateRequest,
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleMatchingService = Depends(get_vehicle_matching_service),
+):
+    """
+    Update a vehicle's name, metadata, VIP status, or blocked status.
+
+    Story P4-8.3: Vehicle Recognition
+    Story P4-8.4: Named Entity Alerts (VIP and blocked)
+
+    Allows users to:
+    - Name recognized vehicles for personalized alerts like "Your car arrived"
+    - Update vehicle metadata (color, type, etc.)
+    - Mark vehicles as VIP for priority notifications
+    - Block vehicles to suppress alerts (events still recorded)
+
+    Args:
+        vehicle_id: UUID of the vehicle
+        request: Update request with new values
+        db: Database session
+        vehicle_service: Vehicle matching service instance
+
+    Returns:
+        VehicleUpdateResponse with updated vehicle info
+
+    Raises:
+        HTTPException 404: If vehicle not found
+    """
+    from app.services.entity_alert_service import get_entity_alert_service
+
+    # Update name if provided
+    if request.name is not None:
+        vehicle = await vehicle_service.update_vehicle_name(
+            db,
+            vehicle_id,
+            name=request.name,
+        )
+    else:
+        # Just get current vehicle data
+        vehicle = await vehicle_service.get_vehicle(db, vehicle_id, include_embeddings=False)
+
+    if not vehicle:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Vehicle {vehicle_id} not found"
+        )
+
+    # Update metadata if provided
+    if request.metadata is not None:
+        vehicle = await vehicle_service.update_vehicle_metadata(
+            db,
+            vehicle_id,
+            metadata_updates=request.metadata,
+        )
+
+    # Story P4-8.4: Update VIP/blocked status if provided
+    if request.is_vip is not None or request.is_blocked is not None:
+        entity_service = get_entity_alert_service()
+        updated_entity = await entity_service.update_entity_alert_settings(
+            db=db,
+            entity_id=vehicle_id,
+            is_vip=request.is_vip,
+            is_blocked=request.is_blocked,
+        )
+        if updated_entity:
+            vehicle["is_vip"] = updated_entity.get("is_vip", False)
+            vehicle["is_blocked"] = updated_entity.get("is_blocked", False)
+
+    return VehicleUpdateResponse(
+        id=vehicle["id"],
+        name=vehicle["name"],
+        first_seen_at=vehicle["first_seen_at"],
+        last_seen_at=vehicle["last_seen_at"],
+        occurrence_count=vehicle["occurrence_count"],
+        vehicle_type=vehicle.get("vehicle_type"),
+        primary_color=vehicle.get("primary_color"),
+        is_vip=vehicle.get("is_vip", False),
+        is_blocked=vehicle.get("is_blocked", False),
+    )
+
+
+@router.get("/vehicle-embeddings/{event_id}", response_model=VehicleEmbeddingsResponse)
+async def get_vehicle_embeddings(
+    event_id: str,
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Get all vehicle embeddings for an event.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns vehicle embeddings detected in the event thumbnail, including
+    bounding box coordinates and confidence scores.
+
+    Args:
+        event_id: UUID of the event
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        VehicleEmbeddingsResponse with list of vehicle embeddings
+
+    Raises:
+        404: If event not found
+    """
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    vehicles = await vehicle_service.get_vehicle_embeddings(db, event_id)
+
+    return VehicleEmbeddingsResponse(
+        event_id=event_id,
+        vehicle_count=len(vehicles),
+        vehicles=[
+            VehicleEmbeddingResponse(
+                id=v["id"],
+                event_id=v["event_id"],
+                entity_id=v.get("entity_id"),
+                bounding_box=v["bounding_box"],
+                confidence=v["confidence"],
+                vehicle_type=v.get("vehicle_type"),
+                model_version=v["model_version"],
+                created_at=v["created_at"],
+            )
+            for v in vehicles
+        ],
+    )
+
+
+@router.delete("/vehicle-embeddings/{event_id}", response_model=DeleteVehiclesResponse)
+async def delete_event_vehicles(
+    event_id: str,
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Delete all vehicle embeddings for an event.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Removes vehicle embedding data for a specific event. Event itself is not deleted.
+
+    Args:
+        event_id: UUID of the event
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        DeleteVehiclesResponse with count of deleted embeddings
+
+    Raises:
+        404: If event not found
+    """
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    count = await vehicle_service.delete_event_vehicles(db, event_id)
+
+    return DeleteVehiclesResponse(
+        deleted_count=count,
+        message=f"Deleted {count} vehicle embedding(s) for event {event_id}"
+    )
+
+
+@router.delete("/vehicle-embeddings", response_model=DeleteVehiclesResponse)
+async def delete_all_vehicles(
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Delete all vehicle embeddings from the database.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Privacy control endpoint - allows users to clear all stored vehicle data.
+    This is an admin-level operation that removes ALL vehicle embeddings.
+
+    Args:
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        DeleteVehiclesResponse with count of deleted embeddings
+    """
+    count = await vehicle_service.delete_all_vehicles(db)
+
+    logger.info(
+        "All vehicle embeddings deleted via API",
+        extra={
+            "event_type": "all_vehicles_deleted_api",
+            "count": count,
+        }
+    )
+
+    return DeleteVehiclesResponse(
+        deleted_count=count,
+        message=f"Deleted all {count} vehicle embedding(s) from database"
+    )
+
+
+@router.get("/vehicle-embeddings/stats", response_model=VehicleStatsResponse)
+async def get_vehicle_stats(
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Get vehicle embedding statistics.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns statistics about vehicle embeddings including total count
+    and current settings.
+
+    Args:
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        VehicleStatsResponse with statistics
+    """
+    from app.models.system_setting import SystemSetting
+
+    total_vehicles = await vehicle_service.get_total_vehicle_count(db)
+
+    # Get vehicle_recognition_enabled setting
+    setting = db.query(SystemSetting).filter(
+        SystemSetting.key == "vehicle_recognition_enabled"
+    ).first()
+    enabled = setting.value.lower() == "true" if setting else False
+
+    return VehicleStatsResponse(
+        total_vehicle_embeddings=total_vehicles,
+        vehicle_recognition_enabled=enabled,
+        model_version=vehicle_service.get_model_version(),
     )

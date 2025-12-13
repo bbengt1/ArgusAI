@@ -517,6 +517,16 @@ async def update_settings(
             'anomaly_low_threshold',
             'anomaly_high_threshold',
             'anomaly_enabled',
+            # Story P4-8.1: Face Recognition Privacy Settings
+            'face_recognition_enabled',
+            # Story P4-8.2: Person Matching Settings
+            'person_match_threshold',
+            'auto_create_persons',
+            'update_appearance_on_high_match',
+            # Story P4-8.3: Vehicle Recognition Settings
+            'vehicle_recognition_enabled',
+            'vehicle_match_threshold',
+            'auto_create_vehicles',
         }
 
         for field_name, value in update_data.items():

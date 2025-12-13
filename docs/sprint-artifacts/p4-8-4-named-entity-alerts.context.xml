@@ -1,0 +1,260 @@
+<story-context id="p4-8-4-named-entity-alerts" v="1.0">
+  <metadata>
+    <epicId>P4-8</epicId>
+    <storyId>P4-8.4</storyId>
+    <title>Named Entity Alerts</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-13</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-8-4-named-entity-alerts.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>alerts that use the names of recognized people and vehicles</iWant>
+    <soThat>I receive personalized notifications like "John is at the door" instead of generic "Person detected"</soThat>
+    <tasks>
+      <task id="1">Add Entity Alert Fields to RecognizedEntity Model (is_vip, is_blocked)</task>
+      <task id="2">Add Recognition Status to Event Model (recognition_status, enriched_description, matched_entity_ids)</task>
+      <task id="3">Create Alembic Migration 043_add_entity_alert_fields.py</task>
+      <task id="4">Create EntityAlertService for description enrichment and VIP/blocklist logic</task>
+      <task id="5">Integrate EntityAlertService into Event Pipeline (Step 15)</task>
+      <task id="6">Update Push Notification Service for entity-aware notifications</task>
+      <task id="7">Extend AlertRule Model with entity_ids and entity_names filters</task>
+      <task id="8">Update Alert Engine for entity-based rule matching</task>
+      <task id="9">Add API Endpoints for VIP and blocked entities</task>
+      <task id="10">Update Frontend Event Cards with recognition status badge</task>
+      <task id="11">Update Entity Management UI with VIP/blocklist toggles</task>
+      <task id="12">Update Alert Rule UI with entity selector</task>
+      <task id="13">Write comprehensive tests (40+ tests)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="AC1" title="Entity Name in AI Descriptions">
+      When a matched entity has a name, include it in the event description via enriched_description field. Handle multiple entities per event.
+    </ac>
+    <ac id="AC2" title="Known vs Stranger Classification">
+      Add recognition_status field to Event: 'known' (named entity), 'stranger' (unnamed but seen before), 'unknown' (first time), null (no recognition). Display badge on event cards.
+    </ac>
+    <ac id="AC3" title="VIP Alert Configuration">
+      Add is_vip boolean to RecognizedEntity. VIP entities trigger high-priority notifications with distinct styling. Add VIP toggle in entity management UI.
+    </ac>
+    <ac id="AC4" title="Entity Blocklist for Alert Suppression">
+      Add is_blocked boolean to RecognizedEntity. Blocked entities suppress notifications but events still recorded. Add blocklist toggle in UI.
+    </ac>
+    <ac id="AC5" title="Entity-Based Alert Rules">
+      Extend AlertRule with entity_ids and entity_names filters. Support wildcards in entity_names. Add entity selector to alert rule configuration UI.
+    </ac>
+    <ac id="AC6" title="Enhanced Push Notifications">
+      Include entity name in notification title. Format: "John at Front Door" or "Unknown Person at Front Door". VIP entities get star emoji prefix.
+    </ac>
+    <ac id="AC7" title="API Endpoints for Entity Alerts">
+      PUT endpoints for persons/vehicles with is_vip, is_blocked. GET /entities/vip and /entities/blocked endpoints.
+    </ac>
+    <ac id="AC8" title="Testing">
+      40+ tests covering entity enrichment, classification, VIP/blocklist logic, API endpoints, and integration flow.
+    </ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD-phase4.md</path>
+        <title>Phase 4 PRD</title>
+        <section>Epic P4-8: Person & Vehicle Recognition</section>
+        <snippet>Named person/vehicle tagging, "Known person" vs "stranger" classification. Users get notifications like "John is at the door" instead of generic alerts.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase4.md</path>
+        <title>Phase 4 Epics</title>
+        <section>Story P4-8.4: Named Entity Alerts</section>
+        <snippet>Use names in notifications, "Known person" vs "Stranger" classification, VIP alerts for specific people, Blocklist for unwanted alerts.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-8-3-vehicle-recognition.md</path>
+        <title>Previous Story: Vehicle Recognition</title>
+        <section>Dev Agent Record</section>
+        <snippet>VehicleMatchingService pattern, pipeline Step 14 integration, settings in no_prefix_fields, entity cache pattern for fast matching.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture.md</path>
+        <title>Architecture</title>
+        <section>Phase 4 ADRs</section>
+        <snippet>Event processing pipeline with Steps 1-14. Face matching (Step 13), Vehicle matching (Step 14). Entity-based alerts should be Step 15.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/models/recognized_entity.py</path>
+        <kind>model</kind>
+        <symbol>RecognizedEntity</symbol>
+        <lines>25-120</lines>
+        <reason>Core entity model - add is_vip and is_blocked fields here</reason>
+      </file>
+      <file>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>9-117</lines>
+        <reason>Event model - add recognition_status, enriched_description, matched_entity_ids fields</reason>
+      </file>
+      <file>
+        <path>backend/app/models/alert_rule.py</path>
+        <kind>model</kind>
+        <symbol>AlertRule</symbol>
+        <lines>8-73</lines>
+        <reason>Alert rule model - extend conditions to support entity_ids and entity_names filters</reason>
+      </file>
+      <file>
+        <path>backend/app/services/person_matching_service.py</path>
+        <kind>service</kind>
+        <symbol>PersonMatchingService</symbol>
+        <reason>Returns matched entity IDs after face matching - use output for entity alerts</reason>
+      </file>
+      <file>
+        <path>backend/app/services/vehicle_matching_service.py</path>
+        <kind>service</kind>
+        <symbol>VehicleMatchingService</symbol>
+        <reason>Returns matched vehicle entity IDs - use output for entity alerts</reason>
+      </file>
+      <file>
+        <path>backend/app/services/push_notification_service.py</path>
+        <kind>service</kind>
+        <symbol>PushNotificationService</symbol>
+        <lines>1-100</lines>
+        <reason>Push notification service - modify to include entity names in notification titles</reason>
+      </file>
+      <file>
+        <path>backend/app/services/alert_engine.py</path>
+        <kind>service</kind>
+        <symbol>AlertEngine</symbol>
+        <lines>44-150</lines>
+        <reason>Alert rule evaluation - extend for entity-based matching</reason>
+      </file>
+      <file>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>service</kind>
+        <symbol>EventProcessor</symbol>
+        <reason>Event pipeline - add Step 15 for entity alert enrichment after face/vehicle matching</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/context.py</path>
+        <kind>api</kind>
+        <symbol>context_router</symbol>
+        <reason>Context API - update PUT endpoints for persons/vehicles, add VIP/blocked list endpoints</reason>
+      </file>
+      <file>
+        <path>frontend/components/events/EventCard.tsx</path>
+        <kind>component</kind>
+        <symbol>EventCard</symbol>
+        <reason>Event card component - add recognition status badge display</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.*" />
+        <package name="sqlalchemy" version="2.0.*" />
+        <package name="pywebpush" version="*" />
+        <package name="pydantic" version="2.*" />
+        <package name="pytest" version="*" />
+        <package name="pytest-asyncio" version="*" />
+      </python>
+      <node>
+        <package name="next" version="15.*" />
+        <package name="react" version="19.*" />
+        <package name="@tanstack/react-query" version="*" />
+        <package name="tailwindcss" version="4.*" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Follow singleton service pattern with get_entity_alert_service() function</constraint>
+    <constraint type="pattern">Use async fire-and-forget processing via asyncio.create_task for non-blocking enrichment</constraint>
+    <constraint type="pattern">Add new settings to no_prefix_fields in system.py for service access</constraint>
+    <constraint type="privacy">Entity names are user-assigned only, never auto-generated</constraint>
+    <constraint type="privacy">Blocklist provides user control over notifications - blocked events still recorded</constraint>
+    <constraint type="performance">Entity alert enrichment should add <100ms to event processing</constraint>
+    <constraint type="testing">Minimum 70% test coverage for new code per Definition of Done</constraint>
+    <constraint type="database">Use alembic for migrations, follow existing naming pattern (043_add_entity_alert_fields.py)</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>EntityAlertService.enrich_event_description</name>
+      <kind>async method</kind>
+      <signature>async def enrich_event_description(self, db: Session, event_id: str, matched_entities: list[str]) -> str</signature>
+      <path>backend/app/services/entity_alert_service.py</path>
+    </interface>
+    <interface>
+      <name>EntityAlertService.classify_recognition_status</name>
+      <kind>async method</kind>
+      <signature>async def classify_recognition_status(self, matched_entities: list[RecognizedEntity]) -> str</signature>
+      <path>backend/app/services/entity_alert_service.py</path>
+    </interface>
+    <interface>
+      <name>EntityAlertService.should_suppress_alert</name>
+      <kind>async method</kind>
+      <signature>async def should_suppress_alert(self, db: Session, matched_entity_ids: list[str]) -> bool</signature>
+      <path>backend/app/services/entity_alert_service.py</path>
+    </interface>
+    <interface>
+      <name>PUT /api/v1/context/persons/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>PUT /api/v1/context/persons/{id} - Update name, is_vip, is_blocked</signature>
+      <path>backend/app/api/v1/context.py</path>
+    </interface>
+    <interface>
+      <name>PUT /api/v1/context/vehicles/{id}</name>
+      <kind>REST endpoint</kind>
+      <signature>PUT /api/v1/context/vehicles/{id} - Update name, is_vip, is_blocked</signature>
+      <path>backend/app/api/v1/context.py</path>
+    </interface>
+    <interface>
+      <name>GET /api/v1/entities/vip</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/entities/vip - List all VIP entities</signature>
+      <path>backend/app/api/v1/context.py</path>
+    </interface>
+    <interface>
+      <name>GET /api/v1/entities/blocked</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/entities/blocked - List all blocked entities</signature>
+      <path>backend/app/api/v1/context.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend uses pytest with pytest-asyncio for async tests. Follow existing test patterns in backend/tests/test_services/ and backend/tests/test_api/. Use MagicMock for database sessions and AsyncMock for async methods. Frontend uses Vitest with React Testing Library.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_entity_alert_service.py</location>
+      <location>backend/tests/test_api/test_entity_alerts.py</location>
+      <location>backend/tests/test_services/test_alert_engine_entities.py</location>
+      <location>frontend/__tests__/components/events/EventCard.test.tsx</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test entity name enrichment with single named entity</idea>
+      <idea ac="AC1">Test entity name enrichment with multiple entities</idea>
+      <idea ac="AC1">Test entity name enrichment with unnamed entities (should not add name)</idea>
+      <idea ac="AC2">Test recognition_status='known' when matched to named entity</idea>
+      <idea ac="AC2">Test recognition_status='stranger' when matched to unnamed entity</idea>
+      <idea ac="AC2">Test recognition_status='unknown' when no match found</idea>
+      <idea ac="AC2">Test recognition_status=null when no person/vehicle in event</idea>
+      <idea ac="AC3">Test VIP entity triggers high-priority notification</idea>
+      <idea ac="AC3">Test VIP toggle via PUT endpoint</idea>
+      <idea ac="AC4">Test blocked entity suppresses push notification</idea>
+      <idea ac="AC4">Test blocked entity still records event in database</idea>
+      <idea ac="AC5">Test alert rule matching by entity_ids</idea>
+      <idea ac="AC5">Test alert rule matching by entity_names with wildcard</idea>
+      <idea ac="AC6">Test notification title includes entity name</idea>
+      <idea ac="AC6">Test VIP notification has star emoji prefix</idea>
+      <idea ac="AC7">Test GET /entities/vip returns only VIP entities</idea>
+      <idea ac="AC7">Test GET /entities/blocked returns only blocked entities</idea>
+    </ideas>
+  </tests>
+</story-context>

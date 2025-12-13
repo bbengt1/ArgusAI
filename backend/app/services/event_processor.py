@@ -1098,6 +1098,149 @@ class EventProcessor:
                     }
                 )
 
+            # Step 12: Process face embeddings (Story P4-8.1)
+            # Only process faces if face_recognition_enabled is true (privacy control)
+            try:
+                from app.models.system_setting import SystemSetting
+                from app.services.face_embedding_service import get_face_embedding_service
+                import base64 as b64
+
+                # Check if face recognition is enabled (AC5: privacy controls)
+                with SessionLocal() as settings_db:
+                    setting = settings_db.query(SystemSetting).filter(
+                        SystemSetting.key == "face_recognition_enabled"
+                    ).first()
+                    face_recognition_enabled = (
+                        setting.value.lower() == "true" if setting else False
+                    )
+
+                if face_recognition_enabled and thumbnail_base64:
+                    # Fire and forget - use asyncio.create_task for non-blocking (AC6)
+                    asyncio.create_task(
+                        self._process_faces(event_id, thumbnail_base64)
+                    )
+                    logger.debug(
+                        f"Face processing task created for event {event_id}",
+                        extra={"event_id": event_id, "camera_id": event.camera_id}
+                    )
+                else:
+                    if not face_recognition_enabled:
+                        logger.debug(
+                            f"Face recognition disabled, skipping face processing for event {event_id}",
+                            extra={"event_id": event_id}
+                        )
+
+            except Exception as face_error:
+                # Face processing failures must not block event processing (AC6)
+                logger.warning(
+                    f"Failed to create face processing task: {face_error}",
+                    extra={"error": str(face_error), "event_id": event_id}
+                )
+
+            # Step 14: Process vehicle embeddings (Story P4-8.3)
+            # Only process vehicles if vehicle_recognition_enabled is true (privacy control)
+            # Also check if event contains vehicle detections
+            try:
+                from app.models.system_setting import SystemSetting
+
+                # Check if vehicle recognition is enabled
+                with SessionLocal() as settings_db:
+                    setting = settings_db.query(SystemSetting).filter(
+                        SystemSetting.key == "vehicle_recognition_enabled"
+                    ).first()
+                    vehicle_recognition_enabled = (
+                        setting.value.lower() == "true" if setting else False
+                    )
+
+                # Check if this event might contain vehicles
+                has_vehicle = False
+                if objects_json:
+                    try:
+                        objects_list = json.loads(objects_json)
+                        has_vehicle = "vehicle" in objects_list
+                    except json.JSONDecodeError:
+                        pass
+                # Also check smart detection type for Protect events
+                if smart_detection_type == "vehicle":
+                    has_vehicle = True
+
+                if vehicle_recognition_enabled and thumbnail_base64 and has_vehicle:
+                    # Fire and forget - use asyncio.create_task for non-blocking
+                    asyncio.create_task(
+                        self._process_vehicles(
+                            event_id,
+                            thumbnail_base64,
+                            ai_result.description if ai_result else None
+                        )
+                    )
+                    logger.debug(
+                        f"Vehicle processing task created for event {event_id}",
+                        extra={"event_id": event_id, "camera_id": event.camera_id}
+                    )
+                else:
+                    if not vehicle_recognition_enabled:
+                        logger.debug(
+                            f"Vehicle recognition disabled, skipping vehicle processing for event {event_id}",
+                            extra={"event_id": event_id}
+                        )
+                    elif not has_vehicle:
+                        logger.debug(
+                            f"No vehicle detected, skipping vehicle processing for event {event_id}",
+                            extra={"event_id": event_id}
+                        )
+
+            except Exception as vehicle_error:
+                # Vehicle processing failures must not block event processing
+                logger.warning(
+                    f"Failed to create vehicle processing task: {vehicle_error}",
+                    extra={"error": str(vehicle_error), "event_id": event_id}
+                )
+
+            # Step 15: Entity Alert Processing (Story P4-8.4)
+            # Process entity alerts for personalized notifications
+            # This runs after face (Step 13) and vehicle (Step 14) matching completes
+            try:
+                from app.models.system_setting import SystemSetting
+
+                # Check if entity alerts are enabled (tied to recognition settings)
+                face_recognition_enabled = False
+                vehicle_recognition_enabled = False
+
+                face_setting = db.query(SystemSetting).filter(
+                    SystemSetting.key == "face_recognition_enabled"
+                ).first()
+                if face_setting and face_setting.value.lower() == "true":
+                    face_recognition_enabled = True
+
+                vehicle_setting = db.query(SystemSetting).filter(
+                    SystemSetting.key == "vehicle_recognition_enabled"
+                ).first()
+                if vehicle_setting and vehicle_setting.value.lower() == "true":
+                    vehicle_recognition_enabled = True
+
+                # Only process if at least one recognition type is enabled
+                if face_recognition_enabled or vehicle_recognition_enabled:
+                    # Check if event has person or vehicle
+                    has_person = "person" in objects_detected if objects_detected else False
+                    has_vehicle = "vehicle" in objects_detected if objects_detected else False
+
+                    if has_person or has_vehicle:
+                        # Run entity alert processing asynchronously
+                        asyncio.create_task(
+                            self._process_entity_alerts(
+                                event_id=event_id,
+                                description=ai_result.description,
+                                has_person_or_vehicle=True
+                            )
+                        )
+
+            except Exception as entity_alert_error:
+                # Entity alert failures must not block event processing
+                logger.warning(
+                    f"Failed to create entity alert task: {entity_alert_error}",
+                    extra={"error": str(entity_alert_error), "event_id": event_id}
+                )
+
             logger.info(
                 f"Event processed successfully for camera {event.camera_name}",
                 extra={
@@ -1438,6 +1581,424 @@ class EventProcessor:
                 extra={
                     "event_type": "anomaly_scoring_error",
                     "event_id": event.id,
+                    "error": str(e)
+                }
+            )
+
+    async def _process_faces(
+        self,
+        event_id: str,
+        thumbnail_base64: str
+    ) -> None:
+        """
+        Process face detection, embedding, and person matching for an event.
+
+        Story P4-8.1: Face detection and embedding storage
+        Story P4-8.2: Person matching (Step 13)
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Uses its own database session since the caller's session may be closed.
+
+        Args:
+            event_id: UUID of the event to process
+            thumbnail_base64: Base64-encoded thumbnail image
+
+        Note:
+            - Non-blocking, runs as background task (AC6)
+            - Only runs when face_recognition_enabled is true (AC5)
+            - Errors don't propagate to caller (AC6)
+        """
+        try:
+            from app.services.face_embedding_service import get_face_embedding_service
+            from app.services.person_matching_service import get_person_matching_service
+            from app.models.system_setting import SystemSetting
+            import base64
+
+            face_service = get_face_embedding_service()
+            person_service = get_person_matching_service()
+
+            # Strip data URI prefix if present
+            b64_str = thumbnail_base64
+            if b64_str.startswith("data:"):
+                comma_idx = b64_str.find(",")
+                if comma_idx != -1:
+                    b64_str = b64_str[comma_idx + 1:]
+
+            thumbnail_bytes = base64.b64decode(b64_str)
+
+            # Use own session since caller's may be closed
+            db = SessionLocal()
+            try:
+                # Step 12: Face Detection and Embedding Storage (P4-8.1)
+                face_ids = await face_service.process_event_faces(
+                    db=db,
+                    event_id=event_id,
+                    thumbnail_bytes=thumbnail_bytes,
+                )
+
+                if face_ids:
+                    logger.info(
+                        f"Face processing complete for event {event_id}",
+                        extra={
+                            "event_type": "face_processing_complete",
+                            "event_id": event_id,
+                            "face_count": len(face_ids),
+                        }
+                    )
+
+                    # Step 13: Person Matching (P4-8.2)
+                    # Get settings for person matching
+                    threshold_setting = db.query(SystemSetting).filter(
+                        SystemSetting.key == "person_match_threshold"
+                    ).first()
+                    auto_create_setting = db.query(SystemSetting).filter(
+                        SystemSetting.key == "auto_create_persons"
+                    ).first()
+                    update_appearance_setting = db.query(SystemSetting).filter(
+                        SystemSetting.key == "update_appearance_on_high_match"
+                    ).first()
+
+                    threshold = float(threshold_setting.value) if threshold_setting else 0.70
+                    auto_create = auto_create_setting.value.lower() == "true" if auto_create_setting else True
+                    update_appearance = update_appearance_setting.value.lower() == "true" if update_appearance_setting else True
+
+                    match_results = await person_service.match_faces_to_persons(
+                        db=db,
+                        face_embedding_ids=face_ids,
+                        auto_create=auto_create,
+                        threshold=threshold,
+                        update_appearance=update_appearance,
+                    )
+
+                    # Log person matches
+                    matched = [r for r in match_results if r.person_id]
+                    named = [r for r in matched if r.person_name]
+
+                    if named:
+                        logger.info(
+                            f"Person matching complete for event {event_id}: {[r.person_name for r in named]}",
+                            extra={
+                                "event_type": "person_matching_complete",
+                                "event_id": event_id,
+                                "matched_persons": len(matched),
+                                "named_persons": [r.person_name for r in named],
+                                "new_persons": sum(1 for r in matched if r.is_new_person),
+                            }
+                        )
+                    elif matched:
+                        logger.debug(
+                            f"Person matching complete for event {event_id}: {len(matched)} unnamed matches",
+                            extra={
+                                "event_type": "person_matching_complete",
+                                "event_id": event_id,
+                                "matched_persons": len(matched),
+                                "new_persons": sum(1 for r in matched if r.is_new_person),
+                            }
+                        )
+                else:
+                    logger.debug(
+                        f"No faces found in event {event_id}",
+                        extra={
+                            "event_type": "no_faces_found",
+                            "event_id": event_id,
+                        }
+                    )
+            finally:
+                db.close()
+
+        except Exception as e:
+            # Face/person processing errors must not propagate (AC6)
+            logger.warning(
+                f"Face/person processing failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "face_person_processing_error",
+                    "event_id": event_id,
+                    "error": str(e)
+                }
+            )
+
+    async def _process_vehicles(
+        self,
+        event_id: str,
+        thumbnail_base64: str,
+        event_description: Optional[str] = None
+    ) -> None:
+        """
+        Process vehicle detection, embedding, and matching for an event.
+
+        Story P4-8.3: Vehicle detection and embedding storage with matching
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Uses its own database session since the caller's session may be closed.
+
+        Args:
+            event_id: UUID of the event to process
+            thumbnail_base64: Base64-encoded thumbnail image
+            event_description: AI-generated description for characteristics extraction
+
+        Note:
+            - Non-blocking, runs as background task
+            - Only runs when vehicle_recognition_enabled is true
+            - Errors don't propagate to caller
+        """
+        try:
+            from app.services.vehicle_embedding_service import get_vehicle_embedding_service
+            from app.services.vehicle_matching_service import get_vehicle_matching_service
+            from app.models.system_setting import SystemSetting
+            import base64
+
+            vehicle_service = get_vehicle_embedding_service()
+            matching_service = get_vehicle_matching_service()
+
+            # Strip data URI prefix if present
+            b64_str = thumbnail_base64
+            if b64_str.startswith("data:"):
+                comma_idx = b64_str.find(",")
+                if comma_idx != -1:
+                    b64_str = b64_str[comma_idx + 1:]
+
+            thumbnail_bytes = base64.b64decode(b64_str)
+
+            # Use own session since caller's may be closed
+            db = SessionLocal()
+            try:
+                # Step 14a: Vehicle Detection and Embedding Storage (P4-8.3)
+                vehicle_ids = await vehicle_service.process_event_vehicles(
+                    db=db,
+                    event_id=event_id,
+                    thumbnail_bytes=thumbnail_bytes,
+                )
+
+                if vehicle_ids:
+                    logger.info(
+                        f"Vehicle processing complete for event {event_id}",
+                        extra={
+                            "event_type": "vehicle_processing_complete",
+                            "event_id": event_id,
+                            "vehicle_count": len(vehicle_ids),
+                        }
+                    )
+
+                    # Step 14b: Vehicle Matching (P4-8.3)
+                    # Get settings for vehicle matching
+                    threshold_setting = db.query(SystemSetting).filter(
+                        SystemSetting.key == "vehicle_match_threshold"
+                    ).first()
+                    auto_create_setting = db.query(SystemSetting).filter(
+                        SystemSetting.key == "auto_create_vehicles"
+                    ).first()
+
+                    threshold = float(threshold_setting.value) if threshold_setting else 0.65
+                    auto_create = auto_create_setting.value.lower() == "true" if auto_create_setting else True
+
+                    match_results = await matching_service.match_vehicles_to_entities(
+                        db=db,
+                        vehicle_embedding_ids=vehicle_ids,
+                        event_description=event_description,
+                        auto_create=auto_create,
+                        threshold=threshold,
+                    )
+
+                    # Log vehicle matches
+                    matched = [r for r in match_results if r.vehicle_id]
+                    named = [r for r in matched if r.vehicle_name]
+
+                    if named:
+                        logger.info(
+                            f"Vehicle matching complete for event {event_id}: {[r.vehicle_name for r in named]}",
+                            extra={
+                                "event_type": "vehicle_matching_complete",
+                                "event_id": event_id,
+                                "matched_vehicles": len(matched),
+                                "named_vehicles": [r.vehicle_name for r in named],
+                                "new_vehicles": sum(1 for r in matched if r.is_new_vehicle),
+                            }
+                        )
+                    elif matched:
+                        logger.debug(
+                            f"Vehicle matching complete for event {event_id}: {len(matched)} unnamed matches",
+                            extra={
+                                "event_type": "vehicle_matching_complete",
+                                "event_id": event_id,
+                                "matched_vehicles": len(matched),
+                                "new_vehicles": sum(1 for r in matched if r.is_new_vehicle),
+                            }
+                        )
+                else:
+                    logger.debug(
+                        f"No vehicles found in event {event_id}",
+                        extra={
+                            "event_type": "no_vehicles_found",
+                            "event_id": event_id,
+                        }
+                    )
+            finally:
+                db.close()
+
+        except Exception as e:
+            # Vehicle processing errors must not propagate
+            logger.warning(
+                f"Vehicle processing failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "vehicle_processing_error",
+                    "event_id": event_id,
+                    "error": str(e)
+                }
+            )
+
+    async def _process_entity_alerts(
+        self,
+        event_id: str,
+        description: str,
+        has_person_or_vehicle: bool = True
+    ) -> None:
+        """
+        Process entity alert enrichment for an event.
+
+        Story P4-8.4: Named Entity Alerts
+
+        This runs after face and vehicle matching to:
+        1. Collect matched entity IDs from face and vehicle embeddings
+        2. Enrich the description with entity names
+        3. Set recognition status (known/stranger/unknown)
+        4. Check for VIP entities
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Uses its own database session since the caller's session may be closed.
+
+        Args:
+            event_id: UUID of the event to process
+            description: AI-generated description to enrich
+            has_person_or_vehicle: Whether event has person/vehicle detection
+        """
+        try:
+            from app.services.entity_alert_service import get_entity_alert_service
+            from app.models.face_embedding import FaceEmbedding
+            from app.models.vehicle_embedding import VehicleEmbedding
+            import json
+
+            entity_service = get_entity_alert_service()
+
+            # Create new database session for background task
+            db = SessionLocal()
+            try:
+                # Collect matched entity IDs from face and vehicle embeddings
+                matched_entity_ids = []
+
+                # Get entity IDs from face embeddings
+                face_embeddings = db.query(FaceEmbedding).filter(
+                    FaceEmbedding.event_id == event_id,
+                    FaceEmbedding.entity_id.isnot(None)
+                ).all()
+                matched_entity_ids.extend([fe.entity_id for fe in face_embeddings])
+
+                # Get entity IDs from vehicle embeddings
+                vehicle_embeddings = db.query(VehicleEmbedding).filter(
+                    VehicleEmbedding.event_id == event_id,
+                    VehicleEmbedding.entity_id.isnot(None)
+                ).all()
+                matched_entity_ids.extend([ve.entity_id for ve in vehicle_embeddings])
+
+                # Remove duplicates while preserving order
+                matched_entity_ids = list(dict.fromkeys(matched_entity_ids))
+
+                # Process entity alerts
+                result = await entity_service.process_event_entities(
+                    db=db,
+                    event_id=event_id,
+                    matched_entity_ids=matched_entity_ids,
+                    original_description=description,
+                    has_person_or_vehicle=has_person_or_vehicle
+                )
+
+                # Update event with entity information
+                await entity_service.update_event_with_entity_info(
+                    db=db,
+                    event_id=event_id,
+                    result=result
+                )
+
+                # Story P4-8.4: Send VIP notification if VIP entities detected
+                # Only send if not suppressed (blocked entity takes precedence)
+                if result.has_vip and not result.should_suppress and result.entity_names:
+                    try:
+                        from app.services.push_notification_service import send_event_notification
+                        from app.models.event import Event
+
+                        # Get event details for notification
+                        event = db.query(Event).filter(Event.id == event_id).first()
+                        if event:
+                            # Get camera name
+                            from app.models.camera import Camera
+                            camera = db.query(Camera).filter(Camera.id == event.camera_id).first()
+                            camera_name = camera.name if camera else "Unknown Camera"
+
+                            # Use enriched description if available
+                            notification_description = result.enriched_description or description
+
+                            # Construct thumbnail URL
+                            push_thumbnail_url = None
+                            if event.thumbnail_path or event.thumbnail_base64:
+                                date_str = event.timestamp.strftime("%Y-%m-%d")
+                                push_thumbnail_url = f"/api/v1/thumbnails/{date_str}/{event_id}.jpg"
+
+                            # Get smart detection type
+                            smart_detection_type = event.smart_detection_type
+
+                            # Fire and forget - VIP notification with entity info
+                            asyncio.create_task(
+                                send_event_notification(
+                                    event_id=event_id,
+                                    camera_name=camera_name,
+                                    description=notification_description,
+                                    thumbnail_url=push_thumbnail_url,
+                                    camera_id=event.camera_id,
+                                    smart_detection_type=smart_detection_type,
+                                    anomaly_score=event.anomaly_score,
+                                    entity_names=result.entity_names,
+                                    is_vip=True,
+                                    recognition_status=result.recognition_status,
+                                )
+                            )
+                            logger.info(
+                                f"VIP notification sent for event {event_id}: {result.entity_names}",
+                                extra={
+                                    "event_type": "vip_notification_sent",
+                                    "event_id": event_id,
+                                    "entity_names": result.entity_names,
+                                    "vip_count": len(result.vip_entity_ids)
+                                }
+                            )
+                    except Exception as notify_error:
+                        # VIP notification failures should not block processing
+                        logger.warning(
+                            f"Failed to send VIP notification for event {event_id}: {notify_error}",
+                            extra={"error": str(notify_error), "event_id": event_id}
+                        )
+
+                logger.info(
+                    f"Entity alert processing complete for event {event_id}: "
+                    f"status={result.recognition_status}, entities={len(matched_entity_ids)}",
+                    extra={
+                        "event_type": "entity_alert_complete",
+                        "event_id": event_id,
+                        "recognition_status": result.recognition_status,
+                        "entity_count": len(matched_entity_ids),
+                        "has_vip": result.has_vip,
+                        "suppressed": result.should_suppress
+                    }
+                )
+
+            finally:
+                db.close()
+
+        except Exception as e:
+            # Entity alert errors must not propagate
+            logger.warning(
+                f"Entity alert processing failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "entity_alert_error",
+                    "event_id": event_id,
                     "error": str(e)
                 }
             )

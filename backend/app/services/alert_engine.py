@@ -282,6 +282,103 @@ class AlertEngine:
 
         return event_anomaly_score >= anomaly_threshold
 
+    def _check_entity_ids(
+        self,
+        event_matched_entity_ids: Optional[List[str]],
+        rule_entity_ids: Optional[List[str]]
+    ) -> bool:
+        """
+        Check if event has any entity from the rule's entity ID list (Story P4-8.4).
+
+        Args:
+            event_matched_entity_ids: List of matched entity UUIDs from event
+            rule_entity_ids: List of entity UUIDs to match (None/empty = any)
+
+        Returns:
+            True if any entity matches or rule has no entity filter
+        """
+        # No filter = match any entity
+        if not rule_entity_ids:
+            return True
+
+        # No matched entities on event = can't match entity-based rules
+        if not event_matched_entity_ids:
+            return False
+
+        # OR logic: event must contain at least one matching entity ID
+        return any(entity_id in rule_entity_ids for entity_id in event_matched_entity_ids)
+
+    def _check_entity_names(
+        self,
+        event_entity_names: Optional[List[str]],
+        rule_entity_names: Optional[List[str]]
+    ) -> bool:
+        """
+        Check if event has any entity matching the rule's name patterns (Story P4-8.4).
+
+        Supports fnmatch wildcard patterns (e.g., "John*", "*Smith", "Mail*").
+
+        Args:
+            event_entity_names: List of entity names from event
+            rule_entity_names: List of name patterns to match (None/empty = any)
+
+        Returns:
+            True if any name matches pattern or rule has no name filter
+        """
+        import fnmatch
+
+        # No filter = match any entity
+        if not rule_entity_names:
+            return True
+
+        # No entity names on event = can't match name-based rules
+        if not event_entity_names:
+            return False
+
+        # OR logic: event must contain at least one matching name
+        for event_name in event_entity_names:
+            if not event_name:
+                continue
+            for pattern in rule_entity_names:
+                # fnmatch supports Unix shell wildcards: *, ?, [seq], [!seq]
+                if fnmatch.fnmatch(event_name.lower(), pattern.lower()):
+                    return True
+
+        return False
+
+    def _get_event_entity_info(self, event: Event) -> Tuple[List[str], List[str]]:
+        """
+        Get matched entity IDs and names from an event (Story P4-8.4).
+
+        Args:
+            event: Event to get entity info from
+
+        Returns:
+            Tuple of (entity_ids list, entity_names list)
+        """
+        entity_ids = []
+        entity_names = []
+
+        # Parse matched_entity_ids from event
+        if event.matched_entity_ids:
+            try:
+                entity_ids = json.loads(event.matched_entity_ids)
+            except json.JSONDecodeError:
+                pass
+
+        # Get entity names from database if we have IDs
+        if entity_ids:
+            try:
+                from app.models.recognized_entity import RecognizedEntity
+                entities = self.db.query(RecognizedEntity).filter(
+                    RecognizedEntity.id.in_(entity_ids)
+                ).all()
+                entity_names = [e.name for e in entities if e.name]
+            except Exception as e:
+                logger.warning(f"Failed to fetch entity names: {e}")
+
+        return entity_ids, entity_names
+
     def evaluate_rule(self, rule: AlertRule, event: Event) -> Tuple[bool, Dict[str, Any]]:
         """
         Evaluate a single rule against an event.
@@ -404,6 +501,54 @@ class AlertEngine:
             )
             return False, details
 
+        # 7. Story P4-8.4: Entity ID matching
+        # Parse rule's entity_ids and entity_names from model fields
+        rule_entity_ids = None
+        rule_entity_names = None
+
+        if rule.entity_ids:
+            try:
+                rule_entity_ids = json.loads(rule.entity_ids)
+            except json.JSONDecodeError:
+                pass
+
+        if rule.entity_names:
+            try:
+                rule_entity_names = json.loads(rule.entity_names)
+            except json.JSONDecodeError:
+                pass
+
+        # Get event's entity info for matching
+        event_entity_ids, event_entity_names = self._get_event_entity_info(event)
+
+        # Check entity ID filter
+        entity_ids_match = self._check_entity_ids(
+            event_entity_ids,
+            rule_entity_ids
+        )
+        details["conditions_checked"]["entity_ids"] = entity_ids_match
+
+        if not entity_ids_match:
+            logger.debug(
+                f"Rule '{rule.name}' failed entity_ids check",
+                extra={"rule_id": rule.id, "event_entity_ids": event_entity_ids, "rule_entity_ids": rule_entity_ids}
+            )
+            return False, details
+
+        # 8. Story P4-8.4: Entity name pattern matching
+        entity_names_match = self._check_entity_names(
+            event_entity_names,
+            rule_entity_names
+        )
+        details["conditions_checked"]["entity_names"] = entity_names_match
+
+        if not entity_names_match:
+            logger.debug(
+                f"Rule '{rule.name}' failed entity_names check",
+                extra={"rule_id": rule.id, "event_entity_names": event_entity_names, "rule_entity_names": rule_entity_names}
+            )
+            return False, details
+
         # All conditions passed
         logger.info(
             f"Rule '{rule.name}' matched event {event.id}",
@@ -411,7 +556,9 @@ class AlertEngine:
                 "rule_id": rule.id,
                 "event_id": event.id,
                 "event_objects": event_objects,
-                "event_confidence": event.confidence
+                "event_confidence": event.confidence,
+                "event_entity_ids": event_entity_ids,
+                "event_entity_names": event_entity_names
             }
         )
 

@@ -57,6 +57,13 @@ class AlertRule(Base):
     #     } or null
     # }
 
+    # Story P4-8.4: Entity-based matching
+    entity_ids = Column(Text, nullable=True)
+    # Expected structure: ["entity-uuid-1", "entity-uuid-2", ...] or null (any entity)
+    entity_names = Column(Text, nullable=True)
+    # Expected structure: ["John*", "Mail Carrier", ...] or null (any name)
+    # Supports wildcard matching with fnmatch patterns
+
     cooldown_minutes = Column(Integer, nullable=False, default=5)
     last_triggered_at = Column(DateTime(timezone=True), nullable=True)
     trigger_count = Column(Integer, nullable=False, default=0)

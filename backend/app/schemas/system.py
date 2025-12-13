@@ -273,6 +273,33 @@ class SystemSettingsUpdate(BaseModel):
         None, description="Enable anomaly scoring for events (default: true)"
     )
 
+    # Story P4-8.1: Face Recognition Privacy Settings
+    face_recognition_enabled: Optional[bool] = Field(
+        None, description="Enable face detection and embedding storage (default: false, opt-in)"
+    )
+
+    # Story P4-8.2: Person Matching Settings
+    person_match_threshold: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Similarity threshold for face-to-person matching (default: 0.70)"
+    )
+    auto_create_persons: Optional[bool] = Field(
+        None, description="Automatically create new person when no match found (default: true)"
+    )
+    update_appearance_on_high_match: Optional[bool] = Field(
+        None, description="Update reference embedding on high-confidence matches (default: true)"
+    )
+
+    # Story P4-8.3: Vehicle Recognition Settings
+    vehicle_recognition_enabled: Optional[bool] = Field(
+        None, description="Enable vehicle detection and embedding storage (default: false, opt-in)"
+    )
+    vehicle_match_threshold: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Similarity threshold for vehicle matching (default: 0.65)"
+    )
+    auto_create_vehicles: Optional[bool] = Field(
+        None, description="Automatically create new vehicle when no match found (default: true)"
+    )
+
 
 # Story P3-7.1: AI Usage Response Schemas for Cost Tracking
 

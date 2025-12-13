@@ -15,7 +15,7 @@ EntityEvent:
     - Enables efficient queries for entity event history
 """
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey, Index
+from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey, Index, Boolean
 from sqlalchemy.orm import relationship
 import uuid
 
@@ -38,6 +38,9 @@ class RecognizedEntity(Base):
         first_seen_at: Timestamp of first occurrence
         last_seen_at: Timestamp of most recent occurrence
         occurrence_count: Number of times this entity has been seen
+        is_vip: VIP entities trigger high-priority notifications (Story P4-8.4)
+        is_blocked: Blocked entities suppress notifications (Story P4-8.4)
+        entity_metadata: JSON object for additional entity data (color, make, etc.)
         created_at: Record creation timestamp
         updated_at: Record last update timestamp
 
@@ -84,6 +87,24 @@ class RecognizedEntity(Base):
         nullable=False,
         default=1,
         doc="Number of times this entity has been seen"
+    )
+    # Story P4-8.4: Named Entity Alerts - VIP and blocklist support
+    is_vip = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        doc="VIP entities trigger high-priority notifications"
+    )
+    is_blocked = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        doc="Blocked entities suppress notifications (events still recorded)"
+    )
+    entity_metadata = Column(
+        Text,
+        nullable=True,
+        doc="JSON object for additional entity data (color, make, vehicle type, etc.)"
     )
     created_at = Column(
         DateTime(timezone=True),

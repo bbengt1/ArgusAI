@@ -697,12 +697,17 @@ def format_rich_notification(
     thumbnail_url: Optional[str] = None,
     smart_detection_type: Optional[str] = None,
     anomaly_score: Optional[float] = None,
+    entity_names: Optional[List[str]] = None,
+    is_vip: bool = False,
+    recognition_status: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Format a rich notification payload for an event (Story P4-1.3, P4-7.3).
+    Format a rich notification payload for an event (Story P4-1.3, P4-7.3, P4-8.4).
 
     Creates a notification with:
     - Descriptive title based on smart detection type
+    - Entity names when recognized (P4-8.4): "John at Front Door" instead of "Person Detected"
+    - VIP indicator for priority entities (P4-8.4): star emoji prefix
     - Anomaly indicator in title for high anomaly events (P4-7.3)
     - Truncated body text
     - Thumbnail image URL
@@ -718,6 +723,9 @@ def format_rich_notification(
         thumbnail_url: Optional URL to event thumbnail image
         smart_detection_type: Optional smart detection type (person, vehicle, etc.)
         anomaly_score: Optional anomaly score 0.0-1.0 (P4-7.3)
+        entity_names: Optional list of recognized entity names (P4-8.4)
+        is_vip: Whether any matched entity is VIP (P4-8.4)
+        recognition_status: Recognition status - 'known', 'stranger', 'unknown' (P4-8.4)
 
     Returns:
         Dict with notification payload fields
@@ -729,8 +737,28 @@ def format_rich_notification(
         anomaly_score >= AnomalyScoringService.HIGH_THRESHOLD
     )
 
-    # Build title based on detection type
-    if smart_detection_type:
+    # Story P4-8.4: Build VIP prefix
+    vip_prefix = "⭐ " if is_vip else ""
+
+    # Story P4-8.4: Check if we have recognized entity names
+    has_entity_names = entity_names and len(entity_names) > 0
+
+    # Build title based on detection type and entity recognition
+    if has_entity_names:
+        # P4-8.4: Use entity names in title
+        if len(entity_names) == 1:
+            name_str = entity_names[0]
+        elif len(entity_names) == 2:
+            name_str = f"{entity_names[0]} and {entity_names[1]}"
+        else:
+            name_str = f"{entity_names[0]} and {len(entity_names) - 1} others"
+
+        # P4-7.3: Add unusual indicator if high anomaly
+        if is_high_anomaly:
+            title = f"{vip_prefix}{name_str} - Unusual Activity at {camera_name}"
+        else:
+            title = f"{vip_prefix}{name_str} at {camera_name}"
+    elif smart_detection_type:
         detection_labels = {
             "person": "Person Detected",
             "vehicle": "Vehicle Detected",
@@ -742,14 +770,14 @@ def format_rich_notification(
         detection_label = detection_labels.get(smart_detection_type, "Motion Detected")
         # P4-7.3: Add "Unusual" prefix for high anomaly events
         if is_high_anomaly:
-            title = f"{camera_name}: Unusual Activity - {detection_label}"
+            title = f"{vip_prefix}{camera_name}: Unusual Activity - {detection_label}"
         else:
-            title = f"{camera_name}: {detection_label}"
+            title = f"{vip_prefix}{camera_name}: {detection_label}"
     else:
         if is_high_anomaly:
-            title = f"{camera_name}: Unusual Activity"
+            title = f"{vip_prefix}{camera_name}: Unusual Activity"
         else:
-            title = f"{camera_name}: Motion Detected"
+            title = f"{vip_prefix}{camera_name}: Motion Detected"
 
     # Truncate description if too long
     body = description
@@ -772,6 +800,13 @@ def format_rich_notification(
     if anomaly_score is not None:
         data["anomaly_score"] = anomaly_score
         data["is_unusual"] = is_high_anomaly
+    # Story P4-8.4: Include entity recognition data in payload
+    if entity_names:
+        data["entity_names"] = entity_names
+    if is_vip:
+        data["is_vip"] = True
+    if recognition_status:
+        data["recognition_status"] = recognition_status
 
     # Build full notification payload
     notification = {
@@ -798,10 +833,13 @@ async def send_event_notification(
     camera_id: Optional[str] = None,
     smart_detection_type: Optional[str] = None,
     anomaly_score: Optional[float] = None,
+    entity_names: Optional[List[str]] = None,
+    is_vip: bool = False,
+    recognition_status: Optional[str] = None,
     db: Optional[Session] = None
 ) -> List[NotificationResult]:
     """
-    Convenience function to send rich notification for a new event (P4-1.3, P4-1.4, P4-7.3).
+    Convenience function to send rich notification for a new event (P4-1.3, P4-1.4, P4-7.3, P4-8.4).
 
     This is the main entry point for event pipeline integration.
     Sends to subscriptions with preference filtering:
@@ -809,6 +847,11 @@ async def send_event_notification(
     - Object type filtering (P4-1.4)
     - Quiet hours (P4-1.4)
     - Sound preference (P4-1.4)
+
+    Supports entity-aware notifications (P4-8.4):
+    - Personalized titles with entity names ("John at Front Door")
+    - VIP indicator (star emoji prefix)
+    - Recognition status in payload
 
     Args:
         event_id: UUID of the event
@@ -818,6 +861,9 @@ async def send_event_notification(
         camera_id: Optional camera UUID (for notification collapse and preference filtering)
         smart_detection_type: Optional smart detection type (person, vehicle, etc.)
         anomaly_score: Optional anomaly score 0.0-1.0 for unusual activity indicator (P4-7.3)
+        entity_names: Optional list of recognized entity names (P4-8.4)
+        is_vip: Whether any matched entity is VIP (P4-8.4)
+        recognition_status: Recognition status - 'known', 'stranger', 'unknown' (P4-8.4)
         db: Optional database session
 
     Returns:
@@ -832,7 +878,7 @@ async def send_event_notification(
         # Use camera_id for collapse tag, fallback to event_id
         collapse_tag = camera_id or event_id
 
-        # Format rich notification (P4-1.3, P4-7.3)
+        # Format rich notification (P4-1.3, P4-7.3, P4-8.4)
         notification = format_rich_notification(
             event_id=event_id,
             camera_id=collapse_tag,
@@ -841,6 +887,9 @@ async def send_event_notification(
             thumbnail_url=thumbnail_url,
             smart_detection_type=smart_detection_type,
             anomaly_score=anomaly_score,
+            entity_names=entity_names,
+            is_vip=is_vip,
+            recognition_status=recognition_status,
         )
 
         # Use broadcast_event_notification for preference filtering (P4-1.4)

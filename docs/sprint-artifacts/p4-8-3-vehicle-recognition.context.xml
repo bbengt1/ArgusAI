@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Story Context XML for P4-8.3: Vehicle Recognition -->
+<!-- Generated: 2025-12-13 -->
+<!-- Epic: P4-8 Person & Vehicle Recognition (Growth) -->
+
+<story-context story-key="p4-8-3-vehicle-recognition">
+  <metadata>
+    <epic>P4-8</epic>
+    <phase>4</phase>
+    <story-number>3</story-number>
+    <title>Vehicle Recognition</title>
+    <generated>2025-12-13</generated>
+  </metadata>
+
+  <acceptance-criteria>
+    <criterion id="1">Create VehicleDetectionService that detects vehicles in thumbnails using OpenCV DNN with MobileNet-SSD</criterion>
+    <criterion id="2">Generate CLIP embeddings for cropped vehicle regions, store in VehicleEmbedding model</criterion>
+    <criterion id="3">Create VehicleEmbedding SQLAlchemy model with event_id, entity_id, embedding, bounding_box, confidence</criterion>
+    <criterion id="4">Create VehicleMatchingService similar to PersonMatchingService (threshold 0.65)</criterion>
+    <criterion id="5">Parse AI descriptions for vehicle characteristics (make, model, color) and store in RecognizedEntity.metadata</criterion>
+    <criterion id="6">Integrate into event pipeline after face processing (Step 14)</criterion>
+    <criterion id="7">Add vehicle API endpoints: GET/PUT /api/v1/context/vehicles</criterion>
+    <criterion id="8">Comprehensive tests for detection, matching, and API endpoints</criterion>
+  </acceptance-criteria>
+
+  <dependencies>
+    <dependency story="P4-8.1" status="done">
+      <description>Face Embedding Storage - Provides FaceEmbedding model pattern to follow</description>
+      <files>
+        <file>backend/app/models/face_embedding.py</file>
+        <file>backend/app/services/face_detection_service.py</file>
+        <file>backend/app/services/face_embedding_service.py</file>
+      </files>
+    </dependency>
+    <dependency story="P4-8.2" status="done">
+      <description>Person Matching - Provides PersonMatchingService pattern to follow</description>
+      <files>
+        <file>backend/app/services/person_matching_service.py</file>
+      </files>
+    </dependency>
+    <dependency story="P4-3.3" status="done">
+      <description>Recurring Visitor Detection - EntityService supports entity_type='vehicle'</description>
+      <files>
+        <file>backend/app/services/entity_service.py</file>
+        <file>backend/app/models/recognized_entity.py</file>
+      </files>
+    </dependency>
+    <dependency story="P4-3.2" status="done">
+      <description>Similarity Search - Provides batch_cosine_similarity for matching</description>
+      <files>
+        <file>backend/app/services/similarity_service.py</file>
+      </files>
+    </dependency>
+  </dependencies>
+
+  <codebase-references>
+    <reference name="FaceEmbedding Model" priority="critical">
+      <file>backend/app/models/face_embedding.py</file>
+      <reason>Template for VehicleEmbedding model structure</reason>
+      <key-fields>
+        <field name="event_id" type="String FK">CASCADE delete on event removal</field>
+        <field name="entity_id" type="String FK" nullable="true">SET NULL on entity removal</field>
+        <field name="embedding" type="Text">512-dim CLIP embedding as JSON</field>
+        <field name="bounding_box" type="Text">JSON with x, y, width, height</field>
+        <field name="confidence" type="Float">Detection confidence</field>
+        <field name="model_version" type="String">Model version tracking</field>
+      </key-fields>
+    </reference>
+
+    <reference name="FaceDetectionService" priority="critical">
+      <file>backend/app/services/face_detection_service.py</file>
+      <reason>Template for VehicleDetectionService using OpenCV DNN</reason>
+      <key-patterns>
+        <pattern name="Lazy Model Loading">_load_model() called on first detection</pattern>
+        <pattern name="Async with ThreadPool">run_in_executor for CPU-bound inference</pattern>
+        <pattern name="BoundingBox Dataclass">Standardized coordinate representation</pattern>
+        <pattern name="Singleton Pattern">get_face_detection_service()</pattern>
+      </key-patterns>
+    </reference>
+
+    <reference name="PersonMatchingService" priority="critical">
+      <file>backend/app/services/person_matching_service.py</file>
+      <reason>Template for VehicleMatchingService</reason>
+      <key-methods>
+        <method name="match_single_face">Compare embedding to known entities</method>
+        <method name="match_faces_to_persons">Batch matching for multiple detections</method>
+        <method name="_create_new_person">Auto-create entity if no match</method>
+        <method name="_update_existing_person">Update entity on match</method>
+      </key-methods>
+      <thresholds>
+        <threshold name="DEFAULT_THRESHOLD">0.70 (use 0.65 for vehicles - more variation)</threshold>
+        <threshold name="HIGH_CONFIDENCE_THRESHOLD">0.90</threshold>
+      </thresholds>
+    </reference>
+
+    <reference name="RecognizedEntity Model" priority="high">
+      <file>backend/app/models/recognized_entity.py</file>
+      <reason>Existing model supports entity_type='vehicle'</reason>
+      <key-fields>
+        <field name="entity_type" type="String">Supports 'person', 'vehicle', 'unknown'</field>
+        <field name="name" type="String" nullable="true">User-assigned name</field>
+        <field name="reference_embedding" type="Text">512-dim embedding for matching</field>
+        <field name="metadata" type="Text" nullable="true">JSON for characteristics like color, make</field>
+      </key-fields>
+    </reference>
+
+    <reference name="EmbeddingService" priority="high">
+      <file>backend/app/services/embedding_service.py</file>
+      <reason>Generate CLIP embeddings for vehicle crops</reason>
+      <key-methods>
+        <method name="generate_embedding">Generate embedding from image bytes</method>
+        <method name="MODEL_VERSION">Current CLIP model version string</method>
+      </key-methods>
+    </reference>
+
+    <reference name="Event Processor Pipeline" priority="high">
+      <file>backend/app/services/event_processor.py</file>
+      <reason>Integration point - add Step 14 for vehicle processing</reason>
+      <key-sections>
+        <section name="_process_faces">Step 12-13: face detection and matching pattern to follow</section>
+        <section name="smart_detection_type">Check for 'vehicle' type</section>
+        <section name="objects_detected">Parse JSON for 'vehicle' presence</section>
+      </key-sections>
+    </reference>
+
+    <reference name="Event Model" priority="medium">
+      <file>backend/app/models/event.py</file>
+      <reason>Fields for vehicle detection triggers</reason>
+      <key-fields>
+        <field name="smart_detection_type">Values include 'vehicle'</field>
+        <field name="objects_detected">JSON array that may contain 'vehicle'</field>
+      </key-fields>
+    </reference>
+
+    <reference name="Context API" priority="medium">
+      <file>backend/app/api/v1/context.py</file>
+      <reason>Add vehicle endpoints alongside existing person endpoints</reason>
+      <existing-endpoints>
+        <endpoint method="GET" path="/api/v1/context/persons">Template for vehicles endpoint</endpoint>
+        <endpoint method="PUT" path="/api/v1/context/persons/{id}">Template for update vehicle</endpoint>
+      </existing-endpoints>
+    </reference>
+
+    <reference name="System Settings Schema" priority="medium">
+      <file>backend/app/schemas/system.py</file>
+      <reason>Add vehicle recognition settings</reason>
+      <existing-fields>
+        <field name="face_recognition_enabled">Pattern for vehicle_recognition_enabled</field>
+        <field name="person_match_threshold">Pattern for vehicle_match_threshold</field>
+      </existing-fields>
+    </reference>
+  </codebase-references>
+
+  <implementation-approach>
+    <step n="1" goal="Create VehicleEmbedding Model">
+      <task>Create backend/app/models/vehicle_embedding.py based on face_embedding.py</task>
+      <task>Add VehicleEmbedding with event_id, entity_id, embedding, bounding_box, confidence, model_version</task>
+      <task>Add relationship to Event model (back_populates="vehicle_embeddings")</task>
+      <task>Update Event model to include vehicle_embeddings relationship</task>
+      <task>Update models/__init__.py to export VehicleEmbedding</task>
+    </step>
+
+    <step n="2" goal="Create Alembic Migration">
+      <task>Generate alembic revision for vehicle_embeddings table</task>
+      <task>Add indexes on event_id, entity_id, model_version</task>
+      <task>Test migration up and down</task>
+    </step>
+
+    <step n="3" goal="Create VehicleDetectionService">
+      <task>Create backend/app/services/vehicle_detection_service.py</task>
+      <task>Use OpenCV DNN with MobileNet-SSD (car, bus, truck, motorcycle classes)</task>
+      <task>Implement detect_vehicles() similar to detect_faces()</task>
+      <task>Return VehicleDetection dataclass with bbox, confidence, vehicle_type</task>
+      <task>Add download script for MobileNet-SSD model if needed</task>
+    </step>
+
+    <step n="4" goal="Create VehicleEmbeddingService">
+      <task>Create backend/app/services/vehicle_embedding_service.py</task>
+      <task>Combine VehicleDetectionService + EmbeddingService</task>
+      <task>process_event_vehicles() - detect, crop, embed, store</task>
+      <task>Return list of VehicleEmbedding IDs</task>
+    </step>
+
+    <step n="5" goal="Create VehicleMatchingService">
+      <task>Create backend/app/services/vehicle_matching_service.py</task>
+      <task>Copy PersonMatchingService structure with vehicle-specific threshold (0.65)</task>
+      <task>match_vehicles_to_entities() - batch matching</task>
+      <task>match_single_vehicle() - single vehicle matching</task>
+      <task>_create_new_vehicle() - auto-create vehicle entity</task>
+      <task>Add vehicle cache for fast matching</task>
+    </step>
+
+    <step n="6" goal="Extract Vehicle Characteristics">
+      <task>Add _extract_vehicle_characteristics() to VehicleMatchingService</task>
+      <task>Parse AI description for color words (red, white, black, etc.)</task>
+      <task>Parse for vehicle types (SUV, sedan, truck, van, motorcycle)</task>
+      <task>Store in RecognizedEntity.metadata as JSON</task>
+    </step>
+
+    <step n="7" goal="Add Settings">
+      <task>Add vehicle_recognition_enabled (default false) to system.py schema</task>
+      <task>Add vehicle_match_threshold (default 0.65) to schema</task>
+      <task>Add auto_create_vehicles (default true) to schema</task>
+      <task>Add to no_prefix_fields in system.py API</task>
+    </step>
+
+    <step n="8" goal="Integrate into Event Pipeline">
+      <task>Add Step 14 to event_processor.py _process_vehicles()</task>
+      <task>Check smart_detection_type == 'vehicle' OR 'vehicle' in objects_detected</task>
+      <task>Call VehicleEmbeddingService.process_event_vehicles()</task>
+      <task>Call VehicleMatchingService.match_vehicles_to_entities()</task>
+      <task>Run async fire-and-forget like face processing</task>
+    </step>
+
+    <step n="9" goal="Add API Endpoints">
+      <task>Add GET /api/v1/context/vehicles endpoint to context.py</task>
+      <task>Add GET /api/v1/context/vehicles/{id} endpoint</task>
+      <task>Add PUT /api/v1/context/vehicles/{id} endpoint</task>
+      <task>Add schemas: VehicleListItem, VehicleListResponse, VehicleDetailResponse, VehicleUpdateRequest</task>
+    </step>
+
+    <step n="10" goal="Write Tests">
+      <task>Create backend/tests/test_services/test_vehicle_detection_service.py</task>
+      <task>Create backend/tests/test_services/test_vehicle_matching_service.py</task>
+      <task>Create backend/tests/test_api/test_context_vehicles.py</task>
+      <task>Test various vehicle types (car, truck, SUV, motorcycle)</task>
+      <task>Test characteristics extraction</task>
+    </step>
+  </implementation-approach>
+
+  <testing-strategy>
+    <unit-tests>
+      <test-file>backend/tests/test_services/test_vehicle_detection_service.py</test-file>
+      <test-cases>
+        <case>test_detect_vehicles_single_car</case>
+        <case>test_detect_vehicles_multiple</case>
+        <case>test_detect_vehicles_no_vehicles</case>
+        <case>test_detect_vehicles_low_confidence_filtered</case>
+        <case>test_crop_vehicle_region</case>
+      </test-cases>
+    </unit-tests>
+
+    <unit-tests>
+      <test-file>backend/tests/test_services/test_vehicle_matching_service.py</test-file>
+      <test-cases>
+        <case>test_match_single_vehicle_known</case>
+        <case>test_match_single_vehicle_unknown</case>
+        <case>test_match_single_vehicle_below_threshold</case>
+        <case>test_match_vehicles_multiple</case>
+        <case>test_auto_create_vehicles_enabled</case>
+        <case>test_auto_create_vehicles_disabled</case>
+        <case>test_extract_characteristics_color</case>
+        <case>test_extract_characteristics_type</case>
+        <case>test_vehicle_cache_loading</case>
+      </test-cases>
+    </unit-tests>
+
+    <api-tests>
+      <test-file>backend/tests/test_api/test_context_vehicles.py</test-file>
+      <test-cases>
+        <case>test_get_vehicles_list</case>
+        <case>test_get_vehicles_empty</case>
+        <case>test_get_vehicle_detail</case>
+        <case>test_get_vehicle_not_found</case>
+        <case>test_update_vehicle_name</case>
+        <case>test_update_vehicle_characteristics</case>
+      </test-cases>
+    </api-tests>
+  </testing-strategy>
+
+  <learnings-from-previous>
+    <learning source="p4-8-2-person-matching">
+      <pattern name="Matching Service Structure">Use cache for known entities, threshold-based matching</pattern>
+      <pattern name="Auto-Create Logic">Create new entity when no match and setting enabled</pattern>
+      <pattern name="Pipeline Integration">Step N in event_processor, async fire-and-forget</pattern>
+      <pattern name="API Pattern">GET list, GET detail, PUT update following person endpoints</pattern>
+    </learning>
+    <learning source="p4-8-1-face-embedding-storage">
+      <pattern name="Detection + Embedding">Separate detection service from embedding service</pattern>
+      <pattern name="Model Loading">Lazy load on first use, thread pool for inference</pattern>
+      <pattern name="Embedding Model">event_id FK (CASCADE), entity_id FK (SET NULL)</pattern>
+    </learning>
+  </learnings-from-previous>
+
+  <file-manifest>
+    <new-files>
+      <file>backend/app/models/vehicle_embedding.py</file>
+      <file>backend/alembic/versions/xxx_add_vehicle_embeddings_table.py</file>
+      <file>backend/app/services/vehicle_detection_service.py</file>
+      <file>backend/app/services/vehicle_embedding_service.py</file>
+      <file>backend/app/services/vehicle_matching_service.py</file>
+      <file>backend/tests/test_services/test_vehicle_detection_service.py</file>
+      <file>backend/tests/test_services/test_vehicle_matching_service.py</file>
+      <file>backend/tests/test_api/test_context_vehicles.py</file>
+    </new-files>
+    <modified-files>
+      <file>backend/app/models/__init__.py</file>
+      <file>backend/app/models/event.py</file>
+      <file>backend/app/schemas/system.py</file>
+      <file>backend/app/api/v1/system.py</file>
+      <file>backend/app/api/v1/context.py</file>
+      <file>backend/app/services/event_processor.py</file>
+    </modified-files>
+  </file-manifest>
+</story-context>

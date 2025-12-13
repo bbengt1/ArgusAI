@@ -95,12 +95,20 @@ class Event(Base):
     prompt_variant = Column(String(20), nullable=True, index=True)  # 'control', 'experiment' (null = no A/B test active)
     # Story P4-7.2: Anomaly scoring
     anomaly_score = Column(Float, nullable=True)  # 0.0 (normal) to 1.0 (highly anomalous), null = not scored
+    # Story P4-8.4: Named Entity Alerts - recognition status and enriched descriptions
+    recognition_status = Column(String(20), nullable=True)  # 'known', 'stranger', 'unknown', null (no recognition)
+    enriched_description = Column(Text, nullable=True)  # AI description with entity names included
+    matched_entity_ids = Column(Text, nullable=True)  # JSON array of matched entity UUIDs
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     camera = relationship("Camera", back_populates="events")
     embedding = relationship("EventEmbedding", back_populates="event", uselist=False, cascade="all, delete-orphan")
     feedback = relationship("EventFeedback", back_populates="event", uselist=False, cascade="all, delete-orphan")
+    # Story P4-8.1: Face embeddings (one event can have multiple faces)
+    face_embeddings = relationship("FaceEmbedding", back_populates="event", cascade="all, delete-orphan")
+    # Story P4-8.3: Vehicle embeddings (one event can have multiple vehicles)
+    vehicle_embeddings = relationship("VehicleEmbedding", back_populates="event", cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint('confidence >= 0 AND confidence <= 100', name='check_confidence_range'),
