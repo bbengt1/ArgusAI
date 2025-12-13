@@ -1219,6 +1219,11 @@ class EventProcessor:
                     self._update_activity_baseline(event_data["camera_id"], event)
                 )
 
+                # Story P4-7.2: Calculate and persist anomaly score (non-blocking)
+                asyncio.create_task(
+                    self._calculate_anomaly_score(event)
+                )
+
                 return event_id  # Return event_id instead of True
 
             except Exception as e:
@@ -1390,6 +1395,49 @@ class EventProcessor:
                 extra={
                     "event_type": "baseline_update_error",
                     "camera_id": camera_id,
+                    "error": str(e)
+                }
+            )
+
+    async def _calculate_anomaly_score(
+        self,
+        event: Event
+    ) -> None:
+        """
+        Calculate and persist anomaly score for an event (Story P4-7.2).
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Uses its own database session since the caller's session may be closed.
+
+        Args:
+            event: Event to score
+
+        Note:
+            - Non-blocking, runs as background task (AC7)
+            - Errors don't propagate to caller (AC7)
+            - Uses AnomalyScoringService for calculation (AC2)
+        """
+        try:
+            from app.services.anomaly_scoring_service import get_anomaly_scoring_service
+            anomaly_service = get_anomaly_scoring_service()
+
+            # Use own session since caller's may be closed
+            db = SessionLocal()
+            try:
+                # Re-fetch event in new session
+                event_in_session = db.query(Event).filter_by(id=event.id).first()
+                if event_in_session:
+                    await anomaly_service.score_event(db, event_in_session)
+            finally:
+                db.close()
+
+        except Exception as e:
+            # Anomaly scoring errors must not propagate (AC7)
+            logger.warning(
+                f"Anomaly scoring failed for event {event.id}: {e}",
+                extra={
+                    "event_type": "anomaly_scoring_error",
+                    "event_id": event.id,
                     "error": str(e)
                 }
             )

@@ -276,7 +276,7 @@ development_status:
   # Epic P4-7: Behavioral Anomaly Detection (Growth)
   epic-p4-7: backlog
   p4-7-1-baseline-activity-learning: done
-  p4-7-2-anomaly-scoring: backlog
+  p4-7-2-anomaly-scoring: done
   p4-7-3-anomaly-alerts: backlog
   epic-p4-7-retrospective: optional
 

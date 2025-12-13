@@ -1,0 +1,209 @@
+<story-context id="p4-7-2-anomaly-scoring" v="1.0">
+  <metadata>
+    <epicId>P4-7</epicId>
+    <storyId>P4-7.2</storyId>
+    <title>Anomaly Scoring</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-13</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p4-7-2-anomaly-scoring.md</sourceStoryPath>
+    <dependency>P4-7.1 (Baseline Activity Learning) - DONE</dependency>
+  </metadata>
+
+  <story>
+    <asA>home security user</asA>
+    <iWant>each event to be scored for how unusual it is compared to my camera's normal patterns</iWant>
+    <soThat>I can quickly identify potentially significant security events that deviate from routine activity</soThat>
+    <tasks>
+      <task id="1">Add anomaly_score column to Event model</task>
+      <task id="2">Create Alembic migration for new column</task>
+      <task id="3">Create AnomalyScoringService class</task>
+      <task id="4">Implement timing anomaly calculation</task>
+      <task id="5">Implement day-of-week anomaly calculation</task>
+      <task id="6">Implement object type anomaly calculation</task>
+      <task id="7">Integrate with event_processor.py</task>
+      <task id="8">Create API endpoints for anomaly scoring</task>
+      <task id="9">Write unit and integration tests</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Add anomaly_score column (Float, nullable, 0.0-1.0) to Event model with Alembic migration</criterion>
+    <criterion id="AC2">Create AnomalyScoringService with calculate_anomaly_score() and score_event() methods</criterion>
+    <criterion id="AC3">Calculate timing anomaly: higher score for quiet hours, lower for peak hours</criterion>
+    <criterion id="AC4">Calculate day-of-week anomaly: higher score for low-activity days</criterion>
+    <criterion id="AC5">Calculate object type anomaly: higher score for rare/novel objects</criterion>
+    <criterion id="AC6">Combined score with weights (timing=0.4, day=0.2, object=0.4), clamped to [0.0, 1.0]</criterion>
+    <criterion id="AC7">Integrate scoring into event_processor.py after event saved, non-blocking</criterion>
+    <criterion id="AC8">Define severity thresholds: low (&lt;0.3), medium (0.3-0.6), high (&gt;0.6)</criterion>
+    <criterion id="AC9">Create API endpoints: GET /api/v1/anomaly/score/{event_id}, POST /api/v1/anomaly/score</criterion>
+    <criterion id="AC10">Write tests for each scoring component and integration</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase4.md</path>
+        <title>Phase 4 Epics</title>
+        <section>Epic P4-7: Behavioral Anomaly Detection</section>
+        <snippet>Story P4-7.2: Anomaly Scoring - Compare events to baseline, calculate anomaly score, define severity thresholds, handle new cameras (no baseline).</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase4.md</path>
+        <title>Phase 4 PRD</title>
+        <section>Anomaly Detection Functional Requirements</section>
+        <snippet>FR27: Events deviating from baseline are flagged. FR28: Anomaly severity is scored (low/medium/high). FR29: Users can adjust sensitivity per camera.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p4-7-1-baseline-activity-learning.md</path>
+        <title>Story P4-7.1</title>
+        <status>done</status>
+        <snippet>Established baseline patterns with hourly_distribution, daily_distribution, object_type_distribution. PatternService provides get_patterns() for baseline retrieval.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/pattern_service.py</path>
+        <kind>service</kind>
+        <symbol>PatternService, PatternData</symbol>
+        <reason>Provides baseline patterns via get_patterns(). PatternData contains hourly_distribution, daily_distribution, object_type_distribution used for anomaly calculation.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <reason>Add anomaly_score column. Event has timestamp (for hour/day extraction) and objects_detected (for object type scoring).</reason>
+      </file>
+      <file>
+        <path>backend/app/models/camera_activity_pattern.py</path>
+        <kind>model</kind>
+        <symbol>CameraActivityPattern</symbol>
+        <reason>Stores baseline patterns. Has hourly_distribution, daily_distribution, object_type_distribution as JSON Text columns.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>service</kind>
+        <symbol>EventProcessor</symbol>
+        <reason>Integrate anomaly scoring after event saved and baseline updated. Follow existing _update_activity_baseline() pattern.</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/context.py</path>
+        <kind>api</kind>
+        <symbol>router</symbol>
+        <reason>Reference for API patterns. New anomaly endpoints can follow similar structure or create new router.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_pattern_service.py</path>
+        <kind>test</kind>
+        <reason>Reference for testing patterns. New anomaly scoring tests should follow similar structure.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0" />
+        <package name="sqlalchemy" version=">=2.0.36" />
+        <package name="alembic" version=">=1.14.0" />
+        <package name="pydantic" version=">=2.10.0" />
+        <package name="pytest" version="7.4.3" />
+        <package name="pytest-asyncio" version="0.21.1" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface>
+      <name>PatternService.get_patterns</name>
+      <kind>async method</kind>
+      <signature>async def get_patterns(self, db: Session, camera_id: str) -> Optional[PatternData]</signature>
+      <path>backend/app/services/pattern_service.py:89</path>
+      <note>Use this to retrieve baseline patterns for anomaly scoring</note>
+    </interface>
+    <interface>
+      <name>PatternData</name>
+      <kind>dataclass</kind>
+      <fields>camera_id, hourly_distribution, daily_distribution, peak_hours, quiet_hours, object_type_distribution, dominant_object_type, average_events_per_day</fields>
+      <path>backend/app/services/pattern_service.py:42</path>
+    </interface>
+    <interface>
+      <name>Event.timestamp</name>
+      <kind>model field</kind>
+      <signature>timestamp: Column(DateTime) - event occurrence time</signature>
+      <note>Use timestamp.hour and timestamp.weekday() for scoring</note>
+    </interface>
+    <interface>
+      <name>Event.objects_detected</name>
+      <kind>model field</kind>
+      <signature>objects_detected: Column(Text) - JSON array like ["person", "vehicle"]</signature>
+      <path>backend/app/models/event.py:55</path>
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint>Scoring must complete in &lt;100ms to avoid slowing event processing</constraint>
+    <constraint>Return 0.0 (neutral) if no baseline exists for camera</constraint>
+    <constraint>Scoring errors should not fail event processing - wrap in try/except</constraint>
+    <constraint>Use existing PatternService singleton pattern</constraint>
+    <constraint>Follow existing service patterns (see pattern_service.py)</constraint>
+    <constraint>Hourly distribution uses zero-padded string keys: {"00": 5, "01": 2, ...}</constraint>
+    <constraint>Daily distribution uses day-of-week strings: {"0": 45, ...} where 0=Monday</constraint>
+  </constraints>
+
+  <scoringAlgorithm>
+    <timingScore>
+      <description>Compare event hour to hourly_distribution using z-score</description>
+      <formula>
+        hourly_mean = mean(hourly_distribution.values())
+        hourly_std = std(hourly_distribution.values())
+        event_count = hourly_distribution[event_hour]
+        z_score = (hourly_mean - event_count) / hourly_std  # Inverted: low count = high score
+        timing_score = clamp(z_score / 3, 0.0, 1.0)  # Normalize z-score to 0-1
+      </formula>
+      <weight>0.4</weight>
+    </timingScore>
+    <dayScore>
+      <description>Compare event day-of-week to daily_distribution using z-score</description>
+      <weight>0.2</weight>
+    </dayScore>
+    <objectScore>
+      <description>Score based on rarity of detected objects</description>
+      <formula>
+        for obj in event.objects_detected:
+          if obj not in object_type_distribution: object_score += 0.5  # Novel
+          elif obj_pct less than 0.05: object_score += 0.3  # Rare
+        object_score = min(1.0, object_score)
+      </formula>
+      <weight>0.4</weight>
+    </objectScore>
+    <combined>
+      <formula>total = (timing * 0.4) + (day * 0.2) + (object * 0.4)</formula>
+      <severity>low if total less than 0.3, medium if 0.3-0.6, high if greater than 0.6</severity>
+    </combined>
+  </scoringAlgorithm>
+
+  <tests>
+    <standards>Use pytest with pytest-asyncio. Follow existing patterns in backend/tests/. Mock PatternService for unit tests. Use SQLite test database for integration tests.</standards>
+    <locations>
+      <location>backend/tests/test_services/test_anomaly_scoring_service.py (new)</location>
+      <location>backend/tests/test_api/test_anomaly.py (new)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test migration adds anomaly_score column</idea>
+      <idea ac="AC2">Test AnomalyScoringService initialization</idea>
+      <idea ac="AC3">Test timing score: peak hour returns low score, quiet hour returns high score</idea>
+      <idea ac="AC3">Test timing score with uniform distribution returns 0.0</idea>
+      <idea ac="AC4">Test day score: high-activity day returns low score, low-activity day returns high score</idea>
+      <idea ac="AC5">Test object score: novel object returns 0.5</idea>
+      <idea ac="AC5">Test object score: rare object (&lt;5%) returns 0.3</idea>
+      <idea ac="AC5">Test object score: common object returns ~0.0</idea>
+      <idea ac="AC6">Test combined score calculation with weights</idea>
+      <idea ac="AC6">Test score clamped to [0.0, 1.0]</idea>
+      <idea ac="AC7">Test event processor calls scoring after event saved</idea>
+      <idea ac="AC7">Test scoring error does not fail event processing</idea>
+      <idea ac="AC8">Test severity classification: low/medium/high thresholds</idea>
+      <idea ac="AC9">Test API endpoint returns score breakdown</idea>
+      <idea ac="AC10">Test new camera with no baseline returns 0.0</idea>
+    </ideas>
+  </tests>
+</story-context>

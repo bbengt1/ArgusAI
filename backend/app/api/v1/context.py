@@ -1,5 +1,5 @@
 """
-Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3, P4-3.5)
+Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3, P4-3.5, P4-7.2)
 
 Provides endpoints for:
 - Batch processing of embeddings for existing events
@@ -7,6 +7,7 @@ Provides endpoints for:
 - Similarity search for finding visually similar past events (P4-3.2)
 - Entity management for recurring visitor detection (P4-3.3)
 - Activity pattern retrieval for cameras (P4-3.5)
+- Anomaly scoring for events (P4-7.2)
 """
 import base64
 import logging
@@ -25,6 +26,7 @@ from app.services.embedding_service import get_embedding_service, EmbeddingServi
 from app.services.similarity_service import get_similarity_service, SimilarityService
 from app.services.entity_service import get_entity_service, EntityService
 from app.services.pattern_service import get_pattern_service, PatternService
+from app.services.anomaly_scoring_service import get_anomaly_scoring_service, AnomalyScoringService, AnomalyScoreResult
 from app.models.camera import Camera
 
 logger = logging.getLogger(__name__)
@@ -871,4 +873,163 @@ async def batch_recalculate_patterns(
         patterns_calculated=result["patterns_calculated"],
         patterns_skipped=result["patterns_skipped"],
         elapsed_ms=result["elapsed_ms"],
+    )
+
+
+# Story P4-7.2: Anomaly Scoring Response Models
+class AnomalyScoreResponse(BaseModel):
+    """Response model for anomaly score calculation."""
+    event_id: Optional[str] = Field(
+        default=None,
+        description="Event UUID (null for ad-hoc scoring)"
+    )
+    total_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Combined anomaly score (0.0=normal, 1.0=highly anomalous)"
+    )
+    timing_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Timing component score based on hourly patterns"
+    )
+    day_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Day-of-week component score"
+    )
+    object_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Object type component score"
+    )
+    severity: str = Field(
+        description="Severity classification: 'low', 'medium', or 'high'"
+    )
+    has_baseline: bool = Field(
+        description="Whether baseline patterns were available for scoring"
+    )
+
+
+class AnomalyScoreRequest(BaseModel):
+    """Request model for ad-hoc anomaly scoring."""
+    camera_id: str = Field(description="Camera UUID for baseline lookup")
+    timestamp: datetime = Field(description="Event timestamp for timing analysis")
+    objects_detected: list[str] = Field(
+        default=[],
+        description="List of detected object types (e.g., ['person', 'vehicle'])"
+    )
+
+
+@router.get("/anomaly/score/{event_id}", response_model=AnomalyScoreResponse)
+async def score_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    anomaly_service: AnomalyScoringService = Depends(get_anomaly_scoring_service),
+):
+    """
+    Calculate and persist anomaly score for an existing event.
+
+    Story P4-7.2: Anomaly Scoring (AC6, AC7)
+
+    Calculates how unusual an event is compared to the camera's baseline
+    activity patterns. Score is persisted to the event record.
+
+    Scoring components:
+    - Timing: Is this hour unusual for events? (40% weight)
+    - Day: Is this day-of-week unusual? (20% weight)
+    - Object: Are the detected objects unusual? (40% weight)
+
+    Severity thresholds:
+    - Low: score < 0.3
+    - Medium: 0.3 <= score < 0.6
+    - High: score >= 0.6
+
+    Args:
+        event_id: UUID of the event to score
+        db: Database session
+        anomaly_service: Anomaly scoring service instance
+
+    Returns:
+        AnomalyScoreResponse with detailed score breakdown
+
+    Raises:
+        404: If event not found
+        500: If scoring fails
+    """
+    # Verify event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Calculate and persist score
+    result = await anomaly_service.score_event(db, event)
+
+    if result is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to calculate anomaly score"
+        )
+
+    return AnomalyScoreResponse(
+        event_id=event_id,
+        total_score=result.total,
+        timing_score=result.timing_score,
+        day_score=result.day_score,
+        object_score=result.object_score,
+        severity=result.severity,
+        has_baseline=result.has_baseline,
+    )
+
+
+@router.post("/anomaly/score", response_model=AnomalyScoreResponse)
+async def calculate_anomaly_score(
+    request: AnomalyScoreRequest,
+    db: Session = Depends(get_db),
+    pattern_service: PatternService = Depends(get_pattern_service),
+    anomaly_service: AnomalyScoringService = Depends(get_anomaly_scoring_service),
+):
+    """
+    Calculate anomaly score for arbitrary event data without persisting.
+
+    Story P4-7.2: Anomaly Scoring (AC8)
+
+    Useful for preview/testing of anomaly detection without creating events.
+    Does not persist the score to any event record.
+
+    Args:
+        request: Anomaly score request with camera_id, timestamp, and objects
+        db: Database session
+        pattern_service: Pattern service for baseline lookup
+        anomaly_service: Anomaly scoring service instance
+
+    Returns:
+        AnomalyScoreResponse with detailed score breakdown
+
+    Raises:
+        404: If camera not found
+    """
+    # Verify camera exists
+    camera = db.query(Camera).filter(Camera.id == request.camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    # Get baseline patterns
+    patterns = await pattern_service.get_patterns(db, request.camera_id)
+
+    # Calculate score (without persisting)
+    result = await anomaly_service.calculate_anomaly_score(
+        patterns=patterns,
+        event_timestamp=request.timestamp,
+        objects_detected=request.objects_detected,
+    )
+
+    return AnomalyScoreResponse(
+        event_id=None,
+        total_score=result.total,
+        timing_score=result.timing_score,
+        day_score=result.day_score,
+        object_score=result.object_score,
+        severity=result.severity,
+        has_baseline=result.has_baseline,
     )

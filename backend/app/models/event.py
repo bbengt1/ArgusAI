@@ -93,6 +93,8 @@ class Event(Base):
     frame_timestamps = Column(Text, nullable=True)  # JSON array of float seconds from video start (null = not stored)
     # Story P4-5.4: A/B testing - tracks which prompt variant was used
     prompt_variant = Column(String(20), nullable=True, index=True)  # 'control', 'experiment' (null = no A/B test active)
+    # Story P4-7.2: Anomaly scoring
+    anomaly_score = Column(Float, nullable=True)  # 0.0 (normal) to 1.0 (highly anomalous), null = not scored
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
