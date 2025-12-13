@@ -2,6 +2,16 @@
 
 AI-powered event detection and monitoring for home security. Analyzes video feeds from multiple camera sources, detects motion and smart events, and uses AI to generate natural language descriptions of what's happening.
 
+## What's New (Phase 4 Complete)
+
+- **Named Entity Alerts** - Personalized notifications like "John is at the door" instead of generic "Person detected"
+- **Person & Vehicle Recognition** - Privacy-first face/vehicle embeddings with VIP alerts and blocklist
+- **Behavioral Anomaly Detection** - Baseline activity learning with anomaly scoring and alerts
+- **HomeKit Integration** - Motion sensor accessories for Apple Home with real-time triggers
+- **Voice Query API** - Natural language queries ("What happened at the front door today?")
+- **Push Notifications** - Web Push with thumbnails and PWA support
+- **Home Assistant via MQTT** - Auto-discovery, event publishing, camera status sensors
+
 ## Features
 
 ### Camera Support
@@ -241,7 +251,7 @@ argusai/
 │   │       ├── correlation_service.py # Multi-camera correlation
 │   │       └── alert_engine.py        # Rule evaluation
 │   ├── alembic/             # Database migrations
-│   └── tests/               # 1,980+ tests
+│   └── tests/               # 2,250+ tests
 ├── frontend/                 # Next.js frontend
 │   ├── app/                 # App Router pages
 │   ├── components/          # React components
@@ -275,7 +285,7 @@ pytest tests/ --cov=app --cov-report=html
 pytest tests/test_api/test_protect.py -v
 ```
 
-**Current Coverage:** 1,980+ tests including integration and performance tests
+**Current Coverage:** 2,250+ tests including integration and performance tests
 
 ### Frontend
 
@@ -323,18 +333,29 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## Documentation
 
+### User & API Documentation
+
 | Document | Description |
 |----------|-------------|
 | [User Guide](docs/user-guide.md) | Complete guide for setup and usage |
+| [API Reference](docs/api-reference.md) | Full REST API documentation |
+| [API Quick Reference](docs/api-quick-reference.md) | One-page endpoint summary with curl examples |
+| [OpenAPI Guide](docs/openapi-guide.md) | Export and use OpenAPI specs |
+| [Webhook Integration](docs/webhook-integration.md) | Connect to Slack, Discord, Home Assistant, etc. |
+| [Troubleshooting UniFi Protect](docs/troubleshooting-protect.md) | Common issues and solutions |
+
+### Project Documentation
+
+| Document | Description |
+|----------|-------------|
 | [Product Brief](docs/product-brief.md) | Project vision and goals |
+| [Architecture](docs/architecture.md) | System design and decisions |
+| [UX Design](docs/ux-design-specification.md) | UI/UX specifications |
 | [PRD Phase 2](docs/PRD-phase2.md) | UniFi Protect integration requirements |
 | [PRD Phase 3](docs/PRD-phase3.md) | Video analysis requirements |
 | [PRD Phase 4](docs/PRD-phase4.md) | Context & smart home requirements |
-| [Architecture](docs/architecture.md) | System design and decisions |
 | [Epics Phase 3](docs/epics-phase3.md) | Phase 3 story breakdown |
 | [Epics Phase 4](docs/epics-phase4.md) | Phase 4 story breakdown |
-| [UX Design](docs/ux-design-specification.md) | UI/UX specifications |
-| [Troubleshooting UniFi Protect](docs/troubleshooting-protect.md) | Common issues and solutions |
 
 ## Roadmap
 
@@ -369,14 +390,16 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
   - User feedback loop for AI accuracy improvement
   - HomeKit integration with motion sensor accessories
   - Voice query API for natural language event queries
-
-### Phase 4: Growth Features (In Progress)
-- 📋 Behavioral anomaly detection (baseline learning, anomaly scoring)
-- 📋 Person/vehicle recognition (privacy-first, face embeddings)
+  - Behavioral anomaly detection (baseline learning, anomaly scoring, alerts)
+  - Person & vehicle recognition (privacy-first face/vehicle embeddings)
+  - Named entity alerts ("John is at the door" personalized notifications)
+  - VIP alerts and entity blocklist for notification control
 
 ### Future
 - 📋 Local LLM support (Ollama)
 - 📋 Alexa voice assistant integration
+- 📋 Multi-user authentication and permissions
+- 📋 Cloud backup and sync
 
 ## License
 
@@ -384,10 +407,35 @@ MIT
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Follow existing code patterns
-4. Write tests for new functionality
-5. Submit a pull request
+We welcome contributions! Here's how to get started:
+
+### Development Setup
+
+1. Fork and clone the repository
+2. Run `./install.sh` to set up the development environment
+3. Review `CLAUDE.md` for codebase conventions and architecture details
+
+### Development Workflow
+
+This project uses the **BMAD Method** for structured development:
+
+- **Stories** are defined in `docs/sprint-artifacts/`
+- **Architecture decisions** are documented in `docs/architecture.md`
+- Run `/bmad:bmm:workflows:dev-story` to execute story implementation
+
+### Code Standards
+
+- **Backend**: Follow FastAPI patterns, use async/await, add type hints
+- **Frontend**: Use TypeScript, follow existing component patterns
+- **Testing**: Write tests for all new functionality (pytest for backend)
+- **Documentation**: Update relevant docs when adding features
+
+### Pull Request Process
+
+1. Create a feature branch from `development`
+2. Make your changes following existing code patterns
+3. Ensure all tests pass: `pytest tests/ -v`
+4. Update documentation as needed
+5. Submit a PR with a clear description of changes
 
 For questions or issues, please open a GitHub issue.

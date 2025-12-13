@@ -42,7 +42,16 @@ This guide covers everything you need to know to set up, configure, and use Argu
   - [On-Demand Summaries](#on-demand-summaries)
 - [Entity Management](#entity-management)
   - [Recognized People and Vehicles](#recognized-people-and-vehicles)
+  - [VIP Alerts and Blocklist](#vip-alerts-and-blocklist)
+  - [Entity-Based Alert Rules](#entity-based-alert-rules)
   - [Similar Events](#similar-events)
+- [Anomaly Detection](#anomaly-detection)
+  - [Baseline Learning](#baseline-learning)
+  - [Viewing Anomaly Scores](#viewing-anomaly-scores)
+  - [Anomaly Alerts](#anomaly-alerts)
+- [Cost Monitoring](#cost-monitoring)
+  - [Viewing AI Costs](#viewing-ai-costs)
+  - [Setting Cost Limits](#setting-cost-limits)
 - [Settings Reference](#settings-reference)
 - [Troubleshooting](#troubleshooting)
 
@@ -516,7 +525,7 @@ The AI creates a narrative summary of activity during that period.
 
 ### Recognized People and Vehicles
 
-ArgusAI learns to recognize recurring visitors:
+ArgusAI learns to recognize recurring visitors using privacy-first face and vehicle embeddings:
 
 1. Navigate to **Entities**
 2. View detected entities grouped by type (Person, Vehicle)
@@ -524,11 +533,72 @@ ArgusAI learns to recognize recurring visitors:
    - All events featuring this entity
    - First and last seen dates
    - Frequency statistics
+   - Recognition status badge
+
+**Recognition Status:**
+- **Known** - Named entity (you've assigned a name)
+- **Stranger** - Seen before but not named
+- **Unknown** - First-time visitor
 
 **Naming Entities:**
 1. Click an unknown entity
-2. Enter a name (e.g., "Mail Carrier", "Neighbor's Dog")
-3. Future events will reference this name
+2. Enter a name (e.g., "Mail Carrier", "John Smith")
+3. Future events will show personalized descriptions:
+   - Before: "A person approached the front door"
+   - After: "John arrived at the front door"
+
+### VIP Alerts and Blocklist
+
+Control notifications for specific people and vehicles:
+
+**VIP Entities:**
+
+Mark important entities as VIP to receive priority notifications:
+
+1. Navigate to **Entities**
+2. Click on an entity
+3. Toggle **VIP** on
+4. VIP notifications appear with a ⭐ indicator and distinct styling
+
+**Use cases:**
+- Family members returning home
+- Expected delivery drivers
+- Important visitors
+
+**Blocklist:**
+
+Suppress notifications for entities you don't need alerts about:
+
+1. Navigate to **Entities**
+2. Click on an entity
+3. Toggle **Blocked** on
+4. Events are still recorded, but no notifications are sent
+
+**Use cases:**
+- Household members (you don't need alerts for yourself)
+- Regular mail carriers
+- Neighbors who frequently pass by
+
+**Viewing VIP and Blocked Lists:**
+- **Settings** > **Entities** > **VIP List** - All VIP entities
+- **Settings** > **Entities** > **Blocked List** - All blocked entities
+
+### Entity-Based Alert Rules
+
+Create alert rules that trigger for specific named entities:
+
+1. Navigate to **Rules** > **Create Rule**
+2. In the conditions section, find **Entity Matching**
+3. Choose matching method:
+   - **Specific Entities**: Select from your named entities
+   - **Name Patterns**: Use wildcards (e.g., "John*" matches John, Johnny)
+4. Configure other conditions and actions
+5. Click **Save**
+
+**Example Rules:**
+- "Alert when John arrives" - Trigger only for entity named John
+- "Alert for delivery*" - Match "Delivery Driver", "Delivery Person", etc.
+- "Alert for unknown person at night" - Combine stranger status with time schedule
 
 ### Similar Events
 
@@ -542,18 +612,149 @@ This helps track recurring visitors or identify patterns.
 
 ---
 
+## Anomaly Detection
+
+ArgusAI learns your property's normal activity patterns and alerts you to unusual behavior.
+
+### Baseline Learning
+
+The system automatically builds a baseline of normal activity:
+
+1. **Data Collection**: ArgusAI analyzes events over time to understand:
+   - Typical activity hours per camera
+   - Normal event frequency
+   - Common detection types
+   - Day-of-week patterns
+
+2. **Learning Period**: The baseline improves over approximately 7 days of activity
+
+3. **Viewing Baseline Data**:
+   - Navigate to **Settings** > **Anomaly Detection**
+   - View learned patterns per camera
+   - See activity heatmaps by hour and day
+
+**What the baseline tracks:**
+- Event frequency per hour
+- Detection type distribution
+- Activity timing patterns
+- Typical event characteristics
+
+### Viewing Anomaly Scores
+
+Each event receives an anomaly score indicating how unusual it is:
+
+**Score Levels:**
+| Score | Label | Meaning |
+|-------|-------|---------|
+| 0-30 | Normal | Typical activity for this time/camera |
+| 31-60 | Slightly Unusual | Somewhat outside normal patterns |
+| 61-80 | Unusual | Notably different from baseline |
+| 81-100 | Highly Anomalous | Very rare or unexpected activity |
+
+**Viewing Scores:**
+1. Open any event card
+2. Look for the **Anomaly Score** indicator
+3. Click for details on why it was flagged
+
+**Filtering by Anomaly:**
+1. On the Events page, use the **Anomaly** filter
+2. Select threshold (e.g., "Show Unusual and above")
+3. View only events that deviate from normal patterns
+
+### Anomaly Alerts
+
+Create alerts for unusual activity:
+
+1. Navigate to **Rules** > **Create Rule**
+2. Enable **Anomaly Detection** condition
+3. Set the threshold:
+   - **Unusual** (61+) - Moderate sensitivity
+   - **Highly Anomalous** (81+) - High confidence only
+4. Configure notification preferences
+5. Click **Save**
+
+**Example Use Cases:**
+- Alert for any activity between 2-5 AM (unusual hours)
+- Alert for front door activity when typically quiet
+- Detect unusual vehicle presence in driveway
+
+---
+
+## Cost Monitoring
+
+Track and control your AI provider spending.
+
+### Viewing AI Costs
+
+Monitor costs across all providers:
+
+1. Navigate to **Settings** > **AI Providers** > **Cost Dashboard**
+2. View:
+   - **Today's Cost**: Current day spending
+   - **Month-to-Date**: Cumulative monthly cost
+   - **Per-Provider Breakdown**: Cost by OpenAI, xAI, Claude, Gemini
+   - **Per-Camera Breakdown**: Which cameras use the most AI
+   - **Cost Trend**: Graph of daily spending
+
+**Cost Factors:**
+- **Analysis Mode**: Video native costs more than single frame
+- **Provider**: Pricing varies by provider
+- **Event Volume**: More events = higher costs
+- **Image Size**: Larger thumbnails use more tokens
+
+### Setting Cost Limits
+
+Prevent unexpected bills with spending caps:
+
+**Daily Limit:**
+1. Navigate to **Settings** > **AI Providers** > **Cost Limits**
+2. Enable **Daily Limit**
+3. Set maximum daily spend (e.g., $1.00)
+4. Choose action when limit reached:
+   - **Pause AI**: Stop analysis until tomorrow
+   - **Fallback Only**: Use free tier providers only
+   - **Alert Only**: Notify but continue
+
+**Monthly Limit:**
+1. Enable **Monthly Limit**
+2. Set maximum monthly spend (e.g., $20.00)
+3. Choose action when limit reached
+
+**Cost Alerts:**
+- Get notified at 50%, 75%, and 90% of your limits
+- Receive daily cost summaries via push notification
+
+**Typical Costs:**
+| Analysis Mode | Approx. Cost per Event |
+|---------------|------------------------|
+| Single Frame | $0.001 - $0.002 |
+| Multi-Frame (5 frames) | $0.003 - $0.005 |
+| Video Native | $0.01 - $0.03 |
+
+---
+
 ## Settings Reference
 
 | Setting | Location | Description |
 |---------|----------|-------------|
 | AI Providers | Settings > AI Providers | Configure API keys and fallback order |
+| Provider Order | Settings > AI Providers | Drag to reorder fallback chain |
+| Cost Limits | Settings > AI Providers > Cost Limits | Daily/monthly spending caps |
+| Cost Dashboard | Settings > AI Providers > Cost Dashboard | View spending breakdown |
 | Data Retention | Settings > Storage | How long to keep events (7-365 days) |
 | Motion Sensitivity | Cameras > [Camera] | Adjust detection threshold |
+| Analysis Mode | Cameras > [Camera] | Single frame, multi-frame, or video |
 | Push Notifications | Settings > Notifications | Enable/disable push |
-| MQTT Broker | Settings > Integrations | Home Assistant connection |
-| HomeKit | Settings > Integrations | Apple Home pairing |
-| Cost Limits | Settings > AI Providers | Daily/monthly spending caps |
-| Quiet Hours | Settings > Notifications | Suppress notifications |
+| Quiet Hours | Settings > Notifications | Suppress notifications during set times |
+| MQTT Broker | Settings > Integrations > MQTT | Home Assistant connection |
+| HomeKit | Settings > Integrations > HomeKit | Apple Home pairing |
+| Face Recognition | Settings > Privacy | Enable/disable face embeddings |
+| Vehicle Recognition | Settings > Privacy | Enable/disable vehicle embeddings |
+| VIP Entities | Entities > [Entity] | Mark entities for priority alerts |
+| Blocked Entities | Entities > [Entity] | Suppress notifications for entity |
+| Anomaly Detection | Settings > Anomaly Detection | View baseline and configure alerts |
+| Anomaly Threshold | Rules > [Rule] | Set anomaly score threshold for alerts |
+| Entity Matching | Rules > [Rule] | Match alerts to specific named entities |
 
 ---
 
@@ -616,4 +817,4 @@ See the [UniFi Protect Troubleshooting Guide](troubleshooting-protect.md) for de
 
 ---
 
-*Last updated: December 2024*
+*Last updated: December 2025*
