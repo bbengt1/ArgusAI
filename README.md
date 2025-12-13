@@ -325,6 +325,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 | Document | Description |
 |----------|-------------|
+| [User Guide](docs/user-guide.md) | Complete guide for setup and usage |
 | [Product Brief](docs/product-brief.md) | Project vision and goals |
 | [PRD Phase 2](docs/PRD-phase2.md) | UniFi Protect integration requirements |
 | [PRD Phase 3](docs/PRD-phase3.md) | Video analysis requirements |
