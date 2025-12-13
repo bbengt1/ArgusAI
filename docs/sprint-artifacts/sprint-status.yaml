@@ -270,7 +270,7 @@ development_status:
   epic-p4-6: backlog
   p4-6-1-homekit-accessory-server: done
   p4-6-2-homekit-motion-events: done
-  p4-6-3-voice-query-api: backlog
+  p4-6-3-voice-query-api: done
   epic-p4-6-retrospective: optional
 
   # Epic P4-7: Behavioral Anomaly Detection (Growth)

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story="p4-6-3-voice-query-api" generated="2025-12-12">
+  <summary>
+    Create a natural language query API for voice assistants.
+    Parse time expressions ("today", "last hour") and camera names.
+    Generate TTS-friendly spoken responses summarizing events.
+  </summary>
+
+  <key-files>
+    <file path="backend/app/services/voice_query_service.py" role="primary" status="new">
+      VoiceQueryService - parse queries, fetch events, generate responses
+    </file>
+    <file path="backend/app/api/v1/voice.py" role="primary" status="new">
+      API endpoint POST /api/v1/voice/query
+    </file>
+    <file path="backend/app/models/event.py" role="reference">
+      Event model - query events by timestamp and camera_id
+    </file>
+    <file path="backend/app/models/camera.py" role="reference">
+      Camera model - match camera names
+    </file>
+  </key-files>
+
+  <existing-patterns>
+    <event-query>
+      Events are queried via SQLAlchemy from Event model.
+      Filter by timestamp range and camera_id.
+      Example: db.query(Event).filter(Event.timestamp >= start, Event.camera_id == camera_id)
+    </event-query>
+    <api-endpoints>
+      FastAPI endpoints in backend/app/api/v1/
+      Use Pydantic models for request/response validation
+      Include in router via api/v1/__init__.py
+    </api-endpoints>
+    <service-pattern>
+      Services in backend/app/services/
+      Dependency injection via FastAPI Depends()
+      Singleton pattern with get_*_service() functions
+    </service-pattern>
+  </existing-patterns>
+
+  <implementation-approach>
+    <step n="1">Create VoiceQueryService with parse_query(), execute_query(), generate_response()</step>
+    <step n="2">Implement time expression parser with regex and datetime arithmetic</step>
+    <step n="3">Implement camera name fuzzy matcher</step>
+    <step n="4">Create response generator with TTS-friendly formatting</step>
+    <step n="5">Create POST /api/v1/voice/query endpoint</step>
+    <step n="6">Write comprehensive unit tests</step>
+  </implementation-approach>
+
+  <time-expressions>
+    <expression pattern="today">midnight to now</expression>
+    <expression pattern="this morning">6 AM to 12 PM today</expression>
+    <expression pattern="this afternoon">12 PM to 6 PM today</expression>
+    <expression pattern="this evening">6 PM to 10 PM today</expression>
+    <expression pattern="tonight">6 PM to midnight today</expression>
+    <expression pattern="last hour">now - 60 minutes</expression>
+    <expression pattern="last (\d+) hours?">now - N hours</expression>
+    <expression pattern="last (\d+) minutes?">now - N minutes</expression>
+    <expression pattern="yesterday">previous day 00:00 to 23:59</expression>
+  </time-expressions>
+
+  <response-examples>
+    <example query="What's happening at the front door?">
+      "I found 2 events at the front door in the last hour. A person was seen at 3:15 PM and a package was delivered at 3:42 PM."
+    </example>
+    <example query="Any activity this morning?">
+      "There were 5 events across all cameras this morning. I saw 3 people and 2 vehicles."
+    </example>
+    <example query="Was anyone at the back yard today?">
+      "No activity detected at the back yard today."
+    </example>
+  </response-examples>
+
+  <acceptance-criteria-mapping>
+    <ac1>POST /api/v1/voice/query endpoint with request/response models</ac1>
+    <ac2>Time parser handles all relative expressions</ac2>
+    <ac3>Camera name matcher with fuzzy matching</ac3>
+    <ac4>Response generator creates TTS-friendly text</ac4>
+    <ac5>Ambiguous queries return helpful responses</ac5>
+    <ac6>Error handling with spoken error messages</ac6>
+    <ac7>Unit tests for all components</ac7>
+  </acceptance-criteria-mapping>
+</story-context>
