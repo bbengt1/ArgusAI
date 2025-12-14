@@ -1,8 +1,9 @@
 """
-HomeKit service for Apple Home integration (Story P4-6.1, P4-6.2)
+HomeKit service for Apple Home integration (Story P4-6.1, P4-6.2, P5-1.2)
 
 Manages the HAP-python accessory server and exposes cameras as motion sensors.
 Story P4-6.2 adds motion event triggering with auto-reset timers.
+Story P5-1.2 adds proper HomeKit Setup URI for QR code pairing.
 """
 import asyncio
 import logging
@@ -28,7 +29,14 @@ try:
 except ImportError:
     QRCODE_AVAILABLE = False
 
-from app.config.homekit import HomekitConfig, get_homekit_config, generate_pincode
+from app.config.homekit import (
+    HomekitConfig,
+    get_homekit_config,
+    generate_pincode,
+    generate_setup_id,
+    generate_setup_uri,
+    HOMEKIT_CATEGORY_BRIDGE,
+)
 from app.services.homekit_accessories import CameraMotionSensor, create_motion_sensor
 
 logger = logging.getLogger(__name__)
@@ -43,6 +51,7 @@ class HomekitStatus:
     accessory_count: int = 0
     bridge_name: str = "ArgusAI"
     setup_code: Optional[str] = None
+    setup_uri: Optional[str] = None  # Story P5-1.2: X-HM:// URI for QR code
     qr_code_data: Optional[str] = None
     port: int = 51826
     error: Optional[str] = None
@@ -82,6 +91,7 @@ class HomekitService:
         self._running = False
         self._driver_thread: Optional[threading.Thread] = None
         self._pincode: Optional[str] = None
+        self._setup_id: Optional[str] = None  # Story P5-1.2: Setup ID for URI
         self._error: Optional[str] = None
 
         # Story P4-6.2: Motion reset timers and state tracking
@@ -135,9 +145,39 @@ class HomekitService:
             self._pincode = generate_pincode()
         return self._pincode
 
+    @property
+    def setup_id(self) -> str:
+        """
+        Get the HomeKit Setup ID (Story P5-1.2).
+
+        The Setup ID is a 4-character alphanumeric identifier used in the
+        X-HM:// Setup URI for QR code pairing.
+        """
+        if self._setup_id:
+            return self._setup_id
+        # Generate a new setup ID
+        self._setup_id = generate_setup_id()
+        return self._setup_id
+
+    def get_setup_uri(self) -> str:
+        """
+        Get the HomeKit Setup URI for QR code pairing (Story P5-1.2).
+
+        Returns:
+            X-HM:// URI string containing encoded setup code, category, and setup ID
+        """
+        return generate_setup_uri(
+            setup_code=self.pincode,
+            setup_id=self.setup_id,
+            category=HOMEKIT_CATEGORY_BRIDGE
+        )
+
     def get_qr_code_data(self) -> Optional[str]:
         """
-        Generate QR code data for HomeKit pairing.
+        Generate QR code data for HomeKit pairing (Story P5-1.2).
+
+        Generates a QR code containing the proper HomeKit Setup URI (X-HM://)
+        which can be scanned directly by the Apple Home app for pairing.
 
         Returns:
             Base64-encoded PNG image data, or None if qrcode not available
@@ -146,20 +186,17 @@ class HomekitService:
             return None
 
         try:
-            # HomeKit setup URI format: X-HM://[setup_code][category][setup_id]
-            # For simplicity, we'll generate a QR code with the pairing code
-            # The actual HomeKit QR code format is proprietary and requires specific encoding
-
-            # Create a simple QR code with pairing instructions
-            qr_content = f"HomeKit Pairing Code: {self.pincode}"
+            # Story P5-1.2 AC2: Generate proper HomeKit Setup URI
+            setup_uri = self.get_setup_uri()
 
             qr = qrcode.QRCode(
                 version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                # Use ERROR_CORRECT_M or higher for reliable mobile scanning
+                error_correction=qrcode.constants.ERROR_CORRECT_M,
                 box_size=10,
                 border=4,
             )
-            qr.add_data(qr_content)
+            qr.add_data(setup_uri)
             qr.make(fit=True)
 
             img = qr.make_image(fill_color="black", back_color="white")
@@ -183,14 +220,17 @@ class HomekitService:
         Returns:
             HomekitStatus with current state information
         """
+        # Story P5-1.2 AC4: Hide setup code/URI when paired
+        is_paired = self.is_paired
         return HomekitStatus(
             enabled=self.config.enabled,
             running=self.is_running,
-            paired=self.is_paired,
+            paired=is_paired,
             accessory_count=self.accessory_count,
             bridge_name=self.config.bridge_name,
-            setup_code=self.pincode if not self.is_paired else None,
-            qr_code_data=self.get_qr_code_data() if not self.is_paired else None,
+            setup_code=self.pincode if not is_paired else None,
+            setup_uri=self.get_setup_uri() if not is_paired else None,
+            qr_code_data=self.get_qr_code_data() if not is_paired else None,
             port=self.config.port,
             error=self._error,
         )

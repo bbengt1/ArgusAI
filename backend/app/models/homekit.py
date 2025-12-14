@@ -26,6 +26,7 @@ class HomeKitConfig(Base):
         enabled: Whether HomeKit integration is enabled
         bridge_name: Display name for the HomeKit bridge (shown in Apple Home)
         pin_code: Encrypted 8-digit pairing code in XXX-XX-XXX format
+        setup_id: 4-character alphanumeric ID for HomeKit Setup URI (P5-1.2)
         port: HAP server port (default 51826)
         motion_reset_seconds: Seconds before motion sensor resets to False
         max_motion_duration: Maximum continuous motion duration in seconds
@@ -39,6 +40,7 @@ class HomeKitConfig(Base):
     enabled = Column(Boolean, default=False, nullable=False)
     bridge_name = Column(String(64), default="ArgusAI", nullable=False)
     pin_code = Column(String(256), nullable=True)  # Fernet encrypted XXX-XX-XXX format
+    setup_id = Column(String(4), nullable=True)  # 4-char alphanumeric for HomeKit Setup URI (P5-1.2)
     port = Column(Integer, default=51826, nullable=False)
     motion_reset_seconds = Column(Integer, default=30, nullable=False)
     max_motion_duration = Column(Integer, default=300, nullable=False)
@@ -107,6 +109,7 @@ class HomeKitConfig(Base):
             "id": self.id,
             "enabled": self.enabled,
             "bridge_name": self.bridge_name,
+            "setup_id": self.setup_id,
             "port": self.port,
             "motion_reset_seconds": self.motion_reset_seconds,
             "max_motion_duration": self.max_motion_duration,

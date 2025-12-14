@@ -1,0 +1,208 @@
+<story-context id="bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P5-1</epicId>
+    <storyId>P5-1.2</storyId>
+    <title>Implement HomeKit Pairing with QR Code</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-14</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p5-1-2-implement-homekit-pairing-with-qr-code.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>HomeKit user with an iPhone or iPad</asA>
+    <iWant>scan a QR code to pair ArgusAI with Apple Home</iWant>
+    <soThat>I can quickly add my ArgusAI cameras and sensors to HomeKit without manually entering codes</soThat>
+    <tasks>
+      <task id="1">Implement HomeKit Setup URI Generation - Add generate_setup_uri() method with X-HM:// encoding</task>
+      <task id="2">Add Setup ID to Database Model - Add setup_id field and migration</task>
+      <task id="3">Update QR Code Generation - Modify get_qr_code_data() to use setup URI</task>
+      <task id="4">Add PIN Code Validation - Validate against HomeKit restrictions</task>
+      <task id="5">Implement Security Logging Filtering - Redact PIN codes from logs</task>
+      <task id="6">Write Unit Tests - Setup URI format, PIN validation, setup ID generation</task>
+      <task id="7">Write API Integration Tests - QR code endpoint, status response</task>
+      <task id="8">Manual Pairing Verification - Test with iPhone/iPad Home app</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Setup Code Generated in XXX-XX-XXX Format on First Enable - validate against HomeKit restrictions, store encrypted</criterion>
+    <criterion id="AC2">QR Code Contains Valid HomeKit Setup URI - Generate X-HM:// format with setup code, category, setup ID</criterion>
+    <criterion id="AC3">Pairing Completes Successfully with Apple Home App - Bridge recognized, handshake completes, accessories visible</criterion>
+    <criterion id="AC4">PIN Not Logged or Stored in Plain Text - Encrypted in DB, not in logs, hidden after pairing</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD-phase5.md</path>
+        <title>Phase 5 PRD</title>
+        <section>HomeKit Integration (FR2, NFR7-NFR9)</section>
+        <snippet>FR2: Users can pair ArgusAI with Apple Home app via QR code or manual PIN. NFR9: HomeKit pairing PIN/QR codes are not logged or persisted after initial pairing.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-p5-1.md</path>
+        <title>Epic P5-1 Tech Spec</title>
+        <section>Story P5-1.2: HomeKit Pairing with QR Code</section>
+        <snippet>Setup code generated in XXX-XX-XXX format. QR code PNG returned from /api/v1/homekit/qrcode. Pairing completes successfully with Apple Home app. PIN not logged or stored in plain text.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/phase-5-additions.md</path>
+        <title>Phase 5 Architecture Additions</title>
+        <section>Phase 5 HomeKit Architecture</section>
+        <snippet>HAP Bridge Design with Bridge accessory (AID=1). Camera streaming pipeline: RTSP to ffmpeg to HLS to HomeKit client. HomeKit setup URI format X-HM://[payload][setupID].</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p5-1-1-set-up-hap-python-bridge-infrastructure.md</path>
+        <title>Previous Story P5-1.1</title>
+        <section>Completion Notes and File List</section>
+        <snippet>Created HomeKitConfig/HomeKitAccessory models, API endpoints for enable/disable/status/qrcode. PIN code encrypted via Fernet. Current QR code uses simple text format - needs X-HM:// URI.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>backend/app/services/homekit_service.py</path>
+        <kind>service</kind>
+        <symbol>get_qr_code_data</symbol>
+        <lines>138-177</lines>
+        <reason>Current QR code generation - generates text "HomeKit Pairing Code: XXX-XX-XXX" - needs to be updated to use X-HM:// setup URI format</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/homekit_service.py</path>
+        <kind>service</kind>
+        <symbol>HomekitService</symbol>
+        <lines>51-598</lines>
+        <reason>Main HomeKit service class - need to add generate_setup_uri() method</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/config/homekit.py</path>
+        <kind>config</kind>
+        <symbol>generate_pincode</symbol>
+        <lines>26-38</lines>
+        <reason>PIN code generation - needs additional validation for HomeKit restrictions (no all-zeros, no sequential)</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/homekit.py</path>
+        <kind>model</kind>
+        <symbol>HomeKitConfig</symbol>
+        <lines>17-121</lines>
+        <reason>HomeKit config model - need to add setup_id field for persistent setup ID storage</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/api/v1/homekit.py</path>
+        <kind>controller</kind>
+        <symbol>get_qrcode</symbol>
+        <lines>354-402</lines>
+        <reason>QR code API endpoint - returns PNG image, needs to ensure setup URI is encoded</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/api/v1/homekit.py</path>
+        <kind>controller</kind>
+        <symbol>get_homekit_status</symbol>
+        <lines>194-230</lines>
+        <reason>Status endpoint - should exclude setup_code when paired per AC4</reason>
+      </artifact>
+      <artifact>
+        <path>backend/tests/test_api/test_homekit.py</path>
+        <kind>test</kind>
+        <symbol>TestHomeKitSchemas</symbol>
+        <lines>1-200</lines>
+        <reason>Existing HomeKit API tests - extend with setup URI and pairing tests</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/utils/encryption.py</path>
+        <kind>util</kind>
+        <symbol>encrypt_password, decrypt_password</symbol>
+        <lines>all</lines>
+        <reason>Encryption utilities used for PIN code storage</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="HAP-python" version=">=4.9.0" purpose="HomeKit Accessory Protocol implementation"/>
+        <package name="qrcode" version=">=7.4.0" purpose="QR code generation for HomeKit pairing"/>
+        <package name="pillow" version=">=10.0.0" purpose="Image processing for QR codes"/>
+        <package name="zeroconf" version="(via HAP-python)" purpose="mDNS/Bonjour for HomeKit discovery"/>
+        <package name="cryptography" version=">=41.0.0" purpose="Fernet encryption for PIN codes"/>
+        <package name="pytest" version=">=7.0.0" purpose="Unit testing framework"/>
+        <package name="pytest-asyncio" version=">=0.21.0" purpose="Async test support"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>HomeKit Setup URI format: X-HM://[base36_payload][4-char setup_id] where payload encodes setup_code (27 bits) + category (8 bits) + flags (8 bits)</constraint>
+    <constraint>Setup ID must be 4 alphanumeric characters (uppercase + digits), unique per bridge instance, persisted in database</constraint>
+    <constraint>PIN code validation rules: No all-same digits (000-00-000), no sequential (123-45-678), no common patterns</constraint>
+    <constraint>PIN must be encrypted with Fernet before database storage, decrypted only when needed for HAP driver</constraint>
+    <constraint>PIN must not appear in application logs - add log filter to redact XXX-XX-XXX patterns</constraint>
+    <constraint>QR code error correction must be M or higher for reliable mobile scanning</constraint>
+    <constraint>HAP-python AccessoryDriver accepts pincode as bytes, not the setup URI (URI is only for QR code scanning)</constraint>
+    <constraint>Category ID for Bridge is 2 per HAP specification</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>generate_setup_uri</name>
+      <kind>function</kind>
+      <signature>def generate_setup_uri(setup_code: str, setup_id: str, category: int = 2) -> str</signature>
+      <path>backend/app/services/homekit_service.py</path>
+      <description>Generate HomeKit X-HM:// setup URI for QR code. Returns URI string.</description>
+    </interface>
+    <interface>
+      <name>generate_setup_id</name>
+      <kind>function</kind>
+      <signature>def generate_setup_id() -> str</signature>
+      <path>backend/app/config/homekit.py</path>
+      <description>Generate 4-character alphanumeric setup ID. Returns uppercase alphanumeric string.</description>
+    </interface>
+    <interface>
+      <name>GET /api/v1/homekit/qrcode</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/homekit/qrcode -> PNG image (image/png)</signature>
+      <path>backend/app/api/v1/homekit.py:354</path>
+      <description>Returns PNG image of QR code containing HomeKit setup URI for pairing.</description>
+    </interface>
+    <interface>
+      <name>GET /api/v1/homekit/status</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/homekit/status -> HomeKitStatusResponse</signature>
+      <path>backend/app/api/v1/homekit.py:194</path>
+      <description>Returns bridge status including setup_code (null when paired) and qr_code_data.</description>
+    </interface>
+    <interface>
+      <name>HomeKitConfig.setup_id</name>
+      <kind>model field</kind>
+      <signature>setup_id = Column(String(4), nullable=True)</signature>
+      <path>backend/app/models/homekit.py</path>
+      <description>4-character setup ID persisted in database for HomeKit URI generation.</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests use pytest framework with pytest-asyncio for async support. Test files are in backend/tests/ directory organized by type (test_api/, test_services/, test_models/). Mock HAP_AVAILABLE and QRCODE_AVAILABLE for graceful degradation tests. Use db_session fixture for database tests. Follow existing test patterns from test_homekit.py and test_homekit_models.py.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_homekit_pairing.py (NEW)</location>
+      <location>backend/tests/test_api/test_homekit.py (EXTEND)</location>
+      <location>backend/tests/test_models/test_homekit_models.py (EXTEND if needed)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test generate_pincode() rejects invalid patterns (000-00-000, 111-11-111, 123-45-678)</idea>
+      <idea ac="AC1">Test PIN code validation edge cases (leading zeros, boundary values)</idea>
+      <idea ac="AC2">Test generate_setup_uri() produces valid X-HM:// prefix</idea>
+      <idea ac="AC2">Test setup URI encodes correct payload (setup code, category, flags)</idea>
+      <idea ac="AC2">Test generate_setup_id() produces 4-character uppercase alphanumeric</idea>
+      <idea ac="AC2">Test setup_id persists across service restarts (database storage)</idea>
+      <idea ac="AC2">Test QR code endpoint returns valid PNG with setup URI encoded</idea>
+      <idea ac="AC3">Manual test: Scan QR code with iPhone Home app</idea>
+      <idea ac="AC3">Manual test: Complete pairing flow and verify bridge appears</idea>
+      <idea ac="AC4">Test PIN code not present in log output (mock logger)</idea>
+      <idea ac="AC4">Test /status endpoint excludes setup_code when paired=true</idea>
+      <idea ac="AC4">Test PIN code encryption/decryption roundtrip</idea>
+    </ideas>
+  </tests>
+</story-context>

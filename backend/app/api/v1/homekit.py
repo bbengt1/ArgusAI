@@ -43,6 +43,7 @@ class HomeKitStatusResponse(BaseModel):
     accessory_count: int = Field(..., description="Number of accessories in bridge")
     bridge_name: str = Field(..., description="Bridge name shown in Apple Home")
     setup_code: Optional[str] = Field(None, description="Pairing code (hidden if paired)")
+    setup_uri: Optional[str] = Field(None, description="X-HM:// Setup URI for QR code (Story P5-1.2)")
     port: int = Field(..., description="HAP server port")
     error: Optional[str] = Field(None, description="Error message if any")
 
@@ -55,6 +56,7 @@ class HomeKitStatusResponse(BaseModel):
                 "accessory_count": 3,
                 "bridge_name": "ArgusAI",
                 "setup_code": "123-45-678",
+                "setup_uri": "X-HM://0023B6WQLAB1C",
                 "port": 51826,
                 "error": None
             }
@@ -83,6 +85,7 @@ class HomeKitEnableResponse(BaseModel):
     running: bool
     port: int
     setup_code: str = Field(..., description="Pairing code in XXX-XX-XXX format")
+    setup_uri: Optional[str] = Field(None, description="X-HM:// Setup URI for QR code (Story P5-1.2)")
     qr_code_data: Optional[str] = Field(None, description="Base64 PNG QR code for pairing")
     bridge_name: str
     message: str
@@ -94,6 +97,7 @@ class HomeKitEnableResponse(BaseModel):
                 "running": True,
                 "port": 51826,
                 "setup_code": "123-45-678",
+                "setup_uri": "X-HM://0023B6WQLAB1C",
                 "qr_code_data": "data:image/png;base64,...",
                 "bridge_name": "ArgusAI",
                 "message": "HomeKit bridge enabled successfully"
@@ -200,7 +204,7 @@ async def get_homekit_status(db: Session = Depends(get_db)):
     - Whether HomeKit is enabled and running
     - Pairing status
     - Number of accessories
-    - Setup code (hidden if already paired)
+    - Setup code and URI (hidden if already paired) - Story P5-1.2
     """
     try:
         # Get config from database
@@ -211,6 +215,7 @@ async def get_homekit_status(db: Session = Depends(get_db)):
         service_status = service.get_status()
 
         # Merge database config with runtime status
+        # Story P5-1.2 AC4: Hide setup_code and setup_uri when paired
         return HomeKitStatusResponse(
             enabled=config.enabled,
             running=service_status.running,
@@ -218,6 +223,7 @@ async def get_homekit_status(db: Session = Depends(get_db)):
             accessory_count=service_status.accessory_count,
             bridge_name=config.bridge_name,
             setup_code=config.get_pin_code() if not service_status.paired else None,
+            setup_uri=service_status.setup_uri,  # Story P5-1.2: Include X-HM:// URI
             port=config.port,
             error=service_status.error
         )
@@ -292,11 +298,13 @@ async def enable_homekit(
             }
         )
 
+        # Story P5-1.2: Include setup_uri in response
         return HomeKitEnableResponse(
             enabled=True,
             running=service.is_running,
             port=config.port,
             setup_code=config.get_pin_code(),
+            setup_uri=service.get_setup_uri(),
             qr_code_data=service.get_qr_code_data(),
             bridge_name=config.bridge_name,
             message=f"HomeKit bridge enabled with {len(cameras)} cameras"

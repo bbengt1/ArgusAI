@@ -45,10 +45,13 @@ class RequestIdFilter(logging.Filter):
 
 class SanitizingFilter(logging.Filter):
     """
-    Filter that sanitizes log messages to prevent log injection attacks.
+    Filter that sanitizes log messages to prevent log injection attacks
+    and redact sensitive information.
 
     Removes or escapes dangerous characters that could be used to
     forge log entries or inject malicious content.
+
+    Story P5-1.2: Also redacts HomeKit PIN codes (XXX-XX-XXX format) from logs.
     """
 
     # Patterns that could be used for log injection
@@ -58,11 +61,23 @@ class SanitizingFilter(logging.Filter):
         (r'\r', ' '),    # Carriage return injection
     ]
 
+    # Story P5-1.2 AC4: Pattern to redact HomeKit PIN codes (XXX-XX-XXX format)
+    # This matches 8-digit PINs with dashes like "123-45-678" or "031-45-154"
+    HOMEKIT_PIN_PATTERN = re.compile(r'\b\d{3}-\d{2}-\d{3}\b')
+    PIN_REDACTION = '[PIN-REDACTED]'
+
+    def _redact_sensitive(self, value: str) -> str:
+        """Redact sensitive patterns from a string."""
+        # Story P5-1.2 AC4: Redact HomeKit PIN codes
+        return self.HOMEKIT_PIN_PATTERN.sub(self.PIN_REDACTION, value)
+
     def filter(self, record: logging.LogRecord) -> bool:
         # Sanitize the message
         if isinstance(record.msg, str):
             for pattern, replacement in self.DANGEROUS_PATTERNS:
                 record.msg = re.sub(pattern, replacement, record.msg)
+            # Story P5-1.2: Redact PIN codes
+            record.msg = self._redact_sensitive(record.msg)
 
         # Sanitize args if present
         if record.args:
@@ -72,6 +87,8 @@ class SanitizingFilter(logging.Filter):
                     sanitized = arg
                     for pattern, replacement in self.DANGEROUS_PATTERNS:
                         sanitized = re.sub(pattern, replacement, sanitized)
+                    # Story P5-1.2: Redact PIN codes from args
+                    sanitized = self._redact_sensitive(sanitized)
                     sanitized_args.append(sanitized)
                 else:
                     sanitized_args.append(arg)

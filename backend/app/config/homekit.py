@@ -1,13 +1,15 @@
 """
-HomeKit configuration module (Story P4-6.1, P4-6.2)
+HomeKit configuration module (Story P4-6.1, P4-6.2, P5-1.2)
 
 Defines HomeKit-related settings for the HAP-python accessory server.
+Story P5-1.2 adds Setup URI generation and enhanced PIN validation.
 """
 import os
 import random
+import string
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Set
 
 # Default HomeKit port (standard HAP port)
 DEFAULT_HOMEKIT_PORT = 51826
@@ -22,20 +24,197 @@ DEFAULT_MANUFACTURER = "ArgusAI"
 DEFAULT_MOTION_RESET_SECONDS = 30
 DEFAULT_MAX_MOTION_DURATION = 300  # 5 minutes
 
+# Story P5-1.2: HomeKit category constants
+HOMEKIT_CATEGORY_BRIDGE = 2  # HAP category for Bridge accessory
+
+# Story P5-1.2: Invalid PIN code patterns per HomeKit restrictions
+INVALID_PIN_PATTERNS: Set[str] = {
+    # All same digits
+    "000-00-000", "111-11-111", "222-22-222", "333-33-333",
+    "444-44-444", "555-55-555", "666-66-666", "777-77-777",
+    "888-88-888", "999-99-999",
+    # Sequential patterns
+    "123-45-678", "012-34-567", "234-56-789",
+    # Common patterns
+    "121-21-212", "123-12-312",
+}
+
+
+def is_valid_pincode(code: str) -> bool:
+    """
+    Validate a PIN code against HomeKit restrictions (Story P5-1.2 AC1).
+
+    HomeKit restricts certain PIN patterns:
+    - All same digits (e.g., 000-00-000, 111-11-111)
+    - Sequential patterns (e.g., 123-45-678)
+    - Common/predictable patterns
+
+    Args:
+        code: PIN code in XXX-XX-XXX format
+
+    Returns:
+        True if valid, False if matches restricted pattern
+    """
+    if code in INVALID_PIN_PATTERNS:
+        return False
+
+    # Check for format validity
+    parts = code.split("-")
+    if len(parts) != 3 or len(parts[0]) != 3 or len(parts[1]) != 2 or len(parts[2]) != 3:
+        return False
+
+    # Check all digits
+    digits_only = code.replace("-", "")
+    if not digits_only.isdigit() or len(digits_only) != 8:
+        return False
+
+    return True
+
 
 def generate_pincode() -> str:
     """
     Generate a random 8-digit HomeKit pairing code in XXX-XX-XXX format.
 
+    Validates against HomeKit restrictions per Story P5-1.2 AC1:
+    - No all-same digits (000-00-000, etc.)
+    - No sequential patterns (123-45-678)
+    - No common/predictable patterns
+
     Returns:
-        str: Pincode in format "123-45-678"
+        str: Validated pincode in format "123-45-678"
     """
-    # Generate random digits (avoiding invalid codes like 000-00-000)
-    while True:
+    max_attempts = 100  # Prevent infinite loops
+    for _ in range(max_attempts):
         code = f"{random.randint(0, 999):03d}-{random.randint(0, 99):02d}-{random.randint(0, 999):03d}"
-        # Avoid codes that are all zeros or too simple
-        if code not in ("000-00-000", "111-11-111", "123-45-678"):
+        if is_valid_pincode(code):
             return code
+
+    # Fallback to a known-valid code if somehow all attempts fail
+    return "031-45-154"
+
+
+def generate_setup_id() -> str:
+    """
+    Generate a 4-character alphanumeric Setup ID for HomeKit URI (Story P5-1.2 AC2).
+
+    The Setup ID is used in the X-HM:// URI format for QR code pairing.
+    It must be uppercase alphanumeric (0-9, A-Z).
+
+    Returns:
+        str: 4-character uppercase alphanumeric string (e.g., "AB1C")
+    """
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choice(chars) for _ in range(4))
+
+
+def generate_setup_uri(setup_code: str, setup_id: str, category: int = HOMEKIT_CATEGORY_BRIDGE) -> str:
+    """
+    Generate HomeKit Setup URI for QR code pairing (Story P5-1.2 AC2).
+
+    The HomeKit Setup URI format is X-HM://[payload][setup_id] where:
+    - payload is base36-encoded value containing setup_code, category, and flags
+    - setup_id is the 4-character alphanumeric identifier
+
+    The payload encodes:
+    - Setup code (27 bits): The 8-digit PIN without dashes
+    - Flags (4 bits): 0x2 for IP transport
+    - Category (8 bits): HAP accessory category (2 = Bridge)
+
+    Reference: HAP specification and HAP-python implementation.
+
+    Args:
+        setup_code: PIN code in XXX-XX-XXX format
+        setup_id: 4-character alphanumeric setup ID
+        category: HAP category (default 2 for Bridge)
+
+    Returns:
+        str: X-HM:// URI string (e.g., "X-HM://0023B6WQLAB1C")
+
+    Raises:
+        ValueError: If setup_code format is invalid or setup_id is not 4 chars
+    """
+    # Validate inputs
+    if not is_valid_pincode(setup_code):
+        # Allow any format-valid code even if in "simple" list, for flexibility
+        parts = setup_code.split("-")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid setup_code format: {setup_code}. Expected XXX-XX-XXX")
+
+    if len(setup_id) != 4:
+        raise ValueError(f"setup_id must be 4 characters, got {len(setup_id)}")
+
+    # Remove dashes and convert to integer
+    code_digits = setup_code.replace("-", "")
+    code_int = int(code_digits)
+
+    # Build payload per HAP specification:
+    # Bits 0-7: Category (8 bits)
+    # Bits 8-11: Flags (4 bits) - 0x2 = IP transport
+    # Bits 12-38: Setup code (27 bits)
+    #
+    # Total payload = (setup_code << 12) | (flags << 8) | category
+    flags = 0x2  # IP transport flag
+    payload = (code_int << 12) | (flags << 8) | (category & 0xFF)
+
+    # Encode as base36 (0-9, A-Z)
+    chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    encoded = ""
+    temp = payload
+    while temp > 0:
+        encoded = chars[temp % 36] + encoded
+        temp //= 36
+
+    # Pad to 9 characters (standard HomeKit payload length)
+    encoded = encoded.zfill(9)
+
+    return f"X-HM://{encoded}{setup_id}"
+
+
+def parse_setup_uri(uri: str) -> dict:
+    """
+    Parse a HomeKit Setup URI to extract components (for testing/debugging).
+
+    Args:
+        uri: X-HM:// URI string
+
+    Returns:
+        dict with keys: setup_code, setup_id, category, flags, valid
+
+    Raises:
+        ValueError: If URI format is invalid
+    """
+    if not uri.startswith("X-HM://"):
+        raise ValueError(f"Invalid URI prefix, expected X-HM://")
+
+    content = uri[7:]  # Remove "X-HM://"
+    if len(content) < 13:  # 9 payload + 4 setup_id minimum
+        raise ValueError(f"URI too short: {len(content)} chars")
+
+    payload_str = content[:-4]
+    setup_id = content[-4:]
+
+    # Decode base36 payload
+    chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    payload = 0
+    for char in payload_str:
+        payload = payload * 36 + chars.index(char.upper())
+
+    # Extract components
+    category = payload & 0xFF
+    flags = (payload >> 8) & 0xF
+    setup_code_int = payload >> 12
+
+    # Format setup code as XXX-XX-XXX
+    setup_code_str = f"{setup_code_int:08d}"
+    setup_code = f"{setup_code_str[:3]}-{setup_code_str[3:5]}-{setup_code_str[5:]}"
+
+    return {
+        "setup_code": setup_code,
+        "setup_id": setup_id,
+        "category": category,
+        "flags": flags,
+        "valid": True
+    }
 
 
 @dataclass
