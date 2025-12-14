@@ -1,6 +1,6 @@
 # Sprint Status
-# Auto-generated from epics.md and epics-phase2.md structure
-# Last updated: 2025-12-13
+# Auto-generated from epics.md, epics-phase2.md, epics-phase3.md, epics-phase4.md, epics-phase5.md
+# Last updated: 2025-12-14
 
 # STATUS DEFINITIONS:
 # ==================
@@ -287,6 +287,66 @@ development_status:
   p4-8-3-vehicle-recognition: done
   p4-8-4-named-entity-alerts: done
   epic-p4-8-retrospective: optional
+
+  # ============================================================================
+  # PHASE 5: Backlog Cleanup, HomeKit Integration & Quality
+  # ============================================================================
+  # Source: docs/epics-phase5.md
+  # PRD: docs/PRD-phase5.md
+  # Architecture: docs/architecture/ (Phase 5 Additions)
+
+  # Epic P5-1: Native HomeKit Integration
+  epic-p5-1: contexted
+  p5-1-1-set-up-hap-python-bridge-infrastructure: backlog
+  p5-1-2-implement-homekit-pairing-with-qr-code: backlog
+  p5-1-3-create-camera-accessory-with-rtsp-to-hls-streaming: backlog
+  p5-1-4-implement-motion-sensor-accessories: backlog
+  p5-1-5-implement-occupancy-sensor-for-person-detection: backlog
+  p5-1-6-add-vehicle-animal-package-sensor-accessories: backlog
+  p5-1-7-implement-doorbell-accessory-for-protect-events: backlog
+  p5-1-8-build-homekit-settings-ui: backlog
+  epic-p5-1-retrospective: optional
+
+  # Epic P5-2: ONVIF Camera Discovery
+  epic-p5-2: contexted
+  p5-2-1-implement-onvif-ws-discovery-scanner: backlog
+  p5-2-2-parse-onvif-device-info-and-capabilities: backlog
+  p5-2-3-build-camera-discovery-ui-with-add-action: backlog
+  p5-2-4-implement-test-connection-endpoint: backlog
+  epic-p5-2-retrospective: optional
+
+  # Epic P5-3: CI/CD & Testing Infrastructure
+  epic-p5-3: contexted
+  p5-3-1-create-github-actions-workflow-for-prs: backlog
+  p5-3-2-add-backend-pytest-execution-to-ci: backlog
+  p5-3-3-set-up-vitest-react-testing-library: backlog
+  p5-3-4-add-frontend-test-execution-to-ci: backlog
+  p5-3-5-add-eslint-and-typescript-checks-to-ci: backlog
+  p5-3-6-configure-test-coverage-reporting: backlog
+  p5-3-7-write-feedbackbuttons-component-tests: backlog
+  epic-p5-3-retrospective: optional
+
+  # Epic P5-4: Quality & Performance Validation
+  epic-p5-4: contexted
+  p5-4-1-document-cpu-memory-performance-baselines: backlog
+  p5-4-2-acquire-and-organize-real-camera-test-footage: backlog
+  p5-4-3-validate-motion-detection-accuracy-metrics: backlog
+  epic-p5-4-retrospective: optional
+
+  # Epic P5-5: UX Polish & Accessibility
+  epic-p5-5: contexted
+  p5-5-1-add-aria-labels-to-all-interactive-elements: backlog
+  p5-5-2-implement-keyboard-navigation-for-core-workflows: backlog
+  p5-5-3-create-detection-zone-preset-templates: backlog
+  p5-5-4-implement-multiple-schedule-time-ranges: backlog
+  p5-5-5-update-readme-with-frontend-setup-docs: backlog
+  epic-p5-5-retrospective: optional
+
+  # Epic P5-6: MQTT Enhancements
+  epic-p5-6: contexted
+  p5-6-1-add-mqtt-5-0-message-expiry-support: backlog
+  p5-6-2-implement-mqtt-birth-will-messages: backlog
+  epic-p5-6-retrospective: optional
 
   # ============================================================================
   # TECHNICAL DEBT

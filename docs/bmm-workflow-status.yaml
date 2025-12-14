@@ -41,7 +41,13 @@ workflow_status:
   # Phase 3: Implementation
   sprint-planning: docs/sprint-artifacts/sprint-status.yaml  # agent: sm
 
-# Phase 3 Artifacts (in progress)
+# Phase 5 Artifacts (in progress)
+phase5_artifacts:
+  prd: docs/PRD-phase5.md
+  architecture: docs/architecture/  # Sharded, Phase 5 section in phase-5-additions.md
+  epics: docs/epics-phase5.md
+
+# Phase 3 Artifacts (completed iteration)
 phase3_artifacts:
   brainstorm: docs/brainstorming-session-results-2025-12-05.md
   prd: docs/PRD-phase3.md
