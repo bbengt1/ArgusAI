@@ -47,3 +47,5 @@ IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the c
 4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions
 5. Save outputs after EACH section when generating any documents from templates
 </steps>
+
+Once complete commit and and push. If this is a backlog item you will look up the github issue link in the backlog document. create a pull request tying this to the appropriate github issue. Close out the github issue.
