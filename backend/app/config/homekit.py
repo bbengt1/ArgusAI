@@ -1,9 +1,10 @@
 """
-HomeKit configuration module (Story P4-6.1, P4-6.2, P5-1.2, P5-1.5)
+HomeKit configuration module (Story P4-6.1, P4-6.2, P5-1.2, P5-1.5, P5-1.6)
 
 Defines HomeKit-related settings for the HAP-python accessory server.
 Story P5-1.2 adds Setup URI generation and enhanced PIN validation.
 Story P5-1.5 adds occupancy sensor configuration for person detection.
+Story P5-1.6 adds vehicle/animal/package sensor configuration.
 """
 import os
 import random
@@ -28,6 +29,11 @@ DEFAULT_MAX_MOTION_DURATION = 300  # 5 minutes
 # Story P5-1.5: Occupancy sensor defaults (person detection only)
 DEFAULT_OCCUPANCY_TIMEOUT_SECONDS = 300  # 5 minutes
 DEFAULT_MAX_OCCUPANCY_DURATION = 1800  # 30 minutes
+
+# Story P5-1.6: Detection-type-specific sensor defaults
+DEFAULT_VEHICLE_RESET_SECONDS = 30  # 30 seconds
+DEFAULT_ANIMAL_RESET_SECONDS = 30  # 30 seconds
+DEFAULT_PACKAGE_RESET_SECONDS = 60  # 60 seconds (packages persist longer)
 
 # Story P5-1.2: HomeKit category constants
 HOMEKIT_CATEGORY_BRIDGE = 2  # HAP category for Bridge accessory
@@ -238,6 +244,9 @@ class HomekitConfig:
         max_motion_duration: Maximum duration for continuous motion (Story P4-6.2)
         occupancy_timeout_seconds: Seconds before occupancy sensor resets to False (Story P5-1.5)
         max_occupancy_duration: Maximum duration for continuous occupancy (Story P5-1.5)
+        vehicle_reset_seconds: Seconds before vehicle sensor resets to False (Story P5-1.6)
+        animal_reset_seconds: Seconds before animal sensor resets to False (Story P5-1.6)
+        package_reset_seconds: Seconds before package sensor resets to False (Story P5-1.6)
     """
     enabled: bool = False
     port: int = DEFAULT_HOMEKIT_PORT
@@ -249,6 +258,9 @@ class HomekitConfig:
     max_motion_duration: int = DEFAULT_MAX_MOTION_DURATION
     occupancy_timeout_seconds: int = DEFAULT_OCCUPANCY_TIMEOUT_SECONDS
     max_occupancy_duration: int = DEFAULT_MAX_OCCUPANCY_DURATION
+    vehicle_reset_seconds: int = DEFAULT_VEHICLE_RESET_SECONDS
+    animal_reset_seconds: int = DEFAULT_ANIMAL_RESET_SECONDS
+    package_reset_seconds: int = DEFAULT_PACKAGE_RESET_SECONDS
 
     @property
     def persist_file(self) -> str:
@@ -282,6 +294,9 @@ def get_homekit_config() -> HomekitConfig:
         HOMEKIT_MAX_MOTION_DURATION: Max continuous motion duration (default: 300)
         HOMEKIT_OCCUPANCY_TIMEOUT_SECONDS: Occupancy sensor reset timeout (default: 300, Story P5-1.5)
         HOMEKIT_MAX_OCCUPANCY_DURATION: Max continuous occupancy duration (default: 1800, Story P5-1.5)
+        HOMEKIT_VEHICLE_RESET_SECONDS: Vehicle sensor reset timeout (default: 30, Story P5-1.6)
+        HOMEKIT_ANIMAL_RESET_SECONDS: Animal sensor reset timeout (default: 30, Story P5-1.6)
+        HOMEKIT_PACKAGE_RESET_SECONDS: Package sensor reset timeout (default: 60, Story P5-1.6)
 
     Returns:
         HomekitConfig: Configuration instance
@@ -297,4 +312,7 @@ def get_homekit_config() -> HomekitConfig:
         max_motion_duration=int(os.getenv("HOMEKIT_MAX_MOTION_DURATION", str(DEFAULT_MAX_MOTION_DURATION))),
         occupancy_timeout_seconds=int(os.getenv("HOMEKIT_OCCUPANCY_TIMEOUT_SECONDS", str(DEFAULT_OCCUPANCY_TIMEOUT_SECONDS))),
         max_occupancy_duration=int(os.getenv("HOMEKIT_MAX_OCCUPANCY_DURATION", str(DEFAULT_MAX_OCCUPANCY_DURATION))),
+        vehicle_reset_seconds=int(os.getenv("HOMEKIT_VEHICLE_RESET_SECONDS", str(DEFAULT_VEHICLE_RESET_SECONDS))),
+        animal_reset_seconds=int(os.getenv("HOMEKIT_ANIMAL_RESET_SECONDS", str(DEFAULT_ANIMAL_RESET_SECONDS))),
+        package_reset_seconds=int(os.getenv("HOMEKIT_PACKAGE_RESET_SECONDS", str(DEFAULT_PACKAGE_RESET_SECONDS))),
     )

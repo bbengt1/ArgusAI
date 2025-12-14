@@ -1043,6 +1043,37 @@ class EventProcessor:
                             f"HomeKit occupancy trigger task created for person event {event_id}",
                             extra={"event_id": event_id, "camera_id": event.camera_id, "smart_detection_type": smart_detection_type}
                         )
+
+                    # Story P5-1.6: Trigger detection-type-specific sensors
+                    # AC1: Vehicle detection triggers only vehicle sensor
+                    if smart_detection_type == "vehicle":
+                        asyncio.create_task(
+                            self._trigger_homekit_vehicle(homekit_service, event.camera_id, event_id)
+                        )
+                        logger.debug(
+                            f"HomeKit vehicle trigger task created for event {event_id}",
+                            extra={"event_id": event_id, "camera_id": event.camera_id, "smart_detection_type": smart_detection_type}
+                        )
+
+                    # AC2: Animal detection triggers only animal sensor
+                    if smart_detection_type == "animal":
+                        asyncio.create_task(
+                            self._trigger_homekit_animal(homekit_service, event.camera_id, event_id)
+                        )
+                        logger.debug(
+                            f"HomeKit animal trigger task created for event {event_id}",
+                            extra={"event_id": event_id, "camera_id": event.camera_id, "smart_detection_type": smart_detection_type}
+                        )
+
+                    # AC3: Package detection triggers only package sensor
+                    if smart_detection_type == "package":
+                        asyncio.create_task(
+                            self._trigger_homekit_package(homekit_service, event.camera_id, event_id)
+                        )
+                        logger.debug(
+                            f"HomeKit package trigger task created for event {event_id}",
+                            extra={"event_id": event_id, "camera_id": event.camera_id, "smart_detection_type": smart_detection_type}
+                        )
             except Exception as homekit_error:
                 # HomeKit failures must not block event processing (AC6)
                 logger.warning(
@@ -1505,6 +1536,154 @@ class EventProcessor:
                 f"HomeKit occupancy trigger failed for event {event_id}: {e}",
                 extra={
                     "event_type": "homekit_occupancy_error",
+                    "event_id": event_id,
+                    "camera_id": camera_id,
+                    "error": str(e)
+                }
+            )
+
+    async def _trigger_homekit_vehicle(
+        self,
+        homekit_service,
+        camera_id: str,
+        event_id: str
+    ) -> None:
+        """
+        Trigger HomeKit vehicle sensor for vehicle detection (Story P5-1.6 AC1).
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Only called when smart_detection_type == 'vehicle'.
+
+        Args:
+            homekit_service: HomekitService instance
+            camera_id: Camera identifier
+            event_id: Event ID for logging
+        """
+        try:
+            success = homekit_service.trigger_vehicle(camera_id, event_id=event_id)
+
+            if success:
+                logger.info(
+                    f"HomeKit vehicle triggered for vehicle detection",
+                    extra={
+                        "event_type": "homekit_vehicle_triggered",
+                        "event_id": event_id,
+                        "camera_id": camera_id
+                    }
+                )
+            else:
+                logger.debug(
+                    f"HomeKit vehicle trigger returned False (no sensor for camera)",
+                    extra={
+                        "event_type": "homekit_vehicle_no_sensor",
+                        "event_id": event_id,
+                        "camera_id": camera_id
+                    }
+                )
+        except Exception as e:
+            logger.warning(
+                f"HomeKit vehicle trigger failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "homekit_vehicle_error",
+                    "event_id": event_id,
+                    "camera_id": camera_id,
+                    "error": str(e)
+                }
+            )
+
+    async def _trigger_homekit_animal(
+        self,
+        homekit_service,
+        camera_id: str,
+        event_id: str
+    ) -> None:
+        """
+        Trigger HomeKit animal sensor for animal detection (Story P5-1.6 AC2).
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Only called when smart_detection_type == 'animal'.
+
+        Args:
+            homekit_service: HomekitService instance
+            camera_id: Camera identifier
+            event_id: Event ID for logging
+        """
+        try:
+            success = homekit_service.trigger_animal(camera_id, event_id=event_id)
+
+            if success:
+                logger.info(
+                    f"HomeKit animal triggered for animal detection",
+                    extra={
+                        "event_type": "homekit_animal_triggered",
+                        "event_id": event_id,
+                        "camera_id": camera_id
+                    }
+                )
+            else:
+                logger.debug(
+                    f"HomeKit animal trigger returned False (no sensor for camera)",
+                    extra={
+                        "event_type": "homekit_animal_no_sensor",
+                        "event_id": event_id,
+                        "camera_id": camera_id
+                    }
+                )
+        except Exception as e:
+            logger.warning(
+                f"HomeKit animal trigger failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "homekit_animal_error",
+                    "event_id": event_id,
+                    "camera_id": camera_id,
+                    "error": str(e)
+                }
+            )
+
+    async def _trigger_homekit_package(
+        self,
+        homekit_service,
+        camera_id: str,
+        event_id: str
+    ) -> None:
+        """
+        Trigger HomeKit package sensor for package detection (Story P5-1.6 AC3).
+
+        This is a fire-and-forget async task. Errors are logged but not propagated.
+        Only called when smart_detection_type == 'package'.
+        Package sensor has a longer timeout (60s) since packages persist.
+
+        Args:
+            homekit_service: HomekitService instance
+            camera_id: Camera identifier
+            event_id: Event ID for logging
+        """
+        try:
+            success = homekit_service.trigger_package(camera_id, event_id=event_id)
+
+            if success:
+                logger.info(
+                    f"HomeKit package triggered for package detection",
+                    extra={
+                        "event_type": "homekit_package_triggered",
+                        "event_id": event_id,
+                        "camera_id": camera_id
+                    }
+                )
+            else:
+                logger.debug(
+                    f"HomeKit package trigger returned False (no sensor for camera)",
+                    extra={
+                        "event_type": "homekit_package_no_sensor",
+                        "event_id": event_id,
+                        "camera_id": camera_id
+                    }
+                )
+        except Exception as e:
+            logger.warning(
+                f"HomeKit package trigger failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "homekit_package_error",
                     "event_id": event_id,
                     "camera_id": camera_id,
                     "error": str(e)

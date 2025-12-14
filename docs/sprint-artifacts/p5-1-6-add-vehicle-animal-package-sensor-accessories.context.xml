@@ -1,0 +1,273 @@
+<story-context id="p5-1-6" v="1.0">
+  <metadata>
+    <epicId>P5-1</epicId>
+    <storyId>P5-1.6</storyId>
+    <title>Add Vehicle/Animal/Package Sensor Accessories</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-14</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p5-1-6-add-vehicle-animal-package-sensor-accessories.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>HomeKit user with Apple Home app</asA>
+    <iWant>separate sensor accessories for vehicle, animal, and package detections</iWant>
+    <soThat>I can create distinct HomeKit automations for each detection type</soThat>
+    <tasks>
+      <task id="1" acs="1,2,3">Create Vehicle/Animal/Package Sensor Classes
+        - Create CameraVehicleSensor class following CameraMotionSensor pattern
+        - Create CameraAnimalSensor class following CameraMotionSensor pattern
+        - Create CameraPackageSensor class following CameraMotionSensor pattern
+        - All use HAP-python MotionSensor service (same as motion, different naming)
+        - Add factory functions for each sensor type
+      </task>
+      <task id="2" acs="1,2,3">Add Sensor Configuration Options
+        - Add DEFAULT_VEHICLE_RESET_SECONDS = 30 constant
+        - Add DEFAULT_ANIMAL_RESET_SECONDS = 30 constant
+        - Add DEFAULT_PACKAGE_RESET_SECONDS = 60 constant
+        - Add fields to HomekitConfig dataclass
+        - Load from environment variables
+      </task>
+      <task id="3" acs="1,2,3">Implement trigger Methods in HomeKit Service
+        - Add sensor storage dicts (_vehicle_sensors, _animal_sensors, _package_sensors)
+        - Add reset task dicts for each sensor type
+        - Implement trigger_vehicle(), trigger_animal(), trigger_package()
+        - Update stop() to cancel all reset timers
+        - Update get_status() with sensor counts
+      </task>
+      <task id="4" acs="1,2,3">Create Sensors in Bridge Startup
+        - Create vehicle sensor for each camera: f"{camera_name} Vehicle"
+        - Create animal sensor for each camera: f"{camera_name} Animal"
+        - Create package sensor for each camera: f"{camera_name} Package"
+        - Add all to bridge
+      </task>
+      <task id="5" acs="1,2,3,4">Integrate with Event Processor
+        - Add _trigger_homekit_vehicle() helper
+        - Add _trigger_homekit_animal() helper
+        - Add _trigger_homekit_package() helper
+        - Route by smart_detection_type
+      </task>
+      <task id="6" acs="1,2,3,4">Write Unit Tests
+        - Test all sensor class creation
+        - Test trigger methods
+        - Test auto-reset timeouts
+        - Test event routing
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1" title="Vehicle Detection Triggers Vehicle Sensor">
+      - CameraVehicleSensor class created using MotionSensor service
+      - Vehicle sensor named "{camera_name} Vehicle"
+      - Only triggers when smart_detection_type == 'vehicle'
+      - Auto-reset after 30 seconds
+    </criterion>
+    <criterion id="AC2" title="Animal Detection Triggers Animal Sensor">
+      - CameraAnimalSensor class created using MotionSensor service
+      - Animal sensor named "{camera_name} Animal"
+      - Only triggers when smart_detection_type == 'animal'
+      - Auto-reset after 30 seconds
+    </criterion>
+    <criterion id="AC3" title="Package Detection Triggers Package Sensor">
+      - CameraPackageSensor class created using MotionSensor service
+      - Package sensor named "{camera_name} Package"
+      - Only triggers when smart_detection_type == 'package'
+      - Auto-reset after 60 seconds (packages persist longer)
+    </criterion>
+    <criterion id="AC4" title="Each Detection Type Can Trigger Separate Automations">
+      - Each sensor can trigger HomeKit automations independently
+      - Motion sensor continues to trigger on ALL detection types
+      - Occupancy sensor continues to trigger only on person detection
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-p5-1.md" relevance="high">
+        P5-1.6 section: Vehicle/Animal/Package Sensors ACs
+        - Vehicle detection triggers motion sensor
+        - Animal detection triggers motion sensor
+        - Package detection triggers motion sensor
+        - Each can trigger separate HomeKit automations
+      </doc>
+      <doc path="docs/PRD-phase5.md" relevance="medium">
+        FR7: Vehicle/Animal/Package detection triggering motion sensors
+      </doc>
+      <doc path="docs/sprint-artifacts/p5-1-5-implement-occupancy-sensor-for-person-detection.md" relevance="high">
+        Previous story with patterns to follow:
+        - CameraOccupancySensor class pattern
+        - trigger_occupancy() method with auto-reset timer
+        - Event processor integration pattern
+        - Test file structure pattern
+      </doc>
+    </docs>
+    <code>
+      <file path="backend/app/services/homekit_accessories.py" action="modify">
+        Current: CameraMotionSensor (lines 21-111), CameraOccupancySensor (lines 148-274)
+        Add: CameraVehicleSensor, CameraAnimalSensor, CameraPackageSensor classes
+        Pattern: Follow CameraMotionSensor but with distinct model names
+        Factory functions: create_vehicle_sensor(), create_animal_sensor(), create_package_sensor()
+      </file>
+      <file path="backend/app/config/homekit.py" action="modify">
+        Current: DEFAULT_MOTION_RESET_SECONDS=30, DEFAULT_OCCUPANCY_TIMEOUT_SECONDS=300
+        Add: DEFAULT_VEHICLE_RESET_SECONDS=30, DEFAULT_ANIMAL_RESET_SECONDS=30, DEFAULT_PACKAGE_RESET_SECONDS=60
+        Add: vehicle_reset_seconds, animal_reset_seconds, package_reset_seconds to HomekitConfig
+        Add: Environment variable loading in get_homekit_config()
+      </file>
+      <file path="backend/app/services/homekit_service.py" action="modify">
+        Current: _sensors, _occupancy_sensors dicts, trigger_motion(), trigger_occupancy()
+        Add: _vehicle_sensors, _animal_sensors, _package_sensors dicts
+        Add: Reset task dicts for each sensor type
+        Add: trigger_vehicle(), trigger_animal(), trigger_package() methods
+        Add: Vehicle/animal/package sensor creation in start() method (lines 346-357 pattern)
+        Add: vehicle_count, animal_count, package_count to HomekitStatus
+        Update: stop() to cancel all reset timers
+        Update: get_status() with new sensor counts
+      </file>
+      <file path="backend/app/services/event_processor.py" action="modify">
+        Current: HomeKit motion trigger at line 1028, occupancy at line 1038
+        Add: _trigger_homekit_vehicle() after line 1501
+        Add: _trigger_homekit_animal() after _trigger_homekit_vehicle()
+        Add: _trigger_homekit_package() after _trigger_homekit_animal()
+        Add: Routing logic at ~line 1038:
+          - if smart_detection_type == 'vehicle': trigger_vehicle()
+          - if smart_detection_type == 'animal': trigger_animal()
+          - if smart_detection_type == 'package': trigger_package()
+      </file>
+      <file path="backend/tests/test_services/test_homekit_detection_sensors.py" action="create">
+        New test file following test_homekit_occupancy.py pattern
+        - TestHomekitVehicleSensor class
+        - TestHomekitAnimalSensor class
+        - TestHomekitPackageSensor class
+        - TestHomekitDetectionRouting class (event processor routing)
+        - TestHomekitDetectionConfig class
+      </file>
+    </code>
+    <dependencies>
+      <dep name="pyhap" version=">=4.9.0" type="python" exists="true">
+        HAP-python for HomeKit Accessory Protocol
+        MotionSensor service already used by CameraMotionSensor
+        No new services needed - just new accessory instances
+      </dep>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">
+      Follow CameraMotionSensor pattern for all new sensor classes
+      - Use MotionSensor service (not custom characteristics)
+      - Configure "MotionDetected" characteristic
+      - Provide trigger_* and clear_* methods
+      - Factory function pattern: create_*_sensor()
+    </constraint>
+    <constraint type="homekit">
+      HomeKit treats all MotionSensor services the same
+      Differentiation is by accessory NAME only
+      Users create automations targeting "{camera_name} Vehicle" vs "{camera_name} Animal"
+    </constraint>
+    <constraint type="event-routing">
+      Motion sensor MUST continue to trigger on ALL detection types (don't break existing behavior)
+      Occupancy sensor MUST continue to trigger only on person detection
+      New sensors trigger ONLY on their specific type
+    </constraint>
+    <constraint type="timer">
+      Each sensor type has independent reset timer
+      Rapid detections extend timeout (reset timer on each trigger)
+      Package has longer timeout (60s) since packages persist
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="CameraVehicleSensor">
+      class CameraVehicleSensor:
+          def __init__(driver, camera_id: str, name: str, manufacturer: str = "ArgusAI", model: str = "Vehicle Sensor")
+          @property accessory -> Accessory
+          @property motion_detected -> bool
+          def set_motion(detected: bool) -> None
+          def trigger_motion() -> None
+          def clear_motion() -> None
+    </interface>
+    <interface name="CameraAnimalSensor">
+      class CameraAnimalSensor:
+          def __init__(driver, camera_id: str, name: str, manufacturer: str = "ArgusAI", model: str = "Animal Sensor")
+          @property accessory -> Accessory
+          @property motion_detected -> bool
+          def set_motion(detected: bool) -> None
+          def trigger_motion() -> None
+          def clear_motion() -> None
+    </interface>
+    <interface name="CameraPackageSensor">
+      class CameraPackageSensor:
+          def __init__(driver, camera_id: str, name: str, manufacturer: str = "ArgusAI", model: str = "Package Sensor")
+          @property accessory -> Accessory
+          @property motion_detected -> bool
+          def set_motion(detected: bool) -> None
+          def trigger_motion() -> None
+          def clear_motion() -> None
+    </interface>
+    <interface name="HomekitService additions">
+      _vehicle_sensors: Dict[str, CameraVehicleSensor]
+      _animal_sensors: Dict[str, CameraAnimalSensor]
+      _package_sensors: Dict[str, CameraPackageSensor]
+      _vehicle_reset_tasks: Dict[str, asyncio.Task]
+      _animal_reset_tasks: Dict[str, asyncio.Task]
+      _package_reset_tasks: Dict[str, asyncio.Task]
+
+      def trigger_vehicle(camera_id: str, event_id: Optional[int] = None) -> bool
+      def trigger_animal(camera_id: str, event_id: Optional[int] = None) -> bool
+      def trigger_package(camera_id: str, event_id: Optional[int] = None) -> bool
+
+      @property vehicle_count -> int
+      @property animal_count -> int
+      @property package_count -> int
+    </interface>
+    <interface name="EventProcessor additions">
+      async def _trigger_homekit_vehicle(homekit_service, camera_id: str, event_id: str) -> None
+      async def _trigger_homekit_animal(homekit_service, camera_id: str, event_id: str) -> None
+      async def _trigger_homekit_package(homekit_service, camera_id: str, event_id: str) -> None
+    </interface>
+    <interface name="HomekitConfig additions">
+      vehicle_reset_seconds: int = 30
+      animal_reset_seconds: int = 30
+      package_reset_seconds: int = 60
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      - Follow test_homekit_occupancy.py pattern (19 tests)
+      - Use pytest with async support (pytest-asyncio)
+      - Mock sensor classes for unit tests (no real HAP driver)
+      - Test timer behavior with short timeouts (2-3 seconds)
+      - Test event routing with mock EventProcessor
+    </standards>
+    <locations>
+      <existing>
+        backend/tests/test_services/test_homekit_motion.py (17 tests)
+        backend/tests/test_services/test_homekit_occupancy.py (19 tests)
+        backend/tests/test_services/test_homekit_service.py
+        backend/tests/test_services/test_homekit_pairing.py
+      </existing>
+      <new>
+        backend/tests/test_services/test_homekit_detection_sensors.py
+      </new>
+    </locations>
+    <ideas>
+      <test>test_vehicle_sensor_triggers_on_vehicle_detection</test>
+      <test>test_vehicle_sensor_does_not_trigger_on_person_detection</test>
+      <test>test_vehicle_sensor_auto_resets_after_timeout</test>
+      <test>test_animal_sensor_triggers_on_animal_detection</test>
+      <test>test_animal_sensor_does_not_trigger_on_vehicle_detection</test>
+      <test>test_package_sensor_has_longer_timeout</test>
+      <test>test_motion_sensor_still_triggers_on_all_types</test>
+      <test>test_occupancy_sensor_only_triggers_on_person</test>
+      <test>test_event_processor_routes_vehicle_to_vehicle_sensor</test>
+      <test>test_event_processor_routes_animal_to_animal_sensor</test>
+      <test>test_event_processor_routes_package_to_package_sensor</test>
+      <test>test_all_sensors_created_in_bridge_startup</test>
+      <test>test_sensor_counts_in_homekit_status</test>
+      <test>test_config_loads_reset_timeouts_from_env</test>
+    </ideas>
+  </tests>
+</story-context>

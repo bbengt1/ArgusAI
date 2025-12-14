@@ -1,11 +1,12 @@
 """
-HomeKit service for Apple Home integration (Story P4-6.1, P4-6.2, P5-1.2, P5-1.3, P5-1.5)
+HomeKit service for Apple Home integration (Story P4-6.1, P4-6.2, P5-1.2, P5-1.3, P5-1.5, P5-1.6)
 
 Manages the HAP-python accessory server and exposes cameras as motion sensors.
 Story P4-6.2 adds motion event triggering with auto-reset timers.
 Story P5-1.2 adds proper HomeKit Setup URI for QR code pairing.
 Story P5-1.3 adds camera accessories with RTSP-to-SRTP streaming.
 Story P5-1.5 adds occupancy sensors for person-only detection with 5-minute timeout.
+Story P5-1.6 adds vehicle/animal/package sensors for detection-type-specific automations.
 """
 import asyncio
 import logging
@@ -44,6 +45,12 @@ from app.services.homekit_accessories import (
     create_motion_sensor,
     CameraOccupancySensor,
     create_occupancy_sensor,
+    CameraVehicleSensor,
+    create_vehicle_sensor,
+    CameraAnimalSensor,
+    create_animal_sensor,
+    CameraPackageSensor,
+    create_package_sensor,
 )
 from app.services.homekit_camera import (
     HomeKitCameraAccessory,
@@ -63,6 +70,9 @@ class HomekitStatus:
     accessory_count: int = 0
     camera_count: int = 0  # Story P5-1.3: Number of camera accessories
     occupancy_count: int = 0  # Story P5-1.5: Number of occupancy sensor accessories
+    vehicle_count: int = 0  # Story P5-1.6: Number of vehicle sensor accessories
+    animal_count: int = 0  # Story P5-1.6: Number of animal sensor accessories
+    package_count: int = 0  # Story P5-1.6: Number of package sensor accessories
     active_streams: int = 0  # Story P5-1.3: Currently active camera streams
     bridge_name: str = "ArgusAI"
     setup_code: Optional[str] = None
@@ -122,6 +132,14 @@ class HomekitService:
         self._occupancy_reset_tasks: Dict[str, asyncio.Task] = {}  # camera_id -> reset task
         self._occupancy_start_times: Dict[str, float] = {}  # camera_id -> start timestamp
 
+        # Story P5-1.6: Vehicle/Animal/Package sensors and reset timers
+        self._vehicle_sensors: Dict[str, CameraVehicleSensor] = {}
+        self._animal_sensors: Dict[str, CameraAnimalSensor] = {}
+        self._package_sensors: Dict[str, CameraPackageSensor] = {}
+        self._vehicle_reset_tasks: Dict[str, asyncio.Task] = {}
+        self._animal_reset_tasks: Dict[str, asyncio.Task] = {}
+        self._package_reset_tasks: Dict[str, asyncio.Task] = {}
+
     @property
     def is_available(self) -> bool:
         """Check if HAP-python is available."""
@@ -165,6 +183,21 @@ class HomekitService:
     def occupancy_count(self) -> int:
         """Get the number of registered occupancy sensor accessories (Story P5-1.5)."""
         return len(self._occupancy_sensors)
+
+    @property
+    def vehicle_count(self) -> int:
+        """Get the number of registered vehicle sensor accessories (Story P5-1.6)."""
+        return len(self._vehicle_sensors)
+
+    @property
+    def animal_count(self) -> int:
+        """Get the number of registered animal sensor accessories (Story P5-1.6)."""
+        return len(self._animal_sensors)
+
+    @property
+    def package_count(self) -> int:
+        """Get the number of registered package sensor accessories (Story P5-1.6)."""
+        return len(self._package_sensors)
 
     @property
     def pincode(self) -> str:
@@ -262,6 +295,9 @@ class HomekitService:
             accessory_count=self.accessory_count,
             camera_count=self.camera_count,  # Story P5-1.3
             occupancy_count=self.occupancy_count,  # Story P5-1.5
+            vehicle_count=self.vehicle_count,  # Story P5-1.6
+            animal_count=self.animal_count,  # Story P5-1.6
+            package_count=self.package_count,  # Story P5-1.6
             active_streams=HomeKitCameraAccessory.get_active_stream_count(),  # Story P5-1.3
             bridge_name=self.config.bridge_name,
             setup_code=self.pincode if not is_paired else None,
@@ -356,6 +392,40 @@ class HomekitService:
                     self._bridge.add_accessory(occupancy_sensor.accessory)
                     logger.info(f"Added HomeKit occupancy sensor for camera: {camera_name}")
 
+                # Story P5-1.6: Add vehicle/animal/package sensors for detection-type-specific automations
+                vehicle_sensor = create_vehicle_sensor(
+                    driver=self._driver,
+                    camera_id=camera_id,
+                    camera_name=f"{camera_name} Vehicle",
+                    manufacturer=self.config.manufacturer,
+                )
+                if vehicle_sensor:
+                    self._vehicle_sensors[camera_id] = vehicle_sensor
+                    self._bridge.add_accessory(vehicle_sensor.accessory)
+                    logger.info(f"Added HomeKit vehicle sensor for camera: {camera_name}")
+
+                animal_sensor = create_animal_sensor(
+                    driver=self._driver,
+                    camera_id=camera_id,
+                    camera_name=f"{camera_name} Animal",
+                    manufacturer=self.config.manufacturer,
+                )
+                if animal_sensor:
+                    self._animal_sensors[camera_id] = animal_sensor
+                    self._bridge.add_accessory(animal_sensor.accessory)
+                    logger.info(f"Added HomeKit animal sensor for camera: {camera_name}")
+
+                package_sensor = create_package_sensor(
+                    driver=self._driver,
+                    camera_id=camera_id,
+                    camera_name=f"{camera_name} Package",
+                    manufacturer=self.config.manufacturer,
+                )
+                if package_sensor:
+                    self._package_sensors[camera_id] = package_sensor
+                    self._bridge.add_accessory(package_sensor.accessory)
+                    logger.info(f"Added HomeKit package sensor for camera: {camera_name}")
+
                 # Story P5-1.3: Add camera accessory for streaming (only if ffmpeg available)
                 if self._ffmpeg_available:
                     rtsp_url = self._get_camera_rtsp_url(camera)
@@ -429,6 +499,17 @@ class HomekitService:
             self._occupancy_reset_tasks.clear()
             self._occupancy_start_times.clear()
 
+            # Story P5-1.6: Cancel all vehicle/animal/package reset timers
+            for camera_id in list(self._vehicle_reset_tasks.keys()):
+                self._cancel_vehicle_reset_timer(camera_id)
+            for camera_id in list(self._animal_reset_tasks.keys()):
+                self._cancel_animal_reset_timer(camera_id)
+            for camera_id in list(self._package_reset_tasks.keys()):
+                self._cancel_package_reset_timer(camera_id)
+            self._vehicle_reset_tasks.clear()
+            self._animal_reset_tasks.clear()
+            self._package_reset_tasks.clear()
+
             # Story P5-1.3: Clean up all camera streams
             HomeKitCameraAccessory.cleanup_all_streams()
 
@@ -443,6 +524,9 @@ class HomekitService:
             self._bridge = None
             self._sensors.clear()
             self._occupancy_sensors.clear()  # Story P5-1.5: Clear occupancy sensors
+            self._vehicle_sensors.clear()  # Story P5-1.6: Clear vehicle sensors
+            self._animal_sensors.clear()  # Story P5-1.6: Clear animal sensors
+            self._package_sensors.clear()  # Story P5-1.6: Clear package sensors
             self._cameras.clear()  # Story P5-1.3: Clear camera accessories
             self._camera_id_mapping.clear()
 
@@ -871,6 +955,238 @@ class HomekitService:
             self._occupancy_start_times.pop(camera_id, None)
 
         logger.debug("Cleared all HomeKit occupancy states")
+
+    # =========================================================================
+    # Story P5-1.6: Vehicle/Animal/Package Sensor Methods
+    # =========================================================================
+
+    def trigger_vehicle(self, camera_id: str, event_id: Optional[int] = None) -> bool:
+        """
+        Trigger vehicle detection for a camera (Story P5-1.6 AC1).
+
+        Sets motion_detected = True and starts auto-reset timer.
+
+        Args:
+            camera_id: Camera identifier (UUID or MAC address)
+            event_id: Optional event ID for logging
+
+        Returns:
+            True if vehicle detection triggered successfully
+        """
+        resolved_id = self._resolve_camera_id(camera_id)
+        sensor = self._vehicle_sensors.get(resolved_id)
+
+        if not sensor:
+            logger.debug(
+                f"No HomeKit vehicle sensor found for camera: {camera_id}",
+                extra={"camera_id": camera_id, "event_id": event_id}
+            )
+            return False
+
+        sensor.trigger_motion()
+
+        # Cancel existing reset timer if any
+        self._cancel_vehicle_reset_timer(resolved_id)
+
+        # Start new reset timer
+        self._start_vehicle_reset_timer(resolved_id)
+
+        logger.info(
+            f"HomeKit vehicle triggered for camera: {sensor.name}",
+            extra={"camera_id": camera_id, "event_id": event_id, "timeout": self.config.vehicle_reset_seconds}
+        )
+
+        return True
+
+    def _cancel_vehicle_reset_timer(self, camera_id: str) -> None:
+        """Cancel existing vehicle reset timer for a camera."""
+        if camera_id in self._vehicle_reset_tasks:
+            task = self._vehicle_reset_tasks.pop(camera_id)
+            if not task.done():
+                task.cancel()
+
+    def _start_vehicle_reset_timer(self, camera_id: str) -> None:
+        """Start a new vehicle reset timer for a camera."""
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(
+                self._vehicle_reset_coroutine(camera_id),
+                name=f"homekit_vehicle_reset_{camera_id}"
+            )
+            self._vehicle_reset_tasks[camera_id] = task
+        except RuntimeError:
+            logger.debug(f"Could not start vehicle reset timer - no running event loop")
+
+    async def _vehicle_reset_coroutine(self, camera_id: str) -> None:
+        """Coroutine that waits and then clears vehicle detection."""
+        try:
+            await asyncio.sleep(self.config.vehicle_reset_seconds)
+            sensor = self._vehicle_sensors.get(camera_id)
+            if sensor:
+                sensor.clear_motion()
+            self._vehicle_reset_tasks.pop(camera_id, None)
+            logger.debug(f"HomeKit vehicle reset for camera after {self.config.vehicle_reset_seconds}s")
+        except asyncio.CancelledError:
+            pass
+
+    def trigger_animal(self, camera_id: str, event_id: Optional[int] = None) -> bool:
+        """
+        Trigger animal detection for a camera (Story P5-1.6 AC2).
+
+        Sets motion_detected = True and starts auto-reset timer.
+
+        Args:
+            camera_id: Camera identifier (UUID or MAC address)
+            event_id: Optional event ID for logging
+
+        Returns:
+            True if animal detection triggered successfully
+        """
+        resolved_id = self._resolve_camera_id(camera_id)
+        sensor = self._animal_sensors.get(resolved_id)
+
+        if not sensor:
+            logger.debug(
+                f"No HomeKit animal sensor found for camera: {camera_id}",
+                extra={"camera_id": camera_id, "event_id": event_id}
+            )
+            return False
+
+        sensor.trigger_motion()
+
+        # Cancel existing reset timer if any
+        self._cancel_animal_reset_timer(resolved_id)
+
+        # Start new reset timer
+        self._start_animal_reset_timer(resolved_id)
+
+        logger.info(
+            f"HomeKit animal triggered for camera: {sensor.name}",
+            extra={"camera_id": camera_id, "event_id": event_id, "timeout": self.config.animal_reset_seconds}
+        )
+
+        return True
+
+    def _cancel_animal_reset_timer(self, camera_id: str) -> None:
+        """Cancel existing animal reset timer for a camera."""
+        if camera_id in self._animal_reset_tasks:
+            task = self._animal_reset_tasks.pop(camera_id)
+            if not task.done():
+                task.cancel()
+
+    def _start_animal_reset_timer(self, camera_id: str) -> None:
+        """Start a new animal reset timer for a camera."""
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(
+                self._animal_reset_coroutine(camera_id),
+                name=f"homekit_animal_reset_{camera_id}"
+            )
+            self._animal_reset_tasks[camera_id] = task
+        except RuntimeError:
+            logger.debug(f"Could not start animal reset timer - no running event loop")
+
+    async def _animal_reset_coroutine(self, camera_id: str) -> None:
+        """Coroutine that waits and then clears animal detection."""
+        try:
+            await asyncio.sleep(self.config.animal_reset_seconds)
+            sensor = self._animal_sensors.get(camera_id)
+            if sensor:
+                sensor.clear_motion()
+            self._animal_reset_tasks.pop(camera_id, None)
+            logger.debug(f"HomeKit animal reset for camera after {self.config.animal_reset_seconds}s")
+        except asyncio.CancelledError:
+            pass
+
+    def trigger_package(self, camera_id: str, event_id: Optional[int] = None) -> bool:
+        """
+        Trigger package detection for a camera (Story P5-1.6 AC3).
+
+        Sets motion_detected = True and starts auto-reset timer.
+        Package sensor has a longer timeout (60s) since packages persist.
+
+        Args:
+            camera_id: Camera identifier (UUID or MAC address)
+            event_id: Optional event ID for logging
+
+        Returns:
+            True if package detection triggered successfully
+        """
+        resolved_id = self._resolve_camera_id(camera_id)
+        sensor = self._package_sensors.get(resolved_id)
+
+        if not sensor:
+            logger.debug(
+                f"No HomeKit package sensor found for camera: {camera_id}",
+                extra={"camera_id": camera_id, "event_id": event_id}
+            )
+            return False
+
+        sensor.trigger_motion()
+
+        # Cancel existing reset timer if any
+        self._cancel_package_reset_timer(resolved_id)
+
+        # Start new reset timer
+        self._start_package_reset_timer(resolved_id)
+
+        logger.info(
+            f"HomeKit package triggered for camera: {sensor.name}",
+            extra={"camera_id": camera_id, "event_id": event_id, "timeout": self.config.package_reset_seconds}
+        )
+
+        return True
+
+    def _cancel_package_reset_timer(self, camera_id: str) -> None:
+        """Cancel existing package reset timer for a camera."""
+        if camera_id in self._package_reset_tasks:
+            task = self._package_reset_tasks.pop(camera_id)
+            if not task.done():
+                task.cancel()
+
+    def _start_package_reset_timer(self, camera_id: str) -> None:
+        """Start a new package reset timer for a camera."""
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(
+                self._package_reset_coroutine(camera_id),
+                name=f"homekit_package_reset_{camera_id}"
+            )
+            self._package_reset_tasks[camera_id] = task
+        except RuntimeError:
+            logger.debug(f"Could not start package reset timer - no running event loop")
+
+    async def _package_reset_coroutine(self, camera_id: str) -> None:
+        """Coroutine that waits and then clears package detection."""
+        try:
+            await asyncio.sleep(self.config.package_reset_seconds)
+            sensor = self._package_sensors.get(camera_id)
+            if sensor:
+                sensor.clear_motion()
+            self._package_reset_tasks.pop(camera_id, None)
+            logger.debug(f"HomeKit package reset for camera after {self.config.package_reset_seconds}s")
+        except asyncio.CancelledError:
+            pass
+
+    def clear_all_detection_sensors(self) -> None:
+        """Clear all vehicle/animal/package sensors (Story P5-1.6)."""
+        # Cancel all reset timers
+        for camera_id in list(self._vehicle_reset_tasks.keys()):
+            self._cancel_vehicle_reset_timer(camera_id)
+        for camera_id in list(self._animal_reset_tasks.keys()):
+            self._cancel_animal_reset_timer(camera_id)
+        for camera_id in list(self._package_reset_tasks.keys()):
+            self._cancel_package_reset_timer(camera_id)
+
+        # Clear all sensor states
+        for sensor in self._vehicle_sensors.values():
+            sensor.clear_motion()
+        for sensor in self._animal_sensors.values():
+            sensor.clear_motion()
+        for sensor in self._package_sensors.values():
+            sensor.clear_motion()
+
+        logger.debug("Cleared all HomeKit detection sensor states")
 
     async def reset_pairing(self) -> bool:
         """
