@@ -1,0 +1,184 @@
+<story-context id="p5-3-7-write-feedbackbuttons-component-tests" v="1.0">
+  <metadata>
+    <epicId>P5-3</epicId>
+    <storyId>7</storyId>
+    <title>Write FeedbackButtons Component Tests</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-15</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p5-3-7-write-feedbackbuttons-component-tests.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer maintaining ArgusAI</asA>
+    <iWant>comprehensive unit tests for the FeedbackButtons component</iWant>
+    <soThat>I can ensure the feedback UI works correctly and catch regressions early</soThat>
+    <tasks>
+      <task id="1">Create Test File with Setup - Create test file with vitest imports, mock useFeedback hooks, set up QueryClientProvider wrapper</task>
+      <task id="2">Implement Thumbs Up Tests - Test renders, aria-labels, click handler calls submitFeedback, green styling when selected, loading spinner, disabled state</task>
+      <task id="3">Implement Thumbs Down Tests - Test renders, aria-labels, click opens correction panel, red styling when selected, correction textarea, character limit (500), submit/skip/cancel actions</task>
+      <task id="4">Implement Existing Feedback Tests - Test renders with existingFeedback, calls updateFeedback, toggling between ratings</task>
+      <task id="5">Implement Accessibility Tests - Test aria-pressed, aria-label changes, correction textarea aria-label, cancel button aria-label</task>
+      <task id="6">Verify Tests Pass - Run npm run test locally, verify all tests pass, check coverage includes FeedbackButtons</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Tests for Thumbs Up Button Click Handler - Test renders with correct aria-label, click calls submitFeedback with 'helpful' rating, shows selected state (green styling), click prevented when isPending</criterion>
+    <criterion id="AC2">Tests for Thumbs Down Button Click Handler - Test renders with correct aria-label, click opens correction input panel, shows selected state (red styling), click prevented when isPending</criterion>
+    <criterion id="AC3">Tests for Loading State - Loading spinner shown during submission, buttons disabled during submission, 'Submitting...' text shown in correction submit button</criterion>
+    <criterion id="AC4">Tests for Already-Submitted State - Initializes with existing feedback rating, calls updateFeedback instead of submitFeedback, shows correct selected state based on existingFeedback</criterion>
+    <criterion id="AC5">Tests for Correction Input Functionality - Correction textarea appears, character limit enforced (500), character count display, submit sends correction, skip sends 'not_helpful' without correction, cancel closes panel</criterion>
+    <criterion id="AC6">Tests for ARIA Labels and Accessibility - Thumbs up/down have correct aria-labels, aria-pressed reflects state, correction textarea/cancel button have aria-labels</criterion>
+    <criterion id="AC7">All Tests Pass - Tests pass with npm run test locally and in CI</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-p5-3.md</path>
+        <title>Epic P5-3 Technical Specification</title>
+        <section>Story P5-3.7: Write FeedbackButtons Component Tests</section>
+        <snippet>Test file at frontend/__tests__/components/events/FeedbackButtons.test.tsx. Tests for thumbs up/down handlers, loading state, submitted state, ARIA labels.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase5.md</path>
+        <title>Phase 5 PRD</title>
+        <section>FR25</section>
+        <snippet>Write FeedbackButtons component tests covering all button states, loading state, disabled state, click handlers, and accessibility.</snippet>
+      </doc>
+      <doc>
+        <path>docs/backlog.md</path>
+        <title>Project Backlog</title>
+        <section>TD-002</section>
+        <snippet>FeedbackButtons Component Tests - Frontend tests for Story P4-5.1 component were deferred. Tests to write include thumbs up/down clicks, correction input, loading state, accessibility attributes.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase5.md</path>
+        <title>Phase 5 Epics</title>
+        <section>Epic P5-3: CI/CD Testing Infrastructure</section>
+        <snippet>Story P5-3.7 creates comprehensive unit tests for FeedbackButtons component with tests for all button states, loading, disabled, click handlers, accessibility.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <item>
+        <path>frontend/components/events/FeedbackButtons.tsx</path>
+        <kind>component</kind>
+        <symbol>FeedbackButtons</symbol>
+        <lines>1-223</lines>
+        <reason>Component under test - implements thumbs up/down feedback with correction input, uses useSubmitFeedback/useUpdateFeedback hooks</reason>
+      </item>
+      <item>
+        <path>frontend/hooks/useFeedback.ts</path>
+        <kind>hook</kind>
+        <symbol>useSubmitFeedback, useUpdateFeedback</symbol>
+        <lines>1-88</lines>
+        <reason>Hooks to mock - TanStack Query mutations for submitting and updating feedback</reason>
+      </item>
+      <item>
+        <path>frontend/__tests__/components/events/ConfidenceIndicator.test.tsx</path>
+        <kind>test</kind>
+        <symbol>ConfidenceIndicator tests</symbol>
+        <lines>1-397</lines>
+        <reason>Reference test file - shows test patterns with vitest, render, screen, userEvent, TooltipProvider wrapper</reason>
+      </item>
+      <item>
+        <path>frontend/__tests__/components/events/ReAnalyzeButton.test.tsx</path>
+        <kind>test</kind>
+        <symbol>ReAnalyzeButton tests</symbol>
+        <reason>Reference test file - shows patterns for testing buttons with loading states and click handlers</reason>
+      </item>
+      <item>
+        <path>frontend/__tests__/components/settings/MQTTSettings.test.tsx</path>
+        <kind>test</kind>
+        <symbol>MQTTSettings tests</symbol>
+        <reason>Reference test file - shows patterns for mocking hooks and testing form interactions</reason>
+      </item>
+      <item>
+        <path>frontend/types/event.ts</path>
+        <kind>type</kind>
+        <symbol>IEventFeedback</symbol>
+        <lines>37-45</lines>
+        <reason>Type definition for feedback - id, event_id, rating ('helpful'|'not_helpful'), correction, timestamps</reason>
+      </item>
+      <item>
+        <path>frontend/vitest.config.ts</path>
+        <kind>config</kind>
+        <symbol>vitest config</symbol>
+        <reason>Test configuration - jsdom environment, setupFiles, coverage with v8 provider</reason>
+      </item>
+      <item>
+        <path>frontend/vitest.setup.ts</path>
+        <kind>setup</kind>
+        <symbol>vitest setup</symbol>
+        <reason>Test setup - imports jest-dom matchers</reason>
+      </item>
+    </code>
+
+    <dependencies>
+      <frontend>
+        <package name="vitest" version="^2.1.8" purpose="test runner" />
+        <package name="@testing-library/react" version="^16.1.0" purpose="React component testing" />
+        <package name="@testing-library/jest-dom" version="^6.6.3" purpose="DOM matchers" />
+        <package name="@testing-library/user-event" version="^14.6.1" purpose="user interaction simulation" />
+        <package name="@vitest/coverage-v8" version="^4.0.15" purpose="coverage provider" />
+        <package name="jsdom" version="^25.0.1" purpose="browser environment" />
+        <package name="@tanstack/react-query" version="^5.62.7" purpose="QueryClient for mutations" />
+      </frontend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="testing">Follow existing test patterns from ConfidenceIndicator.test.tsx - use describe blocks per AC, vitest imports, @testing-library/react for rendering</constraint>
+    <constraint type="testing">Mock useFeedback hooks using vi.mock() - return mock mutate functions and isPending states</constraint>
+    <constraint type="testing">Wrap component in QueryClientProvider for TanStack Query context</constraint>
+    <constraint type="testing">Use userEvent for realistic interactions (clicks, typing)</constraint>
+    <constraint type="accessibility">Test all ARIA attributes: aria-label, aria-pressed on buttons</constraint>
+    <constraint type="structure">Place test file at frontend/__tests__/components/events/FeedbackButtons.test.tsx</constraint>
+    <constraint type="coverage">Tests should achieve good coverage of the 223-line component</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>FeedbackButtonsProps</name>
+      <kind>component props</kind>
+      <signature>{ eventId: string; existingFeedback?: IEventFeedback | null; onFeedbackChange?: (feedback: IEventFeedback) => void; className?: string }</signature>
+      <path>frontend/components/events/FeedbackButtons.tsx:19-28</path>
+    </interface>
+    <interface>
+      <name>useSubmitFeedback</name>
+      <kind>hook</kind>
+      <signature>() => { mutate: (params: { eventId: string; rating: 'helpful' | 'not_helpful'; correction?: string }, options?: { onSuccess, onError }) => void; isPending: boolean }</signature>
+      <path>frontend/hooks/useFeedback.ts:30-43</path>
+    </interface>
+    <interface>
+      <name>useUpdateFeedback</name>
+      <kind>hook</kind>
+      <signature>() => { mutate: (params: { eventId: string; rating?: 'helpful' | 'not_helpful'; correction?: string }, options?: { onSuccess, onError }) => void; isPending: boolean }</signature>
+      <path>frontend/hooks/useFeedback.ts:52-65</path>
+    </interface>
+    <interface>
+      <name>IEventFeedback</name>
+      <kind>type</kind>
+      <signature>{ id: string; event_id: string; camera_id?: string | null; rating: 'helpful' | 'not_helpful'; correction: string | null; created_at: string; updated_at?: string | null }</signature>
+      <path>frontend/types/event.ts:37-45</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Tests use vitest with @testing-library/react. Components are rendered with render(), queried with screen methods (getByRole, getByText, getByLabelText), and user interactions simulated with userEvent. Tests are organized in describe blocks matching acceptance criteria. Mocks are created with vi.mock() and vi.fn(). QueryClientProvider wraps components using TanStack Query.</standards>
+    <locations>
+      <location>frontend/__tests__/components/events/*.test.tsx</location>
+      <location>frontend/__tests__/hooks/*.test.ts</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Test getByRole('button', { name: /mark as helpful/i }) exists, click triggers mock submitFeedback with {eventId, rating: 'helpful'}, button has bg-green-600 class when rating is 'helpful'</idea>
+      <idea ac="AC2">Test getByRole('button', { name: /mark as not helpful/i }) exists, click shows correction panel (getByRole('textbox', { name: /correction/i })), button has bg-red-600 class when rating is 'not_helpful'</idea>
+      <idea ac="AC3">Test with mock isPending=true shows Loader2 spinner, buttons have disabled attribute, submit button shows 'Submitting...' text</idea>
+      <idea ac="AC4">Test with existingFeedback prop, verify updateFeedback called instead of submitFeedback when rating changes, verify button shows selected state</idea>
+      <idea ac="AC5">Test textarea maxLength=500, character count updates on type, submit button calls handleSubmitCorrection, skip button sends rating without correction, cancel button hides panel</idea>
+      <idea ac="AC6">Test aria-pressed attribute toggles, aria-label changes between 'Mark as' and 'Marked as', textarea has aria-label='Correction text', cancel has aria-label='Cancel correction'</idea>
+    </ideas>
+  </tests>
+</story-context>
