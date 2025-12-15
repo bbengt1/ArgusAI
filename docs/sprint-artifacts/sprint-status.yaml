@@ -310,7 +310,7 @@ development_status:
   # Epic P5-2: ONVIF Camera Discovery
   epic-p5-2: contexted
   p5-2-1-implement-onvif-ws-discovery-scanner: done
-  p5-2-2-parse-onvif-device-info-and-capabilities: dev-complete
+  p5-2-2-parse-onvif-device-info-and-capabilities: done
   p5-2-3-build-camera-discovery-ui-with-add-action: backlog
   p5-2-4-implement-test-connection-endpoint: backlog
   epic-p5-2-retrospective: optional

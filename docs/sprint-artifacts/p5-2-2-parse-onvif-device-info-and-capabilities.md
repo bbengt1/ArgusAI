@@ -1,7 +1,7 @@
 # Story P5-2.2: Parse ONVIF Device Info and Capabilities
 
 **Epic:** P5-2 ONVIF Camera Discovery
-**Status:** dev-complete
+**Status:** done
 **Created:** 2025-12-14
 **Story Key:** p5-2-2-parse-onvif-device-info-and-capabilities
 
