@@ -1,0 +1,121 @@
+<story-context id="p5-3-6-configure-test-coverage-reporting" v="1.0">
+  <metadata>
+    <epicId>P5-3</epicId>
+    <storyId>P5-3.6</storyId>
+    <title>Configure Test Coverage Reporting</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-15</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p5-3-6-configure-test-coverage-reporting.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer contributing to ArgusAI</asA>
+    <iWant>test coverage reports generated and displayed during CI</iWant>
+    <soThat>I can understand code coverage metrics and identify untested code areas</soThat>
+    <tasks>
+      <task id="1">Add Backend Coverage to CI (AC: 1)
+        <subtask>Verify pytest-cov is in requirements.txt</subtask>
+        <subtask>Update pytest command to include --cov=app --cov-report=xml --cov-report=term</subtask>
+        <subtask>Verify coverage.xml is generated</subtask>
+      </task>
+      <task id="2">Add Frontend Coverage to CI (AC: 2)
+        <subtask>Verify @vitest/coverage-v8 in devDependencies</subtask>
+        <subtask>Update test:run to npm run test:coverage or add --coverage flag</subtask>
+        <subtask>Verify lcov report generated at frontend/coverage/lcov.info</subtask>
+      </task>
+      <task id="3">Configure Codecov Upload (AC: 3)
+        <subtask>Add codecov/codecov-action@v4 step after backend tests</subtask>
+        <subtask>Configure to upload backend/coverage.xml</subtask>
+        <subtask>Add codecov/codecov-action@v4 step after frontend tests</subtask>
+        <subtask>Configure to upload frontend/coverage/lcov.info</subtask>
+      </task>
+      <task id="4">Verify Coverage Output (AC: 4)
+        <subtask>Run CI pipeline and verify coverage percentages in logs</subtask>
+        <subtask>Verify Codecov receives both reports</subtask>
+        <subtask>Check Codecov dashboard shows project coverage</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC1">Backend coverage generated with pytest-cov (XML format)</criterion>
+    <criterion id="AC2">Frontend coverage generated with @vitest/coverage-v8 (lcov format)</criterion>
+    <criterion id="AC3">Coverage uploaded to Codecov (or displayed in CI output)</criterion>
+    <criterion id="AC4">Coverage percentages visible in PR or CI logs</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/PRD-phase5.md" title="Phase 5 PRD" section="FR24" snippet="Add coverage collection and reporting to CI. Backend coverage with pytest-cov, frontend coverage with vitest." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-p5-3.md" title="Epic P5-3 Tech Spec" section="Acceptance Criteria (P5-3.6)" snippet="Backend coverage generated with pytest-cov (XML format). Frontend coverage generated with vitest. Coverage reports uploaded to Codecov." />
+      <doc path="docs/sprint-artifacts/tech-spec-epic-p5-3.md" title="Epic P5-3 Tech Spec" section="Dependencies and Integrations" snippet="codecov/codecov-action@v4 for coverage upload. pytest-cov>=4.0.0 for backend. @vitest/coverage-v8 for frontend." />
+      <doc path="docs/sprint-artifacts/p5-3-5-add-eslint-and-typescript-checks-to-ci.md" title="Previous Story P5-3.5" section="Dev Agent Record" snippet="CI workflow structure: npm ci → lint → tsc → test. Step order follows fail-fast principle." />
+    </docs>
+    <code>
+      <file path=".github/workflows/ci.yml" kind="config" symbol="backend-tests job" lines="10-34" reason="Backend pytest execution - needs --cov flags added" />
+      <file path=".github/workflows/ci.yml" kind="config" symbol="frontend-tests job" lines="36-62" reason="Frontend test execution - needs coverage flags and Codecov upload" />
+      <file path="frontend/vitest.config.ts" kind="config" symbol="coverage config" lines="13-22" reason="Existing coverage configuration with v8 provider" />
+      <file path="frontend/package.json" kind="manifest" symbol="test:coverage script" lines="12-13" reason="Existing npm run test:coverage script" />
+      <file path="backend/requirements.txt" kind="manifest" symbol="pytest-cov" lines="67" reason="pytest-cov==4.1.0 already installed" />
+      <file path="frontend/vitest.setup.tsx" kind="test-setup" symbol="test setup" lines="1-75" reason="Vitest setup file with jest-dom matchers and mocks" />
+    </code>
+    <dependencies>
+      <backend>
+        <package name="pytest-cov" version="4.1.0" purpose="Coverage collection for pytest" />
+      </backend>
+      <frontend>
+        <package name="@vitest/coverage-v8" version="^4.0.15" purpose="Coverage provider for vitest" />
+        <package name="vitest" version="^4.0.15" purpose="Test runner with coverage support" />
+      </frontend>
+      <ci>
+        <action name="codecov/codecov-action" version="v4" purpose="Upload coverage reports to Codecov" />
+        <action name="actions/checkout" version="v4" purpose="Checkout repository" />
+        <action name="actions/setup-python" version="v5" purpose="Setup Python with caching" />
+        <action name="actions/setup-node" version="v4" purpose="Setup Node.js with caching" />
+      </ci>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="ci">Follow fail-fast principle: faster checks run first (lint → tsc → test)</constraint>
+    <constraint type="ci">Use CODECOV_TOKEN secret if repository is private (optional for public repos)</constraint>
+    <constraint type="coverage">Backend coverage should target 'app' directory, not tests</constraint>
+    <constraint type="coverage">Generate XML format for backend (Codecov compatible)</constraint>
+    <constraint type="coverage">Generate lcov format for frontend (Codecov compatible)</constraint>
+    <constraint type="workflow">Preserve existing CI workflow structure and job parallelism</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="pytest coverage flags" kind="cli">
+      <signature>pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=term</signature>
+      <path>backend/</path>
+      <outputs>coverage.xml, terminal output</outputs>
+    </interface>
+    <interface name="vitest coverage" kind="npm-script">
+      <signature>npm run test:coverage (or vitest run --coverage)</signature>
+      <path>frontend/</path>
+      <outputs>coverage/lcov.info, coverage/coverage-summary.json</outputs>
+    </interface>
+    <interface name="codecov-action" kind="github-action">
+      <signature>codecov/codecov-action@v4</signature>
+      <inputs>files (coverage file paths), token (optional for public)</inputs>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      CI infrastructure story - no unit tests required. Validation through CI pipeline execution and Codecov integration verification.
+    </standards>
+    <locations>
+      <location>backend/tests/</location>
+      <location>frontend/__tests__/</location>
+    </locations>
+    <ideas>
+      <idea ac="AC1">Verify coverage.xml is generated after pytest run</idea>
+      <idea ac="AC2">Verify coverage/lcov.info is generated after vitest run</idea>
+      <idea ac="AC3">Create test PR and verify Codecov receives uploads</idea>
+      <idea ac="AC4">Check CI logs show coverage percentage summary</idea>
+    </ideas>
+  </tests>
+</story-context>
