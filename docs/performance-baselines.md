@@ -336,4 +336,120 @@ ArgusAI exposes the following system metrics at `/metrics`:
 
 ---
 
-*Document generated as part of Story P5-4.1 - Performance baseline documentation for ArgusAI deployment planning.*
+## Detection Accuracy Validation
+
+**Story:** P5-4.3 - Validate Motion Detection Accuracy Metrics
+**Date:** 2025-12-16
+
+### Target Metrics (from PRD-phase5.md FR30)
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| Person Detection Rate | >90% | True positive rate for person clips |
+| Vehicle Detection Rate | >85% | True positive rate for vehicle clips |
+| Animal Detection Rate | >80% | True positive rate for animal clips |
+| Package Detection Rate | >75% | True positive rate for package clips |
+| False Positive Rate | <20% | False triggers on non-detection clips |
+
+### Validation Methodology
+
+**Test Infrastructure:**
+- Test footage organized in `backend/tests/fixtures/footage/`
+- Ground truth labels defined in `manifest.yaml`
+- Validation script: `backend/tests/test_validation/test_detection_accuracy.py`
+
+**Methodology:**
+1. Process each test clip through motion detection pipeline (MOG2 algorithm)
+2. Allow 30 frames (1 second) for background model warmup
+3. Compare detected motion against ground truth labels
+4. Calculate accuracy metrics with 95% confidence intervals
+
+**Classification Logic:**
+- **True Positive (TP):** Expected detection AND motion detected
+- **False Negative (FN):** Expected detection BUT no motion detected
+- **False Positive (FP):** Expected no detection BUT motion detected
+- **True Negative (TN):** Expected no detection AND no motion detected
+
+**Metrics Calculation:**
+```
+Detection Rate = TP / (TP + FN)
+False Positive Rate = FP / (FP + TN)
+Precision = TP / (TP + FP)
+Specificity = TN / (TN + FP)
+```
+
+**Confidence Intervals:**
+- Using Clopper-Pearson (exact) binomial confidence interval at 95%
+- Provides bounds for statistical significance given sample size
+
+### Current Results
+
+> **Note:** Results below are placeholders. Actual validation requires test footage.
+> Add video files to `backend/tests/fixtures/footage/` and run:
+> ```bash
+> cd backend
+> pytest tests/test_validation/test_detection_accuracy.py -v -m validation
+> ```
+
+| Detection Type | Clips | Detection Rate | 95% CI | Target | Status |
+|----------------|-------|----------------|--------|--------|--------|
+| Person | 0 | - | - | >90% | Pending |
+| Vehicle | 0 | - | - | >85% | Pending |
+| Animal | 0 | - | - | >80% | Pending |
+| Package | 0 | - | - | >75% | Pending |
+| False Positive | 0 | - | - | <20% | Pending |
+
+**Overall Metrics:**
+- Total clips processed: 0
+- Overall detection rate: -
+- Overall false positive rate: -
+
+### Test Footage Requirements
+
+To run validation tests, add video clips to `backend/tests/fixtures/footage/`:
+
+| Category | Minimum Clips | Scenarios |
+|----------|---------------|-----------|
+| Person | 3-5 | Walking, running, standing (day/night) |
+| Vehicle | 2-3 | Car arriving, truck at curb |
+| Animal | 2-3 | Dog, cat (day/night) |
+| Package | 1-2 | Delivery person placing package |
+| False Positive | 3-5 | Trees swaying, shadows, rain |
+
+**File Naming:** `{type}_{description}_{lighting}_{seq}.mp4`
+
+**Update Manifest:** Add entries to `manifest.yaml` for each clip.
+
+### Areas for Improvement
+
+Based on validation results and algorithm characteristics:
+
+1. **Low-Light Performance:** KNN algorithm may perform better than MOG2 in night/IR conditions
+2. **Shadow Rejection:** Consider `detectShadows=True` for MOG2 in high-contrast scenes
+3. **Small Object Detection:** May need lower `min_contour_area` for distant subjects
+4. **Motion Blur:** Fast-moving subjects may require higher frame rates (30 FPS vs 15 FPS)
+
+### Running Validation Tests
+
+```bash
+# Run all validation tests
+cd backend
+pytest tests/test_validation/ -v -m validation
+
+# Run with detailed output
+pytest tests/test_validation/test_detection_accuracy.py -v -s
+
+# Generate report only (skip assertions)
+pytest tests/test_validation/test_detection_accuracy.py::TestReportGeneration -v
+```
+
+### NFR Compliance
+
+| NFR | Target | Current Status | Notes |
+|-----|--------|----------------|-------|
+| FR29 | Real camera validation | **Infrastructure Ready** | Awaiting footage |
+| FR30 | >90% person, <20% FP | **Pending** | Test framework created |
+
+---
+
+*Document generated as part of Story P5-4.1 (Performance) and P5-4.3 (Accuracy Validation) for ArgusAI deployment planning.*

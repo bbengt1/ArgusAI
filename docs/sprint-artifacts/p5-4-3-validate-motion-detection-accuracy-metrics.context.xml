@@ -1,0 +1,221 @@
+<story-context id="p5-4-3" v="1.0">
+  <metadata>
+    <epicId>P5-4</epicId>
+    <storyId>P5-4.3</storyId>
+    <title>Validate Motion Detection Accuracy Metrics</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-16</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p5-4-3-validate-motion-detection-accuracy-metrics.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>run detection tests and measure accuracy against targets</iWant>
+    <soThat>detection quality is validated and documented for users</soThat>
+    <tasks>
+      - Task 1: Create validation test script (AC: 1, 2)
+        - 1.1: Create test_detection_accuracy.py in backend/tests/test_validation/
+        - 1.2: Implement fixture loader for manifest.yaml and video clips
+        - 1.3: Implement detection pipeline runner (process each clip frame-by-frame)
+        - 1.4: Implement ground truth comparison logic
+      - Task 2: Implement accuracy metrics calculation (AC: 3, 4, 7)
+        - 2.1: Calculate true positive, false positive, false negative counts
+        - 2.2: Calculate detection rate for each object type (person, vehicle, animal, package)
+        - 2.3: Calculate false positive rate
+        - 2.4: Add confidence interval calculation (Binomial CI)
+        - 2.5: Generate metrics summary report
+      - Task 3: Run validation and document results (AC: 5, 6)
+        - 3.1: Run validation script against all available test footage
+        - 3.2: Update docs/performance-baselines.md with accuracy metrics section
+        - 3.3: Document test methodology in results
+        - 3.4: Identify and document areas for improvement
+      - Task 4: Add CI integration for validation tests (optional)
+        - 4.1: Create pytest marker for validation tests
+        - 4.2: Ensure tests skip gracefully if footage unavailable
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    1. Detection pipeline run on all test footage
+    2. Results compared against ground truth (manifest.yaml)
+    3. Person detection rate calculated (target: >90%)
+    4. False positive rate calculated (target: <20%)
+    5. Results documented with methodology
+    6. Areas for improvement identified and noted
+    7. Confidence intervals or sample sizes documented
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      - docs/PRD-phase5.md - FR27-FR30 (Quality & Performance Validation requirements)
+      - docs/sprint-artifacts/tech-spec-epic-p5-4.md - Epic technical specification
+      - docs/performance-baselines.md - Existing performance doc to update with accuracy metrics
+      - backend/tests/fixtures/footage/README.md - Test footage documentation
+      - backend/tests/fixtures/footage/manifest.yaml - Ground truth labels
+    </docs>
+    <code>
+      - backend/app/services/motion_detection_service.py - Motion detection singleton service
+      - backend/app/services/motion_detector.py - MOG2/KNN/frame_diff algorithms
+      - backend/app/services/ai_service.py - AI provider for object classification
+      - backend/tests/fixtures/footage/ - Test video clips directory structure
+    </code>
+    <dependencies>
+      - opencv-python (cv2) - Video processing and frame extraction
+      - numpy - Array operations for frame handling
+      - PyYAML - Loading manifest.yaml ground truth
+      - scipy - Binomial confidence interval calculation (scipy.stats)
+      - pytest - Test framework with markers
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    - Test footage may not be committed to git (large files)
+    - Tests must skip gracefully with informative message if footage unavailable
+    - AI service calls may be mocked in unit tests to avoid API costs
+    - Validation is documentation-focused, not blocking CI by default
+    - Target metrics are aspirational; document actual results even if below target
+    - Focus on motion detection + AI classification pipeline, not just raw motion
+  </constraints>
+
+  <interfaces>
+    <interface name="MotionDetectionService">
+      <file>backend/app/services/motion_detection_service.py</file>
+      <method>process_frame(camera_id, frame, camera, db) -> Optional[MotionEvent]</method>
+      <notes>Singleton service managing per-camera detectors with cooldown</notes>
+    </interface>
+    <interface name="MotionDetector">
+      <file>backend/app/services/motion_detector.py</file>
+      <method>detect_motion(frame, sensitivity) -> (bool, float, bbox)</method>
+      <notes>Returns (motion_detected, confidence, bounding_box)</notes>
+    </interface>
+    <interface name="AIService">
+      <file>backend/app/services/ai_service.py</file>
+      <method>describe_image(image_data, ...) -> str</method>
+      <notes>Multi-provider AI for object classification (OpenAI, Grok, Claude, Gemini)</notes>
+    </interface>
+    <interface name="ManifestSchema">
+      <file>backend/tests/fixtures/footage/manifest.yaml</file>
+      <schema>
+        clips:
+          - filename: string
+            detection_type: person|vehicle|animal|package|false_positive
+            expected_objects: integer
+            timestamp_ranges: [{start, end, objects}]
+            lighting: day|night|dusk
+            camera_angle: string
+            difficulty: easy|medium|hard
+      </schema>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      - Use pytest with @pytest.mark.validation marker for validation tests
+      - Tests skip with pytest.skip() if footage directory is empty
+      - Output results to console with summary table
+      - Optionally export results to JSON for CI integration
+      - Mock AI service in fast unit tests; real AI optional in integration
+    </standards>
+    <locations>
+      - backend/tests/test_validation/test_detection_accuracy.py - New validation tests
+      - backend/tests/test_validation/__init__.py - Package init
+      - backend/tests/conftest.py - Shared fixtures (update if needed)
+    </locations>
+    <ideas>
+      - test_fixture_manifest_valid - Validate manifest.yaml schema
+      - test_person_detection_rate - Run person clips, verify >90%
+      - test_false_positive_rate - Run false_positive clips, verify <20%
+      - test_detection_rate_by_type - Per-type detection rates
+      - test_detection_rate_by_difficulty - Easy/medium/hard breakdown
+      - test_generates_metrics_report - Verify report generation
+    </ideas>
+  </tests>
+
+  <existingPatterns>
+    <pattern name="Pytest Fixtures">
+      Located in backend/tests/conftest.py
+      Use db_session fixture for database tests
+      Use test_camera fixture for camera-related tests
+    </pattern>
+    <pattern name="Test Organization">
+      Tests mirror source structure: tests/test_services/, tests/test_api/
+      New directory: tests/test_validation/ for accuracy validation
+    </pattern>
+    <pattern name="Skip When Missing">
+      Example pattern from existing tests:
+      ```python
+      @pytest.fixture
+      def footage_manifest():
+          manifest_path = Path(__file__).parent.parent / "fixtures" / "footage" / "manifest.yaml"
+          if not manifest_path.exists():
+              pytest.skip("Test footage manifest not found")
+          with open(manifest_path) as f:
+              return yaml.safe_load(f)
+      ```
+    </pattern>
+  </existingPatterns>
+
+  <implementationNotes>
+    <note priority="high">
+      Motion detection (motion_detector.py) only detects "something moved".
+      Object classification (person, vehicle, etc.) requires AI service.
+      For full pipeline validation, need to integrate both components.
+    </note>
+    <note priority="high">
+      Test clips may not exist yet - tests must skip gracefully.
+      Story P5-4.2 set up the directory structure but actual footage
+      may need to be added separately (user-provided or placeholder).
+    </note>
+    <note priority="medium">
+      Confidence intervals use Clopper-Pearson (exact) binomial CI.
+      scipy.stats.binom.ppf() provides this calculation.
+      If scipy not installed, can fall back to normal approximation.
+    </note>
+    <note priority="medium">
+      Results should be appended to performance-baselines.md as new section:
+      "## Detection Accuracy Validation" with tables and methodology.
+    </note>
+  </implementationNotes>
+
+  <codeSnippets>
+    <snippet name="Load Manifest">
+```python
+import yaml
+from pathlib import Path
+
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "footage"
+
+def load_manifest():
+    manifest_path = FIXTURES_DIR / "manifest.yaml"
+    if not manifest_path.exists():
+        return None
+    with open(manifest_path) as f:
+        return yaml.safe_load(f)
+```
+    </snippet>
+    <snippet name="Calculate Detection Rate">
+```python
+def calculate_detection_rate(true_positives: int, false_negatives: int) -> float:
+    total = true_positives + false_negatives
+    if total == 0:
+        return 0.0
+    return true_positives / total
+```
+    </snippet>
+    <snippet name="Binomial Confidence Interval">
+```python
+from scipy.stats import binom
+
+def binomial_ci(successes: int, trials: int, confidence: float = 0.95):
+    """Calculate Clopper-Pearson exact binomial confidence interval."""
+    if trials == 0:
+        return (0.0, 1.0)
+    alpha = 1 - confidence
+    lower = binom.ppf(alpha / 2, trials, successes / trials) / trials if successes > 0 else 0.0
+    upper = binom.ppf(1 - alpha / 2, trials, successes / trials) / trials if successes < trials else 1.0
+    return (lower, upper)
+```
+    </snippet>
+  </codeSnippets>
+</story-context>
