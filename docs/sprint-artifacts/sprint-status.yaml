@@ -339,7 +339,7 @@ development_status:
   p5-5-2-implement-keyboard-navigation-for-core-workflows: done
   p5-5-3-create-detection-zone-preset-templates: done
   p5-5-4-implement-multiple-schedule-time-ranges: done
-  p5-5-5-update-readme-with-frontend-setup-docs: backlog
+  p5-5-5-update-readme-with-frontend-setup-docs: done
   epic-p5-5-retrospective: optional
 
   # Epic P5-6: MQTT Enhancements
