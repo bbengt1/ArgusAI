@@ -61,6 +61,21 @@ class IntersectionObserverMock {
 
 global.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
 
+// Mock pointer capture methods for Radix UI components (Select, etc.)
+// These methods are not available in jsdom but are used by Radix UI
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = vi.fn(() => false)
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = vi.fn()
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = vi.fn()
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn()
+}
+
 // Suppress console errors during tests (optional - can be removed if you want to see errors)
 // const originalError = console.error
 // beforeAll(() => {

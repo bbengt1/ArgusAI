@@ -26,15 +26,15 @@ import tempfile
 import os
 
 # Use file-based SQLite for testing
-test_db_fd, test_db_path = tempfile.mkstemp(suffix=".db")
-os.close(test_db_fd)
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
 
-TEST_DATABASE_URL = f"sqlite:///{test_db_path}"
+TEST_DATABASE_URL = f"sqlite:///{_test_db_path}"
 engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
+def _override_get_db():
     """Override database dependency for testing"""
     db = TestingSessionLocal()
     try:
@@ -47,39 +47,58 @@ def override_get_db():
         db.close()
 
 
-# Override database dependency
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(scope="module", autouse=True)
+def setup_module_database():
+    """Set up database and override at module start, teardown at end."""
+    # Create tables
+    Base.metadata.create_all(bind=engine)
 
-# Create tables once
-Base.metadata.create_all(bind=engine)
+    # Create FTS5 virtual table for testing
+    with engine.connect() as conn:
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS events_fts
+            USING fts5(
+                id UNINDEXED,
+                description,
+                content='events',
+                content_rowid='rowid'
+            )
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS events_ai AFTER INSERT ON events BEGIN
+                INSERT INTO events_fts(rowid, id, description)
+                VALUES (new.rowid, new.id, new.description);
+            END
+        """))
+        conn.commit()
 
-# Create FTS5 virtual table for testing
-with engine.connect() as conn:
-    conn.execute(text("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS events_fts
-        USING fts5(
-            id UNINDEXED,
-            description,
-            content='events',
-            content_rowid='rowid'
-        )
-    """))
-    conn.execute(text("""
-        CREATE TRIGGER IF NOT EXISTS events_ai AFTER INSERT ON events BEGIN
-            INSERT INTO events_fts(rowid, id, description)
-            VALUES (new.rowid, new.id, new.description);
-        END
-    """))
-    conn.commit()
+    # Apply the override
+    app.dependency_overrides[get_db] = _override_get_db
+    yield
+    # Cleanup
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
 
-# Create test client
-client = TestClient(app)
+
+# Module-level client to be initialized by fixture
+client = None
+
+
+@pytest.fixture(scope="module", autouse=True)
+def initialize_client(setup_module_database):
+    """Initialize module-level client after database is set up"""
+    global client
+    client = TestClient(app)
+    yield
+    client = None
 
 
 # ==================== Fixtures ====================
 
 @pytest.fixture(scope="function")
-def db_session():
+def db_session(setup_module_database):
     """Create a clean database session for each test"""
     db = TestingSessionLocal()
     # Clean up any existing data

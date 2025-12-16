@@ -2,6 +2,8 @@
 import pytest
 import json
 import base64
+import tempfile
+import os
 from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -13,20 +15,16 @@ from app.models.event import Event
 from app.models.camera import Camera
 
 
-# Create test database (file-based to avoid threading issues)
-import tempfile
-import os
+# Create module-level temp database
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
 
-# Use file-based SQLite for testing
-test_db_fd, test_db_path = tempfile.mkstemp(suffix=".db")
-os.close(test_db_fd)
-
-TEST_DATABASE_URL = f"sqlite:///{test_db_path}"
+TEST_DATABASE_URL = f"sqlite:///{_test_db_path}"
 engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
+def _override_get_db():
     """Override database dependency for testing"""
     db = TestingSessionLocal()
     try:
@@ -39,44 +37,54 @@ def override_get_db():
         db.close()
 
 
-# Override database dependency
-app.dependency_overrides[get_db] = override_get_db
+def _setup_fts5_tables(eng):
+    """Set up FTS5 virtual table for full-text search testing"""
+    with eng.connect() as conn:
+        conn.execute(text("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS events_fts
+            USING fts5(
+                id UNINDEXED,
+                description,
+                content='events',
+                content_rowid='rowid'
+            )
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS events_ai AFTER INSERT ON events BEGIN
+                INSERT INTO events_fts(rowid, id, description)
+                VALUES (new.rowid, new.id, new.description);
+            END
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS events_au AFTER UPDATE ON events BEGIN
+                UPDATE events_fts
+                SET description = new.description
+                WHERE rowid = old.rowid;
+            END
+        """))
+        conn.execute(text("""
+            CREATE TRIGGER IF NOT EXISTS events_ad AFTER DELETE ON events BEGIN
+                DELETE FROM events_fts WHERE rowid = old.rowid;
+            END
+        """))
+        conn.commit()
 
-# Create tables once
-Base.metadata.create_all(bind=engine)
 
-# Create FTS5 virtual table for testing
-with engine.connect() as conn:
-    conn.execute(text("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS events_fts
-        USING fts5(
-            id UNINDEXED,
-            description,
-            content='events',
-            content_rowid='rowid'
-        )
-    """))
-    conn.execute(text("""
-        CREATE TRIGGER IF NOT EXISTS events_ai AFTER INSERT ON events BEGIN
-            INSERT INTO events_fts(rowid, id, description)
-            VALUES (new.rowid, new.id, new.description);
-        END
-    """))
-    conn.execute(text("""
-        CREATE TRIGGER IF NOT EXISTS events_au AFTER UPDATE ON events BEGIN
-            UPDATE events_fts
-            SET description = new.description
-            WHERE rowid = old.rowid;
-        END
-    """))
-    conn.execute(text("""
-        CREATE TRIGGER IF NOT EXISTS events_ad AFTER DELETE ON events BEGIN
-            DELETE FROM events_fts WHERE rowid = old.rowid;
-        END
-    """))
-    conn.commit()
+@pytest.fixture(scope="module", autouse=True)
+def setup_module_database():
+    """Set up database at module level and clean up after all tests"""
+    # Create tables
+    Base.metadata.create_all(bind=engine)
+    # Set up FTS5
+    _setup_fts5_tables(engine)
+    # Apply override for all tests in this module
+    app.dependency_overrides[get_db] = _override_get_db
+    yield
+    # Drop tables after all tests in module complete
+    Base.metadata.drop_all(bind=engine)
 
-# Create test client
+
+# Create test client (module-level)
 client = TestClient(app)
 
 
@@ -85,6 +93,10 @@ def test_camera():
     """Create a test camera for event tests"""
     db = TestingSessionLocal()
     try:
+        # Clean up any existing cameras first
+        db.query(Camera).delete()
+        db.commit()
+
         camera = Camera(
             id="test-camera-123",
             name="Test Camera",
@@ -106,8 +118,15 @@ def test_camera():
 @pytest.fixture(scope="function", autouse=True)
 def cleanup_database():
     """Clean up database between tests"""
+    # Clean up BEFORE the test to ensure isolation
+    db = TestingSessionLocal()
+    try:
+        db.query(Event).delete()
+        db.commit()
+    finally:
+        db.close()
     yield
-    # Delete all events after each test
+    # Clean up after each test
     db = TestingSessionLocal()
     try:
         db.query(Event).delete()
@@ -162,7 +181,8 @@ def test_create_event_with_thumbnail_base64(test_camera):
     assert response.status_code == 201
     data = response.json()
     assert data["thumbnail_path"] is not None
-    assert "thumbnails/" in data["thumbnail_path"]
+    # Thumbnail path now uses date-based format: YYYY-MM-DD/event_<uuid>.jpg
+    assert ".jpg" in data["thumbnail_path"] or "thumbnails/" in data["thumbnail_path"]
 
 
 def test_create_event_with_thumbnail_path(test_camera):

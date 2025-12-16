@@ -35,15 +35,15 @@ from app.services.protect_event_handler import (
 
 
 # Create test database
-test_db_fd, test_db_path = tempfile.mkstemp(suffix=".db")
-os.close(test_db_fd)
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
 
-TEST_DATABASE_URL = f"sqlite:///{test_db_path}"
+TEST_DATABASE_URL = f"sqlite:///{_test_db_path}"
 engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
+def _override_get_db():
     """Override database dependency for testing"""
     db = TestingSessionLocal()
     try:
@@ -56,18 +56,33 @@ def override_get_db():
         db.close()
 
 
-# Override database dependency
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(scope="module", autouse=True)
+def setup_module_database():
+    """Set up database and override at module start, teardown at end."""
+    Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = _override_get_db
+    yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
 
-# Create tables once
-Base.metadata.create_all(bind=engine)
 
-# Create test client
-client = TestClient(app)
+# Module-level client to be initialized by fixture
+client = None
+
+
+@pytest.fixture(scope="module", autouse=True)
+def initialize_client(setup_module_database):
+    """Initialize module-level client after database is set up"""
+    global client
+    client = TestClient(app)
+    yield
+    client = None
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_database():
+def cleanup_database(setup_module_database):
     """Clean up database between tests"""
     yield
     db = TestingSessionLocal()

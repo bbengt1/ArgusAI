@@ -122,7 +122,9 @@ def mock_ai_result():
         objects_detected=["person"],
         provider="openai",
         response_time_ms=250,
-        error=None
+        error=None,
+        ai_confidence=85,
+        cost_estimate=0.001
     )
 
 
@@ -136,7 +138,9 @@ def mock_multi_frame_ai_result():
         objects_detected=["person", "package"],
         provider="openai",
         response_time_ms=450,
-        error=None
+        error=None,
+        ai_confidence=92,
+        cost_estimate=0.003
     )
 
 
@@ -180,8 +184,9 @@ class TestMultiFrameAnalysisIntegration:
         mock_clip_path = MagicMock(spec=Path)
         mock_clip_path.exists.return_value = True
 
-        # Mock frames returned by extractor
+        # Mock frames returned by extractor - now using extract_frames_with_timestamps
         mock_frames = [b"frame1_jpeg", b"frame2_jpeg", b"frame3_jpeg", b"frame4_jpeg", b"frame5_jpeg"]
+        mock_timestamps = [0.0, 1.0, 2.0, 3.0, 4.0]
 
         with patch('app.services.ai_service.ai_service') as mock_ai_service, \
              patch('app.services.protect_event_handler.get_frame_extractor') as mock_get_extractor:
@@ -190,7 +195,8 @@ class TestMultiFrameAnalysisIntegration:
             mock_ai_service.load_api_keys_from_db = AsyncMock()
 
             mock_extractor = MagicMock()
-            mock_extractor.extract_frames = AsyncMock(return_value=mock_frames)
+            # The actual method is extract_frames_with_timestamps which returns (frames, timestamps)
+            mock_extractor.extract_frames_with_timestamps = AsyncMock(return_value=(mock_frames, mock_timestamps))
             mock_get_extractor.return_value = mock_extractor
 
             result = await handler._submit_to_ai_pipeline(
@@ -228,7 +234,7 @@ class TestMultiFrameAnalysisIntegration:
 
             # Return empty frames to simulate extraction failure
             mock_extractor = MagicMock()
-            mock_extractor.extract_frames = AsyncMock(return_value=[])
+            mock_extractor.extract_frames_with_timestamps = AsyncMock(return_value=([], []))
             mock_get_extractor.return_value = mock_extractor
 
             result = await handler._submit_to_ai_pipeline(
@@ -265,7 +271,7 @@ class TestMultiFrameAnalysisIntegration:
 
             # Raise exception during extraction
             mock_extractor = MagicMock()
-            mock_extractor.extract_frames = AsyncMock(side_effect=Exception("Video decode error"))
+            mock_extractor.extract_frames_with_timestamps = AsyncMock(side_effect=Exception("Video decode error"))
             mock_get_extractor.return_value = mock_extractor
 
             result = await handler._submit_to_ai_pipeline(
@@ -292,6 +298,7 @@ class TestMultiFrameAnalysisIntegration:
         mock_clip_path = MagicMock(spec=Path)
         mock_clip_path.exists.return_value = True
         mock_frames = [b"frame1_jpeg", b"frame2_jpeg", b"frame3_jpeg"]
+        mock_timestamps = [0.0, 1.0, 2.0]
 
         failed_ai_result = MagicMock(
             success=False,
@@ -308,7 +315,7 @@ class TestMultiFrameAnalysisIntegration:
             mock_ai_service.load_api_keys_from_db = AsyncMock()
 
             mock_extractor = MagicMock()
-            mock_extractor.extract_frames = AsyncMock(return_value=mock_frames)
+            mock_extractor.extract_frames_with_timestamps = AsyncMock(return_value=(mock_frames, mock_timestamps))
             mock_get_extractor.return_value = mock_extractor
 
             result = await handler._submit_to_ai_pipeline(
@@ -335,6 +342,7 @@ class TestMultiFrameAnalysisIntegration:
         mock_clip_path = MagicMock(spec=Path)
         mock_clip_path.exists.return_value = True
         mock_frames = [b"frame1_jpeg", b"frame2_jpeg", b"frame3_jpeg"]
+        mock_timestamps = [0.0, 1.0, 2.0]
 
         with patch('app.services.ai_service.ai_service') as mock_ai_service, \
              patch('app.services.protect_event_handler.get_frame_extractor') as mock_get_extractor:
@@ -345,7 +353,7 @@ class TestMultiFrameAnalysisIntegration:
             mock_ai_service.load_api_keys_from_db = AsyncMock()
 
             mock_extractor = MagicMock()
-            mock_extractor.extract_frames = AsyncMock(return_value=mock_frames)
+            mock_extractor.extract_frames_with_timestamps = AsyncMock(return_value=(mock_frames, mock_timestamps))
             mock_get_extractor.return_value = mock_extractor
 
             result = await handler._submit_to_ai_pipeline(
@@ -503,6 +511,7 @@ class TestMultiFrameDoorbellPrompt:
         mock_clip_path = MagicMock(spec=Path)
         mock_clip_path.exists.return_value = True
         mock_frames = [b"frame1", b"frame2", b"frame3"]
+        mock_timestamps = [0.0, 1.0, 2.0]
 
         with patch('app.services.ai_service.ai_service') as mock_ai_service, \
              patch('app.services.protect_event_handler.get_frame_extractor') as mock_get_extractor:
@@ -511,7 +520,7 @@ class TestMultiFrameDoorbellPrompt:
             mock_ai_service.load_api_keys_from_db = AsyncMock()
 
             mock_extractor = MagicMock()
-            mock_extractor.extract_frames = AsyncMock(return_value=mock_frames)
+            mock_extractor.extract_frames_with_timestamps = AsyncMock(return_value=(mock_frames, mock_timestamps))
             mock_get_extractor.return_value = mock_extractor
 
             result = await handler._submit_to_ai_pipeline(

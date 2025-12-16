@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import tempfile
+import os
 
 from main import app
 from app.core.database import Base, get_db
@@ -18,29 +20,40 @@ from app.models.event import Event
 from app.models.alert_rule import AlertRule, WebhookLog
 
 
-# Test database setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+# Create module-level temp database
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
+
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{_test_db_path}"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
+def _override_get_db():
     """Override database dependency for testing"""
     db = TestingSessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest.fixture(scope="function")
 def client():
     """Create test client with fresh database"""
+    # Set up fresh database
     Base.metadata.create_all(bind=engine)
+
+    # Apply the override for this test
+    app.dependency_overrides[get_db] = _override_get_db
+
     yield TestClient(app)
+
+    # Clean up: drop all tables to ensure isolation
     Base.metadata.drop_all(bind=engine)
 
 

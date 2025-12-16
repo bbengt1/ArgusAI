@@ -1,6 +1,8 @@
 """
 Tests for Event Feedback API endpoints (Story P4-5.1)
 """
+import os
+import tempfile
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -15,41 +17,77 @@ from app.models.event_feedback import EventFeedback
 from app.models.camera import Camera
 
 
-# Test database setup
-engine = create_engine(
-    "sqlite:///:memory:",
-    connect_args={"check_same_thread": False}
-)
+# Create module-level temp database (file-based for isolation)
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
+
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{_test_db_path}"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
+def _override_get_db():
     """Override dependency to use test database"""
     db = TestingSessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
 
-@pytest.fixture(scope="function")
-def test_db():
-    """Create and tear down test database"""
+@pytest.fixture(scope="module", autouse=True)
+def setup_module_database():
+    """Set up database and override at module start, teardown at end."""
     Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = _override_get_db
     yield
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    # Clean up temp file
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
+
+
+@pytest.fixture(scope="function")
+def clean_db():
+    """Clean up all data before each test function."""
+    # Clean up data from previous test
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            try:
+                db.execute(table.delete())
+            except Exception:
+                pass
+        db.commit()
+    finally:
+        db.close()
+    yield
+    # Also clean after test
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            try:
+                db.execute(table.delete())
+            except Exception:
+                pass
+        db.commit()
+    finally:
+        db.close()
 
 
 @pytest.fixture
-def client(test_db):
-    """Create test client with dependency override"""
-    app.dependency_overrides[get_db] = override_get_db
+def client(clean_db):
+    """Create test client - override already applied at module level"""
     yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def db_session(test_db):
+def db_session(clean_db):
     """Get database session for test setup"""
     return TestingSessionLocal()
 

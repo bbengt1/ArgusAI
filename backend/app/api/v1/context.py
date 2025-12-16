@@ -1927,6 +1927,44 @@ async def update_vehicle(
     )
 
 
+# NOTE: /stats endpoint must be defined BEFORE /{event_id} to prevent route conflicts
+@router.get("/vehicle-embeddings/stats", response_model=VehicleStatsResponse)
+async def get_vehicle_stats(
+    db: Session = Depends(get_db),
+    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
+):
+    """
+    Get vehicle embedding statistics.
+
+    Story P4-8.3: Vehicle Recognition
+
+    Returns statistics about vehicle embeddings including total count
+    and current settings.
+
+    Args:
+        db: Database session
+        vehicle_service: Vehicle embedding service instance
+
+    Returns:
+        VehicleStatsResponse with statistics
+    """
+    from app.models.system_setting import SystemSetting
+
+    total_vehicles = await vehicle_service.get_total_vehicle_count(db)
+
+    # Get vehicle_recognition_enabled setting
+    setting = db.query(SystemSetting).filter(
+        SystemSetting.key == "vehicle_recognition_enabled"
+    ).first()
+    enabled = setting.value.lower() == "true" if setting else False
+
+    return VehicleStatsResponse(
+        total_vehicle_embeddings=total_vehicles,
+        vehicle_recognition_enabled=enabled,
+        model_version=vehicle_service.get_model_version(),
+    )
+
+
 @router.get("/vehicle-embeddings/{event_id}", response_model=VehicleEmbeddingsResponse)
 async def get_vehicle_embeddings(
     event_id: str,
@@ -2048,41 +2086,4 @@ async def delete_all_vehicles(
     return DeleteVehiclesResponse(
         deleted_count=count,
         message=f"Deleted all {count} vehicle embedding(s) from database"
-    )
-
-
-@router.get("/vehicle-embeddings/stats", response_model=VehicleStatsResponse)
-async def get_vehicle_stats(
-    db: Session = Depends(get_db),
-    vehicle_service: VehicleEmbeddingService = Depends(get_vehicle_embedding_service),
-):
-    """
-    Get vehicle embedding statistics.
-
-    Story P4-8.3: Vehicle Recognition
-
-    Returns statistics about vehicle embeddings including total count
-    and current settings.
-
-    Args:
-        db: Database session
-        vehicle_service: Vehicle embedding service instance
-
-    Returns:
-        VehicleStatsResponse with statistics
-    """
-    from app.models.system_setting import SystemSetting
-
-    total_vehicles = await vehicle_service.get_total_vehicle_count(db)
-
-    # Get vehicle_recognition_enabled setting
-    setting = db.query(SystemSetting).filter(
-        SystemSetting.key == "vehicle_recognition_enabled"
-    ).first()
-    enabled = setting.value.lower() == "true" if setting else False
-
-    return VehicleStatsResponse(
-        total_vehicle_embeddings=total_vehicles,
-        vehicle_recognition_enabled=enabled,
-        model_version=vehicle_service.get_model_version(),
     )

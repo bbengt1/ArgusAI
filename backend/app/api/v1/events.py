@@ -1277,7 +1277,11 @@ async def reanalyze_event(
 
         # 2. Check rate limiting (max 3 per hour)
         one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
-        if event.reanalyzed_at and event.reanalyzed_at > one_hour_ago:
+        # Handle timezone-naive datetime from DB by making it aware
+        reanalyzed_at = event.reanalyzed_at
+        if reanalyzed_at and reanalyzed_at.tzinfo is None:
+            reanalyzed_at = reanalyzed_at.replace(tzinfo=timezone.utc)
+        if reanalyzed_at and reanalyzed_at > one_hour_ago:
             if event.reanalysis_count >= 3:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,

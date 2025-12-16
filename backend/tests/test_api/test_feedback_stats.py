@@ -1,6 +1,8 @@
 """
 Tests for Feedback Statistics API endpoints (Story P4-5.2)
 """
+import os
+import tempfile
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -17,41 +19,77 @@ from app.models.event_feedback import EventFeedback
 from app.models.camera import Camera
 
 
-# Test database setup
-engine = create_engine(
-    "sqlite:///:memory:",
-    connect_args={"check_same_thread": False}
-)
+# Create module-level temp database (file-based for isolation)
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
+
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{_test_db_path}"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
+def _override_get_db():
     """Override dependency to use test database"""
     db = TestingSessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
 
-@pytest.fixture(scope="function")
-def test_db():
-    """Create and tear down test database"""
+@pytest.fixture(scope="module", autouse=True)
+def setup_module_database():
+    """Set up database and override at module start, teardown at end."""
     Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = _override_get_db
     yield
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    # Clean up temp file
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
+
+
+@pytest.fixture(scope="function")
+def clean_db():
+    """Clean up all data before each test function."""
+    # Clean up data from previous test
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            try:
+                db.execute(table.delete())
+            except Exception:
+                pass
+        db.commit()
+    finally:
+        db.close()
+    yield
+    # Also clean after test
+    db = TestingSessionLocal()
+    try:
+        for table in reversed(Base.metadata.sorted_tables):
+            try:
+                db.execute(table.delete())
+            except Exception:
+                pass
+        db.commit()
+    finally:
+        db.close()
 
 
 @pytest.fixture
-def client(test_db):
-    """Create test client with dependency override"""
-    app.dependency_overrides[get_db] = override_get_db
+def client(clean_db):
+    """Create test client - override already applied at module level"""
     yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def db_session(test_db):
+def db_session(clean_db):
     """Get database session for test setup"""
     return TestingSessionLocal()
 
@@ -108,7 +146,7 @@ def create_event(db_session, camera: Camera, timestamp: datetime = None) -> Even
     return event
 
 
-def create_feedback(db_session, event: Event, rating: str, correction: str = None) -> EventFeedback:
+def create_feedback(db_session, event: Event, rating: str, correction: str = None, created_at: datetime = None) -> EventFeedback:
     """Helper to create feedback for testing"""
     feedback = EventFeedback(
         event_id=event.id,
@@ -116,6 +154,9 @@ def create_feedback(db_session, event: Event, rating: str, correction: str = Non
         rating=rating,
         correction=correction
     )
+    # Set created_at if provided (for date filtering tests)
+    if created_at:
+        feedback.created_at = created_at
     db_session.add(feedback)
     db_session.commit()
     db_session.refresh(feedback)
@@ -201,9 +242,10 @@ class TestFeedbackStatsEndpoint:
         event_yesterday = create_event(db_session, test_camera, yesterday)
         event_week_ago = create_event(db_session, test_camera, week_ago)
 
-        create_feedback(db_session, event_now, "helpful")
-        create_feedback(db_session, event_yesterday, "not_helpful")
-        create_feedback(db_session, event_week_ago, "helpful")
+        # Create feedback with matching created_at timestamps (date filter applies to feedback, not event)
+        create_feedback(db_session, event_now, "helpful", created_at=now)
+        create_feedback(db_session, event_yesterday, "not_helpful", created_at=yesterday)
+        create_feedback(db_session, event_week_ago, "helpful", created_at=week_ago)
 
         # Filter to yesterday only
         start_date = yesterday.strftime("%Y-%m-%d")
@@ -251,18 +293,18 @@ class TestFeedbackStatsEndpoint:
         """Test daily trend data (AC9)"""
         now = datetime.now(timezone.utc)
 
-        # Create feedback for today
+        # Create feedback for today (with matching created_at)
         for i in range(3):
             event = create_event(db_session, test_camera, now)
             rating = "helpful" if i < 2 else "not_helpful"
-            create_feedback(db_session, event, rating)
+            create_feedback(db_session, event, rating, created_at=now)
 
-        # Create feedback for yesterday
+        # Create feedback for yesterday (with matching created_at)
         yesterday = now - timedelta(days=1)
         for i in range(2):
             event = create_event(db_session, test_camera, yesterday)
             rating = "helpful"
-            create_feedback(db_session, event, rating)
+            create_feedback(db_session, event, rating, created_at=yesterday)
 
         response = client.get("/api/v1/feedback/stats")
         assert response.status_code == 200
@@ -321,17 +363,17 @@ class TestFeedbackStatsEndpoint:
         now = datetime.now(timezone.utc)
         yesterday = now - timedelta(days=1)
 
-        # Camera 1, today: helpful
+        # Camera 1, today: helpful (with matching created_at)
         event1 = create_event(db_session, test_camera, now)
-        create_feedback(db_session, event1, "helpful")
+        create_feedback(db_session, event1, "helpful", created_at=now)
 
-        # Camera 1, yesterday: not_helpful
+        # Camera 1, yesterday: not_helpful (with matching created_at)
         event2 = create_event(db_session, test_camera, yesterday)
-        create_feedback(db_session, event2, "not_helpful")
+        create_feedback(db_session, event2, "not_helpful", created_at=yesterday)
 
-        # Camera 2, today: helpful
+        # Camera 2, today: helpful (with matching created_at)
         event3 = create_event(db_session, test_camera_2, now)
-        create_feedback(db_session, event3, "helpful")
+        create_feedback(db_session, event3, "helpful", created_at=now)
 
         # Filter: camera 1, today only
         today = now.strftime("%Y-%m-%d")

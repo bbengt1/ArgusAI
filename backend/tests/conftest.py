@@ -2,9 +2,30 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.core.database import Base
+from app.core.database import Base, get_db
 import os
 import tempfile
+
+
+@pytest.fixture(scope="session", autouse=True)
+def clear_app_overrides():
+    """
+    Session-scoped fixture to ensure app.dependency_overrides is cleared
+    at the start and end of the test session.
+
+    This prevents state pollution between test modules.
+    """
+    from main import app
+
+    # Clear any existing overrides at session start
+    app.dependency_overrides.clear()
+
+    yield
+
+    # Clear overrides at session end
+    app.dependency_overrides.clear()
+
+
 
 
 @pytest.fixture(scope="function")

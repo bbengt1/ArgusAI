@@ -12,10 +12,64 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Sidebar } from '@/components/layout/Sidebar'
+import React from 'react'
 
 // Mock next/navigation
+const mockPush = vi.fn()
 vi.mock('next/navigation', () => ({
   usePathname: vi.fn(() => '/'),
+  useRouter: () => ({
+    push: mockPush,
+  }),
+}))
+
+// Mock the AuthContext
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: vi.fn(() => ({
+    user: null,
+    isAuthenticated: false,
+    logout: vi.fn(),
+  })),
+}))
+
+// Mock the SettingsContext
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: vi.fn(() => ({
+    settings: {
+      systemName: 'ArgusAI',
+      aiProvider: 'openai',
+      dataRetentionDays: 30,
+      defaultMotionSensitivity: 'medium',
+      theme: 'system',
+      timezone: 'America/Chicago',
+      backendUrl: 'http://localhost:8000',
+    },
+    isLoading: false,
+    updateSetting: vi.fn(),
+    updateSettings: vi.fn(),
+    resetSettings: vi.fn(),
+    refreshSystemName: vi.fn(),
+  })),
+}))
+
+// Mock the NotificationContext
+vi.mock('@/contexts/NotificationContext', () => ({
+  useNotifications: vi.fn(() => ({
+    notifications: [],
+    unreadCount: 0,
+    isLoading: false,
+    fetchNotifications: vi.fn(),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    deleteNotification: vi.fn(),
+    deleteAllNotifications: vi.fn(),
+    connectionStatus: 'connected',
+  })),
+}))
+
+// Mock the NotificationBell component
+vi.mock('@/components/notifications/NotificationBell', () => ({
+  NotificationBell: () => <button data-testid="notification-bell">Notifications</button>,
 }))
 
 // Import to mock pathname dynamically

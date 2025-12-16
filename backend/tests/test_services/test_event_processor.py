@@ -286,15 +286,12 @@ class TestEventProcessor:
         assert metrics["events_processed"]["failure"] == 2
         assert metrics["events_processed"]["total"] == 52
 
-    @patch('app.services.event_processor.httpx.AsyncClient')
-    async def test_store_event_with_retry_success(self, mock_http_client, event_processor):
-        """Test storing event with successful response"""
-        event_processor.http_client = AsyncMock()
-
-        # Mock successful response (201 Created)
-        mock_response = Mock()
-        mock_response.status_code = 201
-        event_processor.http_client.post = AsyncMock(return_value=mock_response)
+    @patch('app.services.event_processor.SessionLocal')
+    async def test_store_event_with_retry_success(self, mock_session_local, event_processor):
+        """Test storing event with successful database insertion"""
+        # Mock database session
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
 
         event_data = {
             "camera_id": "camera-123",
@@ -308,19 +305,19 @@ class TestEventProcessor:
 
         result = await event_processor._store_event_with_retry(event_data, max_retries=3)
 
-        assert result == True
-        event_processor.http_client.post.assert_called_once()
+        # Method now returns event_id (string) on success, None on failure
+        assert result is not None
+        assert isinstance(result, str)  # Should be a UUID string
+        mock_db.add.assert_called_once()
+        mock_db.commit.assert_called_once()
 
-    @patch('app.services.event_processor.httpx.AsyncClient')
-    async def test_store_event_with_retry_failure(self, mock_http_client, event_processor):
+    @patch('app.services.event_processor.SessionLocal')
+    async def test_store_event_with_retry_failure(self, mock_session_local, event_processor):
         """Test storing event with all retries failing"""
-        event_processor.http_client = AsyncMock()
-
-        # Mock failed response (500 Internal Server Error)
-        mock_response = Mock()
-        mock_response.status_code = 500
-        mock_response.text = "Internal Server Error"
-        event_processor.http_client.post = AsyncMock(return_value=mock_response)
+        # Mock database session that raises exception
+        mock_db = MagicMock()
+        mock_db.commit.side_effect = Exception("Database error")
+        mock_session_local.return_value = mock_db
 
         event_data = {
             "camera_id": "camera-123",
@@ -334,26 +331,18 @@ class TestEventProcessor:
 
         result = await event_processor._store_event_with_retry(event_data, max_retries=2)
 
-        assert result == False
+        # Method returns None on failure
+        assert result is None
         # Should be called 3 times (initial + 2 retries)
-        assert event_processor.http_client.post.call_count == 3
+        assert mock_db.commit.call_count == 3
 
-    @patch('app.services.event_processor.httpx.AsyncClient')
-    async def test_store_event_with_retry_eventual_success(self, mock_http_client, event_processor):
+    @patch('app.services.event_processor.SessionLocal')
+    async def test_store_event_with_retry_eventual_success(self, mock_session_local, event_processor):
         """Test storing event succeeds after retry"""
-        event_processor.http_client = AsyncMock()
-
-        # Mock: First call fails, second call succeeds
-        mock_response_fail = Mock()
-        mock_response_fail.status_code = 503
-        mock_response_fail.text = "Service Unavailable"
-
-        mock_response_success = Mock()
-        mock_response_success.status_code = 201
-
-        event_processor.http_client.post = AsyncMock(
-            side_effect=[mock_response_fail, mock_response_success]
-        )
+        # Mock database session that fails first, then succeeds
+        mock_db = MagicMock()
+        mock_db.commit.side_effect = [Exception("Transient error"), None]  # Fail, then succeed
+        mock_session_local.return_value = mock_db
 
         event_data = {
             "camera_id": "camera-123",
@@ -367,9 +356,11 @@ class TestEventProcessor:
 
         result = await event_processor._store_event_with_retry(event_data, max_retries=3)
 
-        assert result == True
+        # Method returns event_id (string) on success
+        assert result is not None
+        assert isinstance(result, str)
         # Should be called twice (first fail, second success)
-        assert event_processor.http_client.post.call_count == 2
+        assert mock_db.commit.call_count == 2
 
     async def test_cooldown_enforcement(self, event_processor):
         """Test camera cooldown enforcement"""
@@ -433,13 +424,23 @@ class TestEventProcessor:
 class TestEventProcessorIntegration:
     """Integration tests for EventProcessor with real asyncio"""
 
-    async def test_full_pipeline_simulation(self):
+    @patch('app.services.event_processor.get_cost_cap_service')
+    @patch('app.services.event_processor.SessionLocal')
+    async def test_full_pipeline_simulation(self, mock_session_local, mock_get_cost_cap):
         """Test full pipeline with mocked services"""
+        # Mock database session for event storage
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+
+        # Mock cost cap service to allow analysis
+        mock_cost_cap = MagicMock()
+        mock_cost_cap.can_analyze.return_value = (True, None)
+        mock_get_cost_cap.return_value = mock_cost_cap
+
         processor = EventProcessor(worker_count=2, queue_maxsize=5)
 
         # Mock services
         processor.ai_service = AsyncMock()
-        processor.http_client = AsyncMock()
 
         # Mock AI response
         mock_ai_result = Mock()
@@ -449,12 +450,8 @@ class TestEventProcessorIntegration:
         mock_ai_result.objects_detected = ["person"]
         mock_ai_result.provider = "openai"
         mock_ai_result.response_time_ms = 2341
+        mock_ai_result.cost_estimate = 0.001
         processor.ai_service.generate_description = AsyncMock(return_value=mock_ai_result)
-
-        # Mock HTTP response
-        mock_response = Mock()
-        mock_response.status_code = 201
-        processor.http_client.post = AsyncMock(return_value=mock_response)
 
         # Start processor (without database initialization)
         processor.running = True
@@ -481,7 +478,9 @@ class TestEventProcessorIntegration:
         # Verify event was processed
         assert processor.metrics.events_processed_success >= 1
         processor.ai_service.generate_description.assert_called()
-        processor.http_client.post.assert_called()
+        # Verify event was stored via database (not HTTP)
+        mock_db.add.assert_called()
+        mock_db.commit.assert_called()
 
         # Stop processor
         await processor.stop(timeout=1.0)
@@ -503,11 +502,8 @@ class TestEventProcessorIntegration:
         mock_ai_result.objects_detected = ["test"]
         mock_ai_result.provider = "openai"
         mock_ai_result.response_time_ms = 100
+        mock_ai_result.cost_estimate = 0.001  # Add cost estimate
         processor.ai_service.generate_description = AsyncMock(return_value=mock_ai_result)
-
-        mock_response = Mock()
-        mock_response.status_code = 201
-        processor.http_client.post = AsyncMock(return_value=mock_response)
 
         # Start processor
         processor.running = True

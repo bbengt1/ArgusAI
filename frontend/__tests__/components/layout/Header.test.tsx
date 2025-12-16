@@ -31,6 +31,26 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: vi.fn(),
 }))
 
+// Mock the SettingsContext
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: vi.fn(() => ({
+    settings: {
+      systemName: 'ArgusAI',
+      aiProvider: 'openai',
+      dataRetentionDays: 30,
+      defaultMotionSensitivity: 'medium',
+      theme: 'system',
+      timezone: 'America/Chicago',
+      backendUrl: 'http://localhost:8000',
+    },
+    isLoading: false,
+    updateSetting: vi.fn(),
+    updateSettings: vi.fn(),
+    resetSettings: vi.fn(),
+    refreshSystemName: vi.fn(),
+  })),
+}))
+
 // Mock the NotificationBell to simplify testing
 vi.mock('@/components/notifications', () => ({
   NotificationBell: () => <button data-testid="notification-bell">Notifications</button>,
@@ -377,7 +397,8 @@ describe('Header', () => {
 
       render(<Header />, { wrapper: TestWrapper })
 
-      const logoLink = screen.getByRole('link', { name: /live object ai/i })
+      // The logo link contains the system name from SettingsContext (mocked as 'ArgusAI')
+      const logoLink = screen.getByRole('link', { name: /argusai/i })
       expect(logoLink).toHaveAttribute('href', '/')
     })
   })

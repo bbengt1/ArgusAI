@@ -31,17 +31,17 @@ from app.services.ai_service import (
 )
 
 
-# Create test database
-test_db_fd, test_db_path = tempfile.mkstemp(suffix=".db")
-os.close(test_db_fd)
+# Create module-level temp database (file-based for isolation)
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix="_grok.db")
+os.close(_test_db_fd)
 
-TEST_DATABASE_URL = f"sqlite:///{test_db_path}"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{_test_db_path}"
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def override_get_db():
-    """Override database dependency for testing"""
+def _override_get_db():
+    """Override dependency to use test database"""
     db = TestingSessionLocal()
     try:
         yield db
@@ -53,14 +53,23 @@ def override_get_db():
         db.close()
 
 
-# Override database dependency
-app.dependency_overrides[get_db] = override_get_db
+@pytest.fixture(scope="module", autouse=True)
+def setup_module_database():
+    """Set up database and override at module start, teardown at end."""
+    Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = _override_get_db
+    yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    # Clean up temp file
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
 
-# Create tables once
-Base.metadata.create_all(bind=engine)
 
-# Create test client
-client = TestClient(app)
+@pytest.fixture(scope="module")
+def client(setup_module_database):
+    """Create test client - override already applied at module level"""
+    return TestClient(app)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -121,7 +130,7 @@ class TestGrokProviderConfiguration:
 class TestGrokProviderAPIConfiguration:
     """Tests for configuring Grok via API"""
 
-    def test_save_grok_api_key_via_settings(self):
+    def test_save_grok_api_key_via_settings(self, client):
         """Test Grok API key can be saved via settings API"""
         settings_data = {
             "grok_api_key": "xai-new-api-key-67890"
@@ -131,7 +140,7 @@ class TestGrokProviderAPIConfiguration:
         # Response depends on endpoint implementation
         assert response.status_code in [200, 201, 422]
 
-    def test_grok_key_not_exposed_in_response(self):
+    def test_grok_key_not_exposed_in_response(self, client):
         """Test API key is not exposed in get settings response"""
         # First set a key
         client.put("/api/v1/system/settings", json={
@@ -374,7 +383,7 @@ class TestGrokCostEstimate:
 class TestGrokProviderInSystem:
     """Integration tests for Grok in full system"""
 
-    def test_grok_available_in_settings_page(self):
+    def test_grok_available_in_settings_page(self, client):
         """Test Grok appears as available provider option"""
         response = client.get("/api/v1/system/settings")
         if response.status_code == 200:
@@ -383,7 +392,7 @@ class TestGrokProviderInSystem:
             # Just verify we can check settings
             assert data is not None
 
-    def test_ai_providers_endpoint_includes_grok(self):
+    def test_ai_providers_endpoint_includes_grok(self, client):
         """Test AI providers endpoint includes Grok"""
         response = client.get("/api/v1/ai/providers")
         if response.status_code == 200:

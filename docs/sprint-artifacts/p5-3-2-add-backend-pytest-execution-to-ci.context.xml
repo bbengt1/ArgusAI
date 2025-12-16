@@ -1,0 +1,180 @@
+<story-context id="p5-3-2-add-backend-pytest-execution-to-ci" v="1.0">
+  <metadata>
+    <epicId>P5-3</epicId>
+    <storyId>P5-3.2</storyId>
+    <title>Add Backend Pytest Execution to CI</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-15</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p5-3-2-add-backend-pytest-execution-to-ci.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer contributing to ArgusAI</asA>
+    <iWant>the CI pipeline to run backend pytest tests automatically on every pull request</iWant>
+    <soThat>test failures are caught before code is merged and test quality is maintained</soThat>
+    <tasks>
+      <task id="1">Verify pytest Command in CI Workflow (AC: 1)
+        - Confirm pytest step exists in backend-tests job
+        - Verify command: pytest tests/ -v --tb=short
+        - Ensure working directory is backend</task>
+      <task id="2">Verify Test Database Configuration (AC: 2)
+        - Confirm DATABASE_URL: sqlite:///./test.db in pytest step env
+        - Verify SQLite used (not PostgreSQL)</task>
+      <task id="3">Verify Secret Configuration (AC: 3)
+        - Confirm ENCRYPTION_KEY sourced from secrets
+        - Verify PYTHONPATH setting
+        - Check no hardcoded sensitive values</task>
+      <task id="4">Verify Job Failure Behavior (AC: 4)
+        - Run workflow with passing tests
+        - Verify failed tests would fail the job</task>
+      <task id="5">Documentation Validation
+        - Document current CI configuration
+        - Note implementation was completed in P5-3.1</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1" title="pytest Runs in CI Environment">
+      <criterion>pytest tests/ -v command executes in backend-tests job</criterion>
+      <criterion>pytest runs on ubuntu-latest runner</criterion>
+      <criterion>Python 3.11 environment configured</criterion>
+      <criterion>All test dependencies installed from requirements.txt</criterion>
+    </ac>
+    <ac id="2" title="Test Database Configured (SQLite)">
+      <criterion>DATABASE_URL=sqlite:///./test.db set in CI environment</criterion>
+      <criterion>Tests use isolated SQLite database (not production)</criterion>
+      <criterion>Database created fresh for each CI run</criterion>
+    </ac>
+    <ac id="3" title="Environment Variables Set from GitHub Secrets">
+      <criterion>ENCRYPTION_KEY sourced from secrets.TEST_ENCRYPTION_KEY</criterion>
+      <criterion>PYTHONPATH=. set for proper module imports</criterion>
+      <criterion>No secrets hardcoded in workflow file</criterion>
+    </ac>
+    <ac id="4" title="Failure Fails the PR Check">
+      <criterion>pytest exit code propagates to job status</criterion>
+      <criterion>Non-zero exit code marks job as failed</criterion>
+      <criterion>Failed job blocks PR merge when branch protection enabled</criterion>
+    </ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/PRD-phase5.md</path>
+        <title>Phase 5 PRD</title>
+        <section>Functional Requirements - FR21</section>
+        <snippet>FR21: CI pipeline runs backend pytest suite and fails PR if tests fail</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/phase-5-additions.md</path>
+        <title>Phase 5 Architecture Additions</title>
+        <section>Phase 5 CI/CD Architecture</section>
+        <snippet>GitHub Actions workflow with backend-tests job using pytest, pytest-cov, SQLite test database, and secrets from GitHub Secrets</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase5.md</path>
+        <title>Phase 5 Epics</title>
+        <section>Epic P5-3 Story P5-3.2</section>
+        <snippet>Add backend pytest execution to CI - pytest runs in CI, test database configured, env vars from secrets, failure fails PR</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p5-3-1-create-github-actions-workflow-for-prs.md</path>
+        <title>Previous Story P5-3.1</title>
+        <section>Dev Agent Record</section>
+        <snippet>GitHub Actions CI workflow already includes fully functional pytest execution - implementation exceeded scope of P5-3.1</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>.github/workflows/ci.yml</path>
+        <kind>ci-workflow</kind>
+        <symbol>backend-tests job</symbol>
+        <lines>9-34</lines>
+        <reason>Contains the pytest execution step with env vars, database config, and secret references - already implements all AC requirements</reason>
+      </file>
+      <file>
+        <path>backend/requirements.txt</path>
+        <kind>dependency-manifest</kind>
+        <symbol>pytest, pytest-asyncio, pytest-cov</symbol>
+        <lines>65-68</lines>
+        <reason>Contains all pytest dependencies needed for CI execution</reason>
+      </file>
+      <file>
+        <path>backend/tests/conftest.py</path>
+        <kind>test-config</kind>
+        <symbol>db_session, temp_db_file fixtures</symbol>
+        <lines>1-60</lines>
+        <reason>Test fixtures for database setup - CI uses similar SQLite approach</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="pytest" version="7.4.3">Test framework</package>
+        <package name="pytest-asyncio" version="0.21.1">Async test support</package>
+        <package name="pytest-cov" version="4.1.0">Coverage reporting (P5-3.6)</package>
+        <package name="httpx" version="0.25.2">API testing client</package>
+        <package name="cryptography" version="44.0.1">Required for ENCRYPTION_KEY</package>
+        <package name="sqlalchemy" version=">=2.0.36">Database ORM for tests</package>
+      </python>
+      <ci>
+        <action name="actions/checkout" version="v4">Git checkout</action>
+        <action name="actions/setup-python" version="v5">Python environment</action>
+      </ci>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="ci-environment">Tests must run on ubuntu-latest GitHub runner with Python 3.11</constraint>
+    <constraint type="database">Tests use SQLite (sqlite:///./test.db) for isolation from production</constraint>
+    <constraint type="security">ENCRYPTION_KEY must come from GitHub Secrets, never hardcoded</constraint>
+    <constraint type="test-isolation">Each CI run starts with fresh database - no persistence between runs</constraint>
+    <constraint type="exit-codes">pytest exit codes must propagate to fail the CI job on test failures</constraint>
+    <constraint type="working-directory">Pytest runs from backend/ directory via defaults.run.working-directory</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>GitHub Actions Environment Variables</name>
+      <kind>ci-environment</kind>
+      <signature>env: DATABASE_URL, ENCRYPTION_KEY, PYTHONPATH</signature>
+      <path>.github/workflows/ci.yml:31-34</path>
+    </interface>
+    <interface>
+      <name>pytest CLI</name>
+      <kind>cli-command</kind>
+      <signature>pytest tests/ -v --tb=short</signature>
+      <path>.github/workflows/ci.yml:30</path>
+    </interface>
+    <interface>
+      <name>GitHub Secrets Reference</name>
+      <kind>secret-reference</kind>
+      <signature>${{ secrets.TEST_ENCRYPTION_KEY }}</signature>
+      <path>.github/workflows/ci.yml:33</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Backend tests use pytest with pytest-asyncio for async support. Tests are organized by type: test_api/, test_services/, test_models/, test_integration/, test_performance/. Each test file uses the db_session fixture from conftest.py for database isolation. API tests use httpx TestClient with the FastAPI app.</standards>
+    <locations>
+      <location>backend/tests/**/*.py</location>
+      <location>backend/tests/conftest.py (fixtures)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Verify pytest command exits 0 when tests pass</idea>
+      <idea ac="2">Verify tests use in-memory or file-based SQLite (not external DB)</idea>
+      <idea ac="3">Verify workflow file has no hardcoded secrets</idea>
+      <idea ac="4">Verify pytest non-zero exit fails the CI job</idea>
+      <note>This story validates existing implementation - tests verify CI behavior rather than new code</note>
+    </ideas>
+  </tests>
+
+  <implementationNotes>
+    <note priority="critical">This story validates existing implementation from P5-3.1 - NO new code changes expected</note>
+    <note priority="high">All acceptance criteria are already satisfied by current .github/workflows/ci.yml</note>
+    <note priority="medium">GitHub Secret TEST_ENCRYPTION_KEY must be configured in repository settings</note>
+    <note priority="info">Story completion involves verification and documentation rather than implementation</note>
+  </implementationNotes>
+</story-context>
