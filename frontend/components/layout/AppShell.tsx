@@ -14,6 +14,7 @@
 import { usePathname } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
+import { SkipToContent } from '@/components/layout/SkipToContent';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 import { ServiceWorkerUpdateBanner } from '@/components/pwa/ServiceWorkerUpdateBanner';
@@ -37,12 +38,19 @@ export function AppShell({ children }: AppShellProps) {
   // Protected routes: wrap with auth check and full layout
   // FF-005: Removed MobileNav (bottom bar) - mobile uses hamburger menu in Header instead
   // IMP-003: Header hidden on desktop (lg+), only visible on mobile/tablet
+  // P6-2.1: SkipToContent renders first for keyboard accessibility (WCAG 2.4.1)
   return (
     <ProtectedRoute>
+      <SkipToContent />
       <Header />
       <Sidebar />
       {/* IMP-003: pt-16 for header space on mobile, pt-0 on desktop (header hidden) */}
-      <main className="min-h-screen bg-background pt-16 lg:pt-0 lg:pl-60 transition-all duration-300">
+      {/* P6-2.1: id="main-content" and tabIndex={-1} for skip link target */}
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="min-h-screen bg-background pt-16 lg:pt-0 lg:pl-60 transition-all duration-300 outline-none"
+      >
         <div className="container mx-auto">
           {children}
         </div>

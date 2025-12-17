@@ -1,0 +1,184 @@
+<story-context id="bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P6-2</epicId>
+    <storyId>P6-2.1</storyId>
+    <title>Add Skip to Content Link</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p6-2-1-add-skip-to-content-link.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>keyboard-only user</asA>
+    <iWant>a skip link that bypasses navigation elements</iWant>
+    <soThat>I can quickly access the main content without tabbing through the entire header and sidebar</soThat>
+    <tasks>
+      <task id="1" status="pending">Create SkipToContent component
+        <subtask id="1.1">Create frontend/components/layout/SkipToContent.tsx</subtask>
+        <subtask id="1.2">Use sr-only with focus:not-sr-only Tailwind classes</subtask>
+        <subtask id="1.3">Style with shadcn/ui button-like appearance when focused</subtask>
+        <subtask id="1.4">Use anchor link pattern with href="#main-content"</subtask>
+      </task>
+      <task id="2" status="pending">Add main content landmark with ID
+        <subtask id="2.1">Update frontend/components/layout/AppShell.tsx</subtask>
+        <subtask id="2.2">Add id="main-content" to the main element</subtask>
+        <subtask id="2.3">Add tabIndex={-1} to allow focus without being in tab order</subtask>
+      </task>
+      <task id="3" status="pending">Integrate SkipToContent in layout
+        <subtask id="3.1">Add SkipToContent component to AppShell (protected routes)</subtask>
+        <subtask id="3.2">Ensure it renders as the first child in the body flow</subtask>
+        <subtask id="3.3">Verify works on public routes</subtask>
+      </task>
+      <task id="4" status="pending">Write component tests
+        <subtask id="4.1">Test component renders in DOM</subtask>
+        <subtask id="4.2">Test link has correct href="#main-content"</subtask>
+        <subtask id="4.3">Test sr-only class applied by default</subtask>
+        <subtask id="4.4">Test visible styles on focus</subtask>
+      </task>
+      <task id="5" status="pending">Manual accessibility testing
+        <subtask id="5.1">Test with Tab key on dashboard page</subtask>
+        <subtask id="5.2">Test with Tab key on cameras page</subtask>
+        <subtask id="5.3">Verify skip link is first focusable element</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Skip link appears on Tab at page top (first focusable element)</criterion>
+    <criterion id="2">Visually hidden until focused (using Tailwind sr-only with focus styles)</criterion>
+    <criterion id="3">Links to main content area (targets main with id="main-content")</criterion>
+    <criterion id="4">Works on all pages (public and protected routes)</criterion>
+    <criterion id="5">Styled to match design system when visible (consistent with shadcn/ui theme)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase6.md</path>
+        <title>Phase 6 Epics</title>
+        <section>Epic P6-2: Accessibility Completion - Story P6-2.1</section>
+        <snippet>WCAG 2.4.1 Bypass Blocks compliance. Skip link appears on Tab at page top, visually hidden until focused, links to main content area, works on all pages.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/08-implementation-patterns.md</path>
+        <title>Implementation Patterns</title>
+        <section>Frontend Component Test</section>
+        <snippet>Use @testing-library/react with vitest. Follow describe/it pattern with render and screen queries.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/04-project-structure.md</path>
+        <title>Project Structure</title>
+        <section>Frontend Components Layout</section>
+        <snippet>Layout components in frontend/components/layout/. Includes Header.tsx, Sidebar.tsx, AppShell.tsx.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>frontend/components/layout/AppShell.tsx</path>
+        <kind>component</kind>
+        <symbol>AppShell</symbol>
+        <lines>1-57</lines>
+        <reason>Main layout wrapper where skip link will be integrated. Contains main element that needs id="main-content".</reason>
+      </file>
+      <file>
+        <path>frontend/components/layout/Header.tsx</path>
+        <kind>component</kind>
+        <symbol>Header</symbol>
+        <reason>Navigation header that skip link bypasses. Reference for styling consistency.</reason>
+      </file>
+      <file>
+        <path>frontend/components/layout/Sidebar.tsx</path>
+        <kind>component</kind>
+        <symbol>Sidebar</symbol>
+        <reason>Desktop sidebar navigation that skip link bypasses.</reason>
+      </file>
+      <file>
+        <path>frontend/__tests__/components/layout/Sidebar.test.tsx</path>
+        <kind>test</kind>
+        <symbol>Sidebar tests</symbol>
+        <lines>1-365</lines>
+        <reason>Reference test file for layout component testing patterns. Uses vitest, @testing-library/react, userEvent.</reason>
+      </file>
+      <file>
+        <path>frontend/app/layout.tsx</path>
+        <kind>layout</kind>
+        <symbol>RootLayout</symbol>
+        <lines>62-94</lines>
+        <reason>Root layout where AppShell is used. Shows provider hierarchy and body structure.</reason>
+      </file>
+      <file>
+        <path>frontend/app/globals.css</path>
+        <kind>styles</kind>
+        <symbol>Theme variables</symbol>
+        <reason>Contains theme color variables (--primary, --background, --ring) for consistent skip link styling.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>react</package>
+        <version>19.2.0</version>
+      </node>
+      <node>
+        <package>next</package>
+        <version>^16.0.10</version>
+      </node>
+      <node>
+        <package>tailwindcss</package>
+        <version>^4</version>
+      </node>
+      <node>
+        <package>vitest</package>
+        <version>^4.0.15</version>
+      </node>
+      <node>
+        <package>@testing-library/react</package>
+        <version>^16.3.0</version>
+      </node>
+      <node>
+        <package>@testing-library/user-event</package>
+        <version>^14.6.1</version>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Must use Tailwind CSS sr-only and focus:not-sr-only utilities for accessibility pattern</constraint>
+    <constraint>Component must be client-side ('use client') as it requires focus/tab interaction</constraint>
+    <constraint>Skip link must render before Header/Sidebar in DOM order to be first in tab sequence</constraint>
+    <constraint>Styling should use existing theme variables (--primary, --background) for consistency</constraint>
+    <constraint>No new dependencies - use existing Tailwind utilities and React patterns</constraint>
+    <constraint>Follow existing layout component patterns (PascalCase.tsx, 'use client' directive)</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>SkipToContent</name>
+      <kind>React component</kind>
+      <signature>function SkipToContent(): JSX.Element</signature>
+      <path>frontend/components/layout/SkipToContent.tsx</path>
+    </interface>
+    <interface>
+      <name>main#main-content</name>
+      <kind>DOM element</kind>
+      <signature>main element with id="main-content" tabIndex={-1}</signature>
+      <path>frontend/components/layout/AppShell.tsx</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use vitest and @testing-library/react for component tests. Follow describe/it pattern. Mock next/navigation with vi.mock(). Use userEvent.setup() for user interactions. Test accessibility attributes and focus behavior.</standards>
+    <locations>
+      <location>frontend/__tests__/components/layout/SkipToContent.test.tsx</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test skip link is rendered in DOM as first element after body open</idea>
+      <idea ac="2">Test sr-only class is applied by default (component not visible)</idea>
+      <idea ac="2">Test focus:not-sr-only class applied when focused (component becomes visible)</idea>
+      <idea ac="3">Test anchor href attribute equals "#main-content"</idea>
+      <idea ac="3">Test clicking skip link moves focus to main content area</idea>
+      <idea ac="4">Test skip link renders in protected routes (with AppShell)</idea>
+      <idea ac="5">Test visual styles when focused match design system (background, text, ring)</idea>
+    </ideas>
+  </tests>
+</story-context>

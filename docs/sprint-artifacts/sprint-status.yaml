@@ -364,7 +364,7 @@ development_status:
 
   # Epic P6-2: Accessibility Completion
   epic-p6-2: contexted
-  p6-2-1-add-skip-to-content-link: backlog  # GH #59
+  p6-2-1-add-skip-to-content-link: done  # GH #59
   p6-2-2-audit-and-fix-remaining-aria-issues: backlog  # GH #60
   epic-p6-2-retrospective: optional
 
