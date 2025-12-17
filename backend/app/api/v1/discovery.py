@@ -282,7 +282,7 @@ async def get_device_details(
 
 
 @router.post(
-    "/test",
+    "/discover/test",
     response_model=TestConnectionResponse,
     summary="Test RTSP connection",
     description="Test an RTSP camera connection without saving the camera configuration",

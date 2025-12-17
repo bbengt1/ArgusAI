@@ -682,7 +682,9 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(AuthMiddleware)
 
 # Register API routers
+# Note: Register discovery_router before cameras_router to prevent {camera_id} from matching "discover"
 # Note: Register motion_events before cameras to ensure proper route precedence
+app.include_router(discovery_router, prefix=f"{settings.API_V1_PREFIX}/cameras")  # Story P5-2.1 - ONVIF Discovery (must be before cameras_router)
 app.include_router(motion_events_router, prefix=settings.API_V1_PREFIX)
 app.include_router(cameras_router, prefix=settings.API_V1_PREFIX)
 app.include_router(ai_router, prefix=settings.API_V1_PREFIX)
@@ -705,7 +707,6 @@ app.include_router(digests_router, prefix=settings.API_V1_PREFIX)  # Story P4-4.
 app.include_router(feedback_router, prefix=settings.API_V1_PREFIX)  # Story P4-5.2 - Feedback Statistics
 app.include_router(voice_router, prefix=settings.API_V1_PREFIX)  # Story P4-6.3 - Voice Query API
 app.include_router(homekit_router, prefix=settings.API_V1_PREFIX)  # Story P5-1.1 - HomeKit API
-app.include_router(discovery_router, prefix=f"{settings.API_V1_PREFIX}/cameras")  # Story P5-2.1 - ONVIF Discovery
 
 # Thumbnail serving endpoint (with CORS support)
 from fastapi.responses import FileResponse, Response as FastAPIResponse

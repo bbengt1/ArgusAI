@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { CameraPreview } from './CameraPreview';
 import type { ICamera } from '@/types/camera';
@@ -28,33 +28,29 @@ interface VirtualCameraListProps {
  * Recalculates on window resize
  */
 function useColumnCount(containerRef: React.RefObject<HTMLDivElement | null>) {
-  const calculateColumnCount = useCallback(() => {
-    if (!containerRef.current) return 1;
-    const width = containerRef.current.offsetWidth;
-    if (width >= 1024) return 3; // lg breakpoint
-    if (width >= 768) return 2;  // md breakpoint
-    return 1;
-  }, [containerRef]);
-
-  // Initialize with calculated value
-  const [columnCount, setColumnCount] = useState(() => {
-    // This will return 1 on first render before ref is attached
-    // The effect below will update it once mounted
-    return calculateColumnCount();
-  });
+  // Start with default column count - will be updated in effect
+  const [columnCount, setColumnCount] = useState(1);
 
   useEffect(() => {
+    const calculateColumnCount = () => {
+      if (!containerRef.current) return 1;
+      const width = containerRef.current.offsetWidth;
+      if (width >= 1024) return 3; // lg breakpoint
+      if (width >= 768) return 2;  // md breakpoint
+      return 1;
+    };
+
     // Handle resize events
     const handleResize = () => {
       setColumnCount(calculateColumnCount());
     };
 
-    // Calculate on mount (ref may not be available during useState init)
+    // Calculate on mount
     handleResize();
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [calculateColumnCount]);
+  }, [containerRef]);
 
   return columnCount;
 }

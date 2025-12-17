@@ -721,7 +721,7 @@ class TestDeviceDetailsResponseSchema:
 
 
 class TestTestConnectionEndpoint:
-    """Tests for POST /api/v1/cameras/test (P5-2.4)."""
+    """Tests for POST /api/v1/cameras/discover/test (P5-2.4)."""
 
     def test_test_connection_success(self, client, mock_discovery_service):
         """AC1, AC2: Test successful connection returns stream metadata."""
@@ -746,7 +746,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://192.168.1.100:554/stream"}
             )
 
@@ -787,7 +787,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={
                     "rtsp_url": "rtsp://192.168.1.100:554/stream",
                     "username": "admin",
@@ -807,7 +807,7 @@ class TestTestConnectionEndpoint:
         ):
             # HTTP URL should fail validation
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "http://192.168.1.100/stream"}
             )
 
@@ -837,7 +837,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsps://192.168.1.100:322/secure_stream"}
             )
 
@@ -865,7 +865,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://192.168.1.100:554/stream"}
             )
 
@@ -895,7 +895,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://192.168.1.100:554/stream"}
             )
 
@@ -925,7 +925,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://10.0.0.1:554/stream"}
             )
 
@@ -955,7 +955,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://192.168.1.100:554/invalid_path"}
             )
 
@@ -972,7 +972,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={}  # Missing rtsp_url
             )
 
@@ -999,7 +999,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={
                     "rtsp_url": "rtsp://192.168.1.100:554/stream",
                     "username": "admin",
@@ -1026,7 +1026,7 @@ class TestTestConnectionEndpoint:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://192.168.1.100:554/stream"}
             )
 
@@ -1063,7 +1063,7 @@ class TestTestConnectionResponseSchema:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://192.168.1.100:554/stream"}
             )
 
@@ -1109,7 +1109,7 @@ class TestTestConnectionResponseSchema:
             return_value=mock_discovery_service
         ):
             response = client.post(
-                "/api/v1/cameras/test",
+                "/api/v1/cameras/discover/test",
                 json={"rtsp_url": "rtsp://10.0.0.1:554/stream"}
             )
 
