@@ -82,11 +82,11 @@ vi.mock('@/components/cameras/DetectionZoneList', () => ({
 }))
 
 vi.mock('@/components/cameras/ZonePresetTemplates', () => ({
-  ZonePresetTemplates: ({ onTemplateSelect }: { onTemplateSelect: (vertices: Array<{x: number, y: number}>) => void }) => (
+  ZonePresetTemplates: ({ onTemplateSelect }: { onTemplateSelect: (vertices: Array<{x: number, y: number}>, name: string) => void }) => (
     <div data-testid="zone-preset-templates">
       <button
         type="button"
-        onClick={() => onTemplateSelect([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }])}
+        onClick={() => onTemplateSelect([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }], 'Full Frame')}
       >
         Full Frame Template
       </button>
@@ -507,7 +507,7 @@ describe('CameraForm', () => {
       await user.click(screen.getByText('Full Frame Template'))
 
       await waitFor(() => {
-        expect(screen.getByText('Zone 1')).toBeInTheDocument()
+        expect(screen.getByText('Full Frame Zone')).toBeInTheDocument()
       })
     })
 
