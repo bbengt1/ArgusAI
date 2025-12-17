@@ -2,10 +2,12 @@
  * Camera preview card component
  * Displays camera info with source badge, status indicator, and action buttons
  * Phase 2: Supports RTSP, USB, and UniFi Protect cameras with source-specific features
+ * Phase 6: Optimized with React.memo to prevent unnecessary re-renders (Story P6-1.2)
  */
 
 'use client';
 
+import { memo } from 'react';
 import Link from 'next/link';
 import { Edit, Trash2, Shield, Camera, Usb, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -35,10 +37,39 @@ const SOURCE_CONFIG: Record<CameraSourceType, { icon: typeof Shield; label: stri
 };
 
 /**
+ * Custom comparison function for React.memo
+ * Compares props to determine if re-render is needed
+ * Only re-renders when camera data that affects display changes
+ */
+function arePropsEqual(
+  prevProps: CameraPreviewProps,
+  nextProps: CameraPreviewProps
+): boolean {
+  const prevCamera = prevProps.camera;
+  const nextCamera = nextProps.camera;
+
+  // Compare camera object by key fields that affect visual output
+  return (
+    prevCamera.id === nextCamera.id &&
+    prevCamera.updated_at === nextCamera.updated_at &&
+    prevCamera.name === nextCamera.name &&
+    prevCamera.is_enabled === nextCamera.is_enabled &&
+    prevCamera.frame_rate === nextCamera.frame_rate &&
+    prevCamera.motion_sensitivity === nextCamera.motion_sensitivity &&
+    prevCamera.is_doorbell === nextCamera.is_doorbell &&
+    prevCamera.source_type === nextCamera.source_type &&
+    prevCamera.protect_camera_type === nextCamera.protect_camera_type &&
+    prevCamera.type === nextCamera.type &&
+    prevProps.onDelete === nextProps.onDelete
+  );
+}
+
+/**
  * Camera preview card
  * Shows camera name, source type badge, status, and action buttons
+ * Memoized to prevent unnecessary re-renders when parent updates
  */
-export function CameraPreview({ camera, onDelete }: CameraPreviewProps) {
+export const CameraPreview = memo(function CameraPreview({ camera, onDelete }: CameraPreviewProps) {
   const sourceType = (camera.source_type || camera.type || 'rtsp') as CameraSourceType;
   const sourceConfig = SOURCE_CONFIG[sourceType] || SOURCE_CONFIG.rtsp;
   const SourceIcon = sourceConfig.icon;
@@ -144,4 +175,4 @@ export function CameraPreview({ camera, onDelete }: CameraPreviewProps) {
       </CardContent>
     </Card>
   );
-}
+}, arePropsEqual);
