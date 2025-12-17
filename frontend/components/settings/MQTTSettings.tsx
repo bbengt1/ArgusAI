@@ -1,5 +1,5 @@
 /**
- * MQTT Settings Component (Story P4-2.4)
+ * MQTT Settings Component (Story P4-2.4, P5-6.2)
  *
  * Features:
  * - MQTT broker configuration form (AC 2, 6, 7, 9)
@@ -7,6 +7,7 @@
  * - Test connection button (AC 3)
  * - Save functionality with validation (AC 5, 8)
  * - Publish discovery button (AC 10)
+ * - Birth/Will message configuration (P5-6.2)
  */
 
 'use client';
@@ -43,7 +44,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Validation schema (AC 8, P5-6.1)
+// Validation schema (AC 8, P5-6.1, P5-6.2)
 const mqttConfigSchema = z.object({
   broker_host: z.string().min(1, 'Broker host is required').max(255),
   broker_port: z.coerce.number().int().min(1, 'Port must be between 1-65535').max(65535, 'Port must be between 1-65535'),
@@ -57,6 +58,9 @@ const mqttConfigSchema = z.object({
   retain_messages: z.boolean(),
   use_tls: z.boolean(),
   message_expiry_seconds: z.coerce.number().int().min(60, 'Expiry must be at least 60 seconds').max(3600, 'Expiry must be at most 3600 seconds'),
+  availability_topic: z.string().max(255).optional().or(z.literal('')),
+  birth_message: z.string().min(1, 'Birth message is required').max(100),
+  will_message: z.string().min(1, 'Will message is required').max(100),
 });
 
 interface MQTTFormData {
@@ -72,6 +76,9 @@ interface MQTTFormData {
   retain_messages: boolean;
   use_tls: boolean;
   message_expiry_seconds: number;
+  availability_topic: string;
+  birth_message: string;
+  will_message: string;
 }
 
 export function MQTTSettings() {
@@ -110,6 +117,9 @@ export function MQTTSettings() {
       retain_messages: true,
       use_tls: false,
       message_expiry_seconds: 300,
+      availability_topic: '',
+      birth_message: 'online',
+      will_message: 'offline',
     },
   });
 
@@ -132,6 +142,9 @@ export function MQTTSettings() {
         retain_messages: config.retain_messages,
         use_tls: config.use_tls,
         message_expiry_seconds: config.message_expiry_seconds,
+        availability_topic: config.availability_topic || '',
+        birth_message: config.birth_message || 'online',
+        will_message: config.will_message || 'offline',
       });
     }
   }, [configQuery.data, form]);
@@ -543,6 +556,61 @@ export function MQTTSettings() {
               <p className="text-xs text-muted-foreground">
                 MQTT 5.0 message expiry interval (60-3600 seconds). Messages not consumed within this time are discarded by the broker.
               </p>
+            </div>
+          </div>
+
+          {/* Availability Messages (P5-6.2) */}
+          <div className="space-y-4">
+            <h4 className="font-medium">Availability Messages</h4>
+            <p className="text-sm text-muted-foreground">
+              Birth and will messages announce ArgusAI&apos;s connection state to Home Assistant.
+              The broker publishes the will message if ArgusAI disconnects unexpectedly.
+            </p>
+
+            <div className="space-y-2">
+              <Label htmlFor="availability_topic">Availability Topic</Label>
+              <Input
+                id="availability_topic"
+                placeholder={`${form.watch('topic_prefix')}/status`}
+                {...form.register('availability_topic')}
+              />
+              {errors.availability_topic && (
+                <p className="text-sm text-destructive">{errors.availability_topic.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Topic for online/offline status. Leave empty to use default: {form.watch('topic_prefix')}/status
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="birth_message">Birth Message (online)</Label>
+                <Input
+                  id="birth_message"
+                  placeholder="online"
+                  {...form.register('birth_message')}
+                />
+                {errors.birth_message && (
+                  <p className="text-sm text-destructive">{errors.birth_message.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Published when ArgusAI connects
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="will_message">Will Message (offline)</Label>
+                <Input
+                  id="will_message"
+                  placeholder="offline"
+                  {...form.register('will_message')}
+                />
+                {errors.will_message && (
+                  <p className="text-sm text-destructive">{errors.will_message.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Published when ArgusAI disconnects
+                </p>
+              </div>
             </div>
           </div>
 

@@ -1,13 +1,14 @@
 """
-MQTT Service for Home Assistant Integration (Story P4-2.1, P5-6.1)
+MQTT Service for Home Assistant Integration (Story P4-2.1, P5-6.1, P5-6.2)
 
 Provides MQTT client management with:
 - Connection to MQTT brokers with username/password authentication
 - Auto-reconnect with exponential backoff (1s → 60s max)
 - Event publishing to camera-specific topics
 - Connection status tracking and metrics
-- Graceful shutdown
+- Graceful shutdown with offline message
 - MQTT 5.0 message expiry support (P5-6.1)
+- Birth/Will messages for availability tracking (P5-6.2)
 
 Uses paho-mqtt 2.0+ with CallbackAPIVersion.VERSION2.
 Connects using MQTT 5.0 protocol for message expiry support,
@@ -208,16 +209,20 @@ class MQTTService:
             self._client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
             logger.debug("MQTT TLS enabled")
 
-        # Configure Last Will and Testament (LWT) for availability (Story P4-2.2, AC7)
+        # Configure Last Will and Testament (LWT) for availability (Story P4-2.2 AC7, P5-6.2)
         # This message is sent by the broker if the client disconnects unexpectedly
-        status_topic = f"{self._config.topic_prefix}/status"
+        # Use config.availability_topic if set, otherwise fallback to {topic_prefix}/status
+        availability_topic = self._config.availability_topic or f"{self._config.topic_prefix}/status"
+        will_payload = self._config.will_message or "offline"
         self._client.will_set(
-            topic=status_topic,
-            payload="offline",
+            topic=availability_topic,
+            payload=will_payload,
             qos=1,
             retain=True
         )
-        logger.debug(f"MQTT LWT configured on topic {status_topic}")
+        logger.debug(
+            f"MQTT LWT configured: topic={availability_topic}, payload={will_payload}"
+        )
 
         # Start network loop in background thread
         self._client.loop_start()
@@ -279,11 +284,133 @@ class MQTTService:
                 pass
             self._client = None
 
+    def get_availability_topic(self) -> str:
+        """
+        Get the availability topic for birth/will messages (Story P5-6.2).
+
+        Returns:
+            Availability topic string. Uses config.availability_topic if set,
+            otherwise defaults to "{topic_prefix}/status".
+        """
+        if self._config and self._config.availability_topic:
+            return self._config.availability_topic
+        prefix = self._config.topic_prefix if self._config else "liveobject"
+        return f"{prefix}/status"
+
+    def publish_birth_message(self) -> bool:
+        """
+        Publish birth (online) message to availability topic (Story P5-6.2, AC5-7).
+
+        Called immediately after successful connection to announce ArgusAI is online.
+        Uses QoS 1 and retain=True for persistent state.
+
+        Returns:
+            True if publish successful, False otherwise.
+        """
+        if not self._connected or not self._client or not self._config:
+            logger.debug("Cannot publish birth message: not connected or no config")
+            return False
+
+        availability_topic = self.get_availability_topic()
+        birth_payload = self._config.birth_message or "online"
+
+        try:
+            result = self._client.publish(
+                availability_topic,
+                birth_payload,
+                qos=1,
+                retain=True
+            )
+
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                logger.info(
+                    f"MQTT birth message published",
+                    extra={
+                        "event_type": "mqtt_birth_published",
+                        "topic": availability_topic,
+                        "payload": birth_payload
+                    }
+                )
+                return True
+            else:
+                logger.warning(
+                    f"MQTT birth message publish failed: rc={result.rc}",
+                    extra={
+                        "event_type": "mqtt_birth_failed",
+                        "topic": availability_topic,
+                        "error_code": result.rc
+                    }
+                )
+                return False
+
+        except Exception as e:
+            logger.warning(
+                f"MQTT birth message error: {e}",
+                extra={
+                    "event_type": "mqtt_birth_error",
+                    "topic": availability_topic,
+                    "error": str(e)
+                }
+            )
+            return False
+
+    def _publish_offline_message(self) -> bool:
+        """
+        Publish offline message before graceful disconnect (Story P5-6.2, Task 4).
+
+        Unlike the will message (which is sent by the broker on unexpected disconnect),
+        this is sent explicitly when ArgusAI shuts down gracefully.
+
+        Returns:
+            True if publish successful, False otherwise.
+        """
+        if not self._client or not self._config:
+            return False
+
+        availability_topic = self.get_availability_topic()
+        will_payload = self._config.will_message or "offline"
+
+        try:
+            result = self._client.publish(
+                availability_topic,
+                will_payload,
+                qos=1,
+                retain=True
+            )
+
+            # Wait briefly for the message to be sent
+            result.wait_for_publish(timeout=2.0)
+
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                logger.info(
+                    f"MQTT offline message published",
+                    extra={
+                        "event_type": "mqtt_offline_published",
+                        "topic": availability_topic,
+                        "payload": will_payload
+                    }
+                )
+                return True
+            else:
+                logger.warning(
+                    f"MQTT offline message publish failed: rc={result.rc}",
+                    extra={"event_type": "mqtt_offline_failed", "error_code": result.rc}
+                )
+                return False
+
+        except Exception as e:
+            logger.warning(
+                f"MQTT offline message error: {e}",
+                extra={"event_type": "mqtt_offline_error", "error": str(e)}
+            )
+            return False
+
     async def disconnect(self) -> None:
         """
-        Gracefully disconnect from MQTT broker.
+        Gracefully disconnect from MQTT broker (Story P5-6.2).
 
-        Stops auto-reconnect and closes connection cleanly.
+        Publishes offline message before disconnecting, then stops auto-reconnect
+        and closes connection cleanly.
         """
         self._should_reconnect = False
 
@@ -301,6 +428,10 @@ class MQTTService:
                 "Disconnecting MQTT",
                 extra={"event_type": "mqtt_disconnecting"}
             )
+
+            # Publish offline message before disconnect (P5-6.2 Task 4)
+            self._publish_offline_message()
+
             self._client.disconnect()
             self._client.loop_stop()
             self._connected = False
@@ -458,6 +589,9 @@ class MQTTService:
                     "mqtt5_features": self._use_mqtt5
                 }
             )
+
+            # Publish birth message immediately after connect (Story P5-6.2, AC5)
+            self.publish_birth_message()
 
             # Invoke callback (e.g., to publish discovery messages)
             if self._on_connect_callback:
