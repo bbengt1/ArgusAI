@@ -33,6 +33,7 @@ import type { ICamera, ICameraTestResponse, IDetectionZone, IZoneVertex } from '
 import type { ITestConnectionResponse } from '@/types/discovery';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { MotionSettingsSection } from './MotionSettingsSection';
+import { AudioSettingsSection } from './AudioSettingsSection';
 import { DetectionZoneDrawer } from './DetectionZoneDrawer';
 import { DetectionZoneList } from './DetectionZoneList';
 import { ZonePresetTemplates } from './ZonePresetTemplates';
@@ -103,6 +104,10 @@ export function CameraForm({
             days: [0, 1, 2, 3, 4],
           },
           analysis_mode: initialData.analysis_mode || 'single_frame',
+          // Phase 6: Audio settings
+          audio_enabled: initialData.audio_enabled ?? false,
+          audio_event_types: (initialData.audio_event_types ?? []) as Array<'glass_break' | 'gunshot' | 'scream' | 'doorbell'>,
+          audio_threshold: initialData.audio_threshold ?? null,
         }
       : {
           name: '',
@@ -121,6 +126,10 @@ export function CameraForm({
             days: [0, 1, 2, 3, 4],
           },
           analysis_mode: 'single_frame',
+          // Phase 6: Audio settings (default disabled for new cameras)
+          audio_enabled: false,
+          audio_event_types: [],
+          audio_threshold: null,
         },
   });
 
@@ -478,6 +487,11 @@ export function CameraForm({
           form={form}
           sourceType={initialData?.source_type || cameraType}
         />
+
+        {/* Audio Detection Settings - only for RTSP cameras */}
+        {cameraType === 'rtsp' && (
+          <AudioSettingsSection form={form} />
+        )}
 
         {/* Test Connection Button - available for RTSP cameras (both new and edit mode) */}
         {(cameraType === 'rtsp' || isEditMode) && (

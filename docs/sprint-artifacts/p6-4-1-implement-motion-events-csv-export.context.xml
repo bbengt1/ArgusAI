@@ -1,0 +1,171 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P6-4</epicId>
+    <storyId>P6-4.1</storyId>
+    <title>Implement Motion Events CSV Export</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p6-4-1-implement-motion-events-csv-export.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>home owner</asA>
+    <iWant>to export motion event data to CSV format</iWant>
+    <soThat>I can analyze raw motion detection data in external tools for security review or trend analysis</soThat>
+    <tasks>
+      <task id="1">Create CSV export endpoint in motion_events.py (AC: #1, #2, #5)
+        - Add GET /motion-events/export endpoint before /{event_id} routes
+        - Accept format query param (validate: must be "csv")
+        - Implement streaming response generator using StreamingResponse
+        - Write CSV headers matching AC #2 columns
+        - Stream data in batches of 100</task>
+      <task id="2">Implement filtering and filename generation (AC: #3, #4, #6)
+        - Add start_date and end_date query params
+        - Add camera_id query param
+        - Convert dates to datetime for timestamp comparison
+        - Generate filename with date range</task>
+      <task id="3">Handle camera name lookup for CSV (AC: #2)
+        - Join with Camera table to get camera.name
+        - Use camera_id as fallback if camera not found</task>
+      <task id="4">Parse bounding_box JSON for CSV columns (AC: #2)
+        - Parse bounding_box JSON field to extract x, y, width, height
+        - Handle null/missing bounding_box gracefully
+        - Handle zone_id (may be null)</task>
+      <task id="5">Write backend tests (AC: #1-6)
+        - Test CSV export with no filters
+        - Test date range filtering
+        - Test camera_id filtering
+        - Test combined filters
+        - Test empty result set
+        - Test streaming response headers
+        - Test CSV format and columns</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">GET /api/v1/motion-events/export?format=csv endpoint created</criterion>
+    <criterion id="2">CSV columns: timestamp, camera_id, camera_name, confidence, algorithm, x, y, width, height, zone_id</criterion>
+    <criterion id="3">Date range filtering via start_date and end_date query parameters</criterion>
+    <criterion id="4">Camera filtering via camera_id query parameter</criterion>
+    <criterion id="5">Streaming response for large datasets (no memory issues with 100k+ events)</criterion>
+    <criterion id="6">Response filename includes date range (e.g., motion_events_2025-12-01_2025-12-17.csv)</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/epics-phase6.md" title="Phase 6 Epics" section="Epic P6-4: Data Export Enhancements">
+        Story P6-4.1 requirements for CSV export with columns and filtering specs
+      </doc>
+      <doc path="docs/backlog.md" title="Project Backlog" section="FF-017">
+        Export Motion Events to CSV - GitHub issue #42
+      </doc>
+      <doc path="docs/architecture/07-api-contracts.md" title="API Contracts" section="REST API Endpoints">
+        API design patterns and response formats for events endpoints
+      </doc>
+    </docs>
+    <code>
+      <file path="backend/app/api/v1/motion_events.py" kind="api-router" symbol="router" reason="Target file for new export endpoint - existing motion events API with list, get, delete, stats endpoints">
+        <lines>1-285</lines>
+      </file>
+      <file path="backend/app/api/v1/events.py" kind="api-router" symbol="export_events" lines="542-723" reason="Reference pattern for streaming CSV/JSON export with filtering - COPY THIS PATTERN">
+      </file>
+      <file path="backend/app/models/motion_event.py" kind="model" symbol="MotionEvent" reason="Data model with bounding_box JSON field, camera_id FK, timestamp, confidence, algorithm_used">
+      </file>
+      <file path="backend/app/schemas/motion.py" kind="schema" symbol="MotionEventResponse, BoundingBox" reason="Response schema and bounding box structure definition">
+      </file>
+      <file path="backend/app/models/camera.py" kind="model" symbol="Camera" reason="Camera model for name lookup via JOIN">
+      </file>
+      <file path="backend/tests/test_api/test_motion_events.py" kind="test" reason="Existing motion events tests - follow patterns for new export tests" lines="if-exists">
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" usage="StreamingResponse for memory-efficient exports"/>
+        <package name="sqlalchemy" usage="Database queries with JOIN for camera names"/>
+        <package name="csv" usage="Standard library CSV writer"/>
+        <package name="io" usage="StringIO buffer for CSV streaming"/>
+        <package name="json" usage="Parse bounding_box JSON field"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Route placement: Export endpoint MUST be defined before /{event_id} routes to avoid path shadowing</constraint>
+    <constraint type="pattern">Use StreamingResponse with batch size of 100 for memory efficiency</constraint>
+    <constraint type="pattern">Return text/csv media type with Content-Disposition header for file download</constraint>
+    <constraint type="pattern">Use project-relative paths in code references</constraint>
+    <constraint type="data">MotionEvent.bounding_box is JSON text: {"x": int, "y": int, "width": int, "height": int}</constraint>
+    <constraint type="data">Zone_id is not currently on MotionEvent model - use empty string in CSV</constraint>
+    <constraint type="testing">All new endpoints require corresponding unit tests</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="GET /api/v1/motion-events/export" kind="REST endpoint">
+      <signature>
+        GET /api/v1/motion-events/export
+        Query params:
+          - format: str (required, must be "csv")
+          - start_date: date (optional, YYYY-MM-DD)
+          - end_date: date (optional, YYYY-MM-DD)
+          - camera_id: str (optional, UUID)
+        Response: StreamingResponse (text/csv)
+        Headers: Content-Disposition: attachment; filename=motion_events_{start}_{end}.csv
+      </signature>
+      <path>backend/app/api/v1/motion_events.py</path>
+    </interface>
+    <interface name="MotionEvent model" kind="SQLAlchemy model">
+      <signature>
+        id: String (UUID)
+        camera_id: String (FK cameras.id)
+        timestamp: DateTime (timezone=True)
+        confidence: Float (0.0-1.0)
+        algorithm_used: String (mog2, knn, frame_diff)
+        bounding_box: Text (JSON)
+        motion_intensity: Float (nullable)
+        frame_thumbnail: Text (nullable)
+        created_at: DateTime
+      </signature>
+      <path>backend/app/models/motion_event.py</path>
+    </interface>
+    <interface name="Existing events export pattern" kind="function">
+      <signature>
+        @router.get("/export")
+        async def export_events(
+            format: str = Query(..., pattern="^(json|csv)$"),
+            start_date: Optional[date] = Query(None),
+            end_date: Optional[date] = Query(None),
+            camera_id: Optional[str] = Query(None),
+            db: Session = Depends(get_db)
+        ) -> StreamingResponse
+      </signature>
+      <path>backend/app/api/v1/events.py:542-723</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend tests use pytest with FastAPI TestClient. Tests are organized in backend/tests/test_api/ by router module.
+      Follow existing patterns from test_events.py and test_camera_audio_settings.py.
+      Use fixtures from conftest.py for database session and test client.
+      Mock external services where needed.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_motion_events_export.py</location>
+      <location>backend/tests/test_api/</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test endpoint returns 200 with valid format=csv parameter</idea>
+      <idea ac="1">Test endpoint returns 422 with invalid format parameter</idea>
+      <idea ac="2">Test CSV contains all required columns in correct order</idea>
+      <idea ac="2">Test bounding_box JSON is parsed correctly into x,y,width,height columns</idea>
+      <idea ac="2">Test camera_name is populated from Camera table join</idea>
+      <idea ac="3">Test start_date filter excludes events before date</idea>
+      <idea ac="3">Test end_date filter excludes events after date</idea>
+      <idea ac="4">Test camera_id filter returns only matching events</idea>
+      <idea ac="5">Test streaming response has correct Content-Type header</idea>
+      <idea ac="6">Test filename includes date range when filters applied</idea>
+      <idea ac="6">Test filename uses "all" when no date filters</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -1,6 +1,6 @@
 """Pydantic schemas for camera API endpoints"""
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, Literal, Any
+from typing import Optional, Literal, Any, List
 from datetime import datetime
 import json
 
@@ -41,6 +41,20 @@ class CameraCreate(CameraBase):
     username: Optional[str] = Field(None, max_length=100, description="RTSP authentication username")
     password: Optional[str] = Field(None, max_length=100, description="RTSP password (will be encrypted)")
     device_index: Optional[int] = Field(None, ge=0, description="USB camera device index (0, 1, 2, ...)")
+    # Phase 6 (P6-3.3): Audio settings
+    audio_enabled: bool = Field(default=False, description="Whether audio stream extraction is enabled")
+    audio_event_types: Optional[Any] = Field(None, description="JSON array of audio event types to detect: glass_break, gunshot, scream, doorbell")
+    audio_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Per-camera confidence threshold override (0.0-1.0)")
+
+    @field_validator('audio_event_types', mode='before')
+    @classmethod
+    def serialize_audio_event_types_create(cls, v):
+        """Convert audio_event_types from list to JSON string if needed"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v
+        return json.dumps(v)
 
     @model_validator(mode='after')
     def validate_camera_fields(self):
@@ -103,6 +117,21 @@ class CameraUpdate(BaseModel):
         None,
         description="AI analysis mode: single_frame (fast, low cost), multi_frame (balanced), video_native (best quality, highest cost)"
     )
+    # Phase 6 (P6-3.1): Audio stream extraction
+    audio_enabled: Optional[bool] = Field(None, description="Whether audio stream extraction is enabled")
+    # Phase 6 (P6-3.3): Per-camera audio event settings
+    audio_event_types: Optional[Any] = Field(None, description="JSON array of audio event types to detect: glass_break, gunshot, scream, doorbell")
+    audio_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Per-camera confidence threshold override (0.0-1.0)")
+
+    @field_validator('audio_event_types', mode='before')
+    @classmethod
+    def serialize_audio_event_types(cls, v):
+        """Convert audio_event_types from list to JSON string if needed"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v
+        return json.dumps(v)
 
     @field_validator('detection_zones', mode='before')
     @classmethod
@@ -145,8 +174,28 @@ class CameraResponse(CameraBase):
     smart_detection_types: Optional[Any] = Field(None, description="Enabled smart detection types")
     is_doorbell: Optional[bool] = Field(None, description="Whether camera is a doorbell")
 
+    # Phase 6 (P6-3.1): Audio stream extraction fields
+    audio_enabled: bool = Field(default=False, description="Whether audio stream extraction is enabled")
+    audio_codec: Optional[str] = Field(None, description="Detected audio codec: 'aac', 'pcmu', 'opus', etc.")
+    # Phase 6 (P6-3.3): Per-camera audio event settings
+    audio_event_types: Optional[Any] = Field(None, description="JSON array of audio event types to detect")
+    audio_threshold: Optional[float] = Field(None, description="Per-camera confidence threshold override (0.0-1.0)")
+
     # Note: password field is intentionally omitted (write-only field)
     # Note: analysis_mode is inherited from CameraBase
+
+    @field_validator('audio_event_types', mode='before')
+    @classmethod
+    def deserialize_audio_event_types(cls, v):
+        """Convert audio_event_types from JSON string to list"""
+        if v is None or v == '':
+            return None
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
 
     @field_validator('detection_zones', mode='before')
     @classmethod

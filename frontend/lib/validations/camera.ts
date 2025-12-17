@@ -146,6 +146,10 @@ export const cameraFormSchema = z.object({
   detection_schedule: detectionScheduleSchema.optional().nullable(),
   // Phase 3: AI analysis mode
   analysis_mode: z.enum(['single_frame', 'multi_frame', 'video_native']),
+  // Phase 6: Audio settings
+  audio_enabled: z.boolean().optional(),
+  audio_event_types: z.array(z.enum(['glass_break', 'gunshot', 'scream', 'doorbell'])).optional(),
+  audio_threshold: z.number().min(0).max(1).nullable().optional(),
 }).superRefine((data, ctx) => {
   // Validate RTSP-specific fields
   if (data.type === 'rtsp') {

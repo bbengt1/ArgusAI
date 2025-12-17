@@ -6,7 +6,7 @@
 
 import { memo, useState } from 'react';
 import Image from 'next/image';
-import { Video, Loader2, AlertCircle, PlayCircle } from 'lucide-react';
+import { Video, Loader2, AlertCircle, PlayCircle, Volume2 } from 'lucide-react';
 import type { ICamera } from '@/types/camera';
 import { useCameraPreview, useAnalyzeCamera } from '@/lib/hooks/useCameraPreview';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -118,6 +118,15 @@ export const CameraPreviewCard = memo(function CameraPreviewCard({
         <div className="flex items-center space-x-2">
           <Video className="w-5 h-5 text-blue-600" aria-hidden="true" />
           <h3 className="font-semibold text-base">{camera.name}</h3>
+          {/* Audio indicator - shown when audio capture is enabled */}
+          {camera.audio_enabled && (
+            <span title={camera.audio_codec ? `Audio: ${camera.audio_codec}` : 'Audio enabled'}>
+              <Volume2
+                className="w-4 h-4 text-green-600"
+                aria-label="Audio capture enabled"
+              />
+            </span>
+          )}
         </div>
         <div className="flex items-center space-x-2">
           <div

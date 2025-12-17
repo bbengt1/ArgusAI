@@ -97,6 +97,11 @@ export interface ICamera {
   detection_schedule?: IDetectionSchedule | null; // Optional detection schedule configuration
   // Phase 3: AI analysis mode
   analysis_mode: AnalysisMode; // AI analysis mode for event processing
+  // Phase 6: Audio settings
+  audio_enabled: boolean; // Whether audio capture is enabled
+  audio_codec?: string | null; // Detected audio codec
+  audio_event_types?: string[] | null; // Audio event types to detect: glass_break, gunshot, scream, doorbell
+  audio_threshold?: number | null; // Per-camera confidence threshold override (0.0-1.0)
   // Phase 2: UniFi Protect integration fields
   source_type: CameraSourceType; // 'rtsp', 'usb', or 'protect'
   protect_controller_id?: string | null; // Foreign key to protect_controllers
@@ -127,6 +132,10 @@ export interface ICameraCreate {
   detection_zones?: IDetectionZone[];
   detection_schedule?: IDetectionSchedule | null;
   analysis_mode?: AnalysisMode; // Phase 3: AI analysis mode
+  // Phase 6: Audio settings
+  audio_enabled?: boolean;
+  audio_event_types?: string[];
+  audio_threshold?: number | null;
 }
 
 /**
@@ -148,6 +157,10 @@ export interface ICameraUpdate {
   detection_zones?: IDetectionZone[];
   detection_schedule?: IDetectionSchedule | null;
   analysis_mode?: AnalysisMode; // Phase 3: AI analysis mode
+  // Phase 6: Audio settings
+  audio_enabled?: boolean;
+  audio_event_types?: string[];
+  audio_threshold?: number | null;
 }
 
 /**
