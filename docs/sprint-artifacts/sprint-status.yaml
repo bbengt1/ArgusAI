@@ -392,6 +392,42 @@ development_status:
   # Total: 11 stories completed
 
   # ============================================================================
+  # PHASE 7: HomeKit Integration & Enhancements
+  # ============================================================================
+  # Source: docs/epics-phase7.md
+  # Focus: Fix HomeKit issues, package delivery alerts, camera streaming, entities stub
+
+  # Epic P7-1: HomeKit Troubleshooting & Fixes
+  epic-p7-1: backlog
+  p7-1-1-add-homekit-diagnostic-logging: backlog
+  p7-1-2-fix-homekit-bridge-discovery-issues: backlog
+  p7-1-3-fix-homekit-event-delivery: backlog
+  p7-1-4-add-homekit-connection-status-monitoring: backlog
+  epic-p7-1-retrospective: optional
+
+  # Epic P7-2: Package Delivery Alerts
+  epic-p7-2: backlog
+  p7-2-1-add-carrier-detection-to-ai-analysis: backlog
+  p7-2-2-create-package-delivery-alert-rule-type: backlog
+  p7-2-3-add-package-delivery-to-homekit: backlog
+  p7-2-4-create-package-delivery-dashboard-widget: backlog
+  epic-p7-2-retrospective: optional
+
+  # Epic P7-3: HomeKit Camera Streaming
+  epic-p7-3: backlog
+  p7-3-1-verify-rtsp-to-srtp-streaming-works: backlog
+  p7-3-2-add-camera-snapshot-support: backlog
+  p7-3-3-add-camera-streaming-diagnostics: backlog
+  epic-p7-3-retrospective: optional
+
+  # Epic P7-4: Entities Page & Alert Stub
+  epic-p7-4: backlog
+  p7-4-1-design-entities-data-model: backlog
+  p7-4-2-create-entities-list-page: backlog
+  p7-4-3-stub-entity-alert-configuration-ui: backlog
+  epic-p7-4-retrospective: optional
+
+  # ============================================================================
   # TECHNICAL DEBT
   # ============================================================================
   # Source: docs/backlog.md
