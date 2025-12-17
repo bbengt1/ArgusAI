@@ -1,6 +1,6 @@
 # Story P6-1.2: Add React.memo to CameraPreview Component
 
-Status: review
+Status: done
 
 ## Story
 
