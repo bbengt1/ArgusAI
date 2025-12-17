@@ -3,25 +3,183 @@ Motion Events API endpoints
 
 Provides REST API for motion event retrieval and management:
 - GET /motion-events - List all motion events with filters
+- GET /motion-events/export - Export motion events to CSV format
 - GET /motion-events/{id} - Get single motion event
 - DELETE /motion-events/{id} - Delete motion event
 - GET /motion-events/stats - Get motion event statistics
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 import logging
 import json
+import csv
+import io
 
 from app.core.database import get_db
 from app.models.motion_event import MotionEvent
+from app.models.camera import Camera
 from app.schemas.motion import MotionEventResponse, MotionEventStatsResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/motion-events", tags=["motion-events"])
+
+
+# IMPORTANT: Export route must come BEFORE /{event_id} to avoid path parameter shadowing
+@router.get("/export")
+async def export_motion_events(
+    format: str = Query(..., pattern="^csv$", description="Export format (currently only csv supported)"),
+    start_date: Optional[date] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="End date (YYYY-MM-DD)"),
+    camera_id: Optional[str] = Query(None, description="Filter by camera UUID"),
+    db: Session = Depends(get_db)
+):
+    """
+    Export motion events to CSV format
+
+    Streams motion events in batches for memory efficiency. Supports filtering by date range
+    and camera. Returns a downloadable CSV file with motion detection data.
+
+    Args:
+        format: Export format - must be "csv"
+        start_date: Optional start date filter (inclusive)
+        end_date: Optional end date filter (inclusive)
+        camera_id: Optional filter by camera UUID
+        db: Database session
+
+    Returns:
+        StreamingResponse with Content-Disposition header for download
+
+    **CSV Columns:**
+    - timestamp: ISO 8601 timestamp of motion detection
+    - camera_id: UUID of the camera
+    - camera_name: Human-readable camera name
+    - confidence: Motion detection confidence (0.0-1.0)
+    - algorithm: Detection algorithm used (mog2, knn, frame_diff)
+    - x, y, width, height: Bounding box coordinates (if available)
+    - zone_id: Detection zone ID (if applicable)
+
+    **Status Codes:**
+    - 200: Success (streaming response)
+    - 422: Invalid format parameter
+    - 500: Internal server error
+
+    **Examples:**
+    - GET /motion-events/export?format=csv
+    - GET /motion-events/export?format=csv&start_date=2025-11-01&end_date=2025-11-17
+    - GET /motion-events/export?format=csv&camera_id=abc123
+    """
+    try:
+        # Build query with filters, joining Camera table for camera names
+        query = db.query(MotionEvent, Camera.name.label("camera_name")).outerjoin(
+            Camera, MotionEvent.camera_id == Camera.id
+        )
+
+        # Date range filters
+        if start_date:
+            start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+            query = query.filter(MotionEvent.timestamp >= start_datetime)
+
+        if end_date:
+            end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+            query = query.filter(MotionEvent.timestamp <= end_datetime)
+
+        # Camera filter
+        if camera_id:
+            query = query.filter(MotionEvent.camera_id == camera_id)
+
+        # Sort by timestamp
+        query = query.order_by(MotionEvent.timestamp)
+
+        # Generate filename with date range
+        if start_date and end_date:
+            filename = f"motion_events_{start_date.isoformat()}_{end_date.isoformat()}.csv"
+        elif start_date:
+            filename = f"motion_events_{start_date.isoformat()}_latest.csv"
+        elif end_date:
+            filename = f"motion_events_earliest_{end_date.isoformat()}.csv"
+        else:
+            filename = "motion_events_all.csv"
+
+        logger.info(
+            f"Starting motion events export: format={format}, start_date={start_date}, "
+            f"end_date={end_date}, camera={camera_id}"
+        )
+
+        def generate_csv():
+            """Generate CSV with headers, streaming in batches"""
+            batch_size = 100
+            offset = 0
+
+            # CSV headers per AC#2
+            fieldnames = [
+                "timestamp", "camera_id", "camera_name", "confidence",
+                "algorithm", "x", "y", "width", "height", "zone_id"
+            ]
+
+            # Write headers
+            buffer = io.StringIO()
+            writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+            writer.writeheader()
+            yield buffer.getvalue()
+
+            # Stream rows in batches
+            while True:
+                results = query.offset(offset).limit(batch_size).all()
+
+                if not results:
+                    break
+
+                buffer = io.StringIO()
+                writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+
+                for motion_event, camera_name in results:
+                    # Parse bounding_box JSON if present
+                    x, y, width, height = "", "", "", ""
+                    if motion_event.bounding_box:
+                        try:
+                            bbox = json.loads(motion_event.bounding_box)
+                            x = bbox.get("x", "")
+                            y = bbox.get("y", "")
+                            width = bbox.get("width", "")
+                            height = bbox.get("height", "")
+                        except (json.JSONDecodeError, TypeError):
+                            pass  # Leave as empty strings
+
+                    writer.writerow({
+                        "timestamp": motion_event.timestamp.isoformat() if motion_event.timestamp else "",
+                        "camera_id": motion_event.camera_id or "",
+                        "camera_name": camera_name or motion_event.camera_id or "",  # Fallback to camera_id
+                        "confidence": motion_event.confidence if motion_event.confidence is not None else "",
+                        "algorithm": motion_event.algorithm_used or "",
+                        "x": x,
+                        "y": y,
+                        "width": width,
+                        "height": height,
+                        "zone_id": ""  # zone_id not currently stored on MotionEvent
+                    })
+
+                yield buffer.getvalue()
+                offset += batch_size
+
+        return StreamingResponse(
+            generate_csv(),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to export motion events: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to export motion events"
+        )
 
 
 @router.get("", response_model=List[MotionEventResponse])
