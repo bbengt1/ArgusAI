@@ -1,5 +1,5 @@
 """
-Tests for HomeKit API endpoints (Story P5-1.1, P5-1.8)
+Tests for HomeKit API endpoints (Story P5-1.1, P5-1.8, P7-1.2)
 
 Tests cover:
 - HomeKit status endpoint
@@ -7,9 +7,11 @@ Tests cover:
 - HomeKit QR code endpoint
 - HomeKit pairings list endpoint (P5-1.8 AC3)
 - HomeKit remove pairing endpoint (P5-1.8 AC4)
+- HomeKit connectivity test endpoint (P7-1.2 AC6)
 - Schema validation
 """
 import pytest
+from datetime import datetime
 from pydantic import ValidationError
 
 from app.api.v1.homekit import (
@@ -21,6 +23,11 @@ from app.api.v1.homekit import (
     PairingInfo,
     PairingsListResponse,
     RemovePairingResponse,
+)
+from app.schemas.homekit_connectivity import (
+    HomeKitConnectivityResponse,
+    HomeKitTestEventRequest,
+    HomeKitTestEventResponse,
 )
 
 
@@ -457,3 +464,209 @@ class TestPairingsAPIEndpoints:
 
         assert admin_count == 1
         assert user_count == 2
+
+
+# ============================================================================
+# Story P7-1.2: Connectivity Test Schema Tests
+# ============================================================================
+
+
+class TestConnectivitySchemas:
+    """Tests for HomeKit connectivity test schemas (Story P7-1.2)."""
+
+    def test_connectivity_response_schema_success(self):
+        """AC6: HomeKitConnectivityResponse validates successful test."""
+        response = HomeKitConnectivityResponse(
+            mdns_visible=True,
+            discovered_as="ArgusAI._hap._tcp.local",
+            port_accessible=True,
+            firewall_issues=[],
+            bind_address="0.0.0.0",
+            port=51826,
+            bridge_name="ArgusAI",
+            test_timestamp=datetime.utcnow(),
+            troubleshooting_hints=[]
+        )
+
+        assert response.mdns_visible is True
+        assert response.discovered_as == "ArgusAI._hap._tcp.local"
+        assert response.port_accessible is True
+        assert response.firewall_issues == []
+        assert response.bind_address == "0.0.0.0"
+        assert response.port == 51826
+        assert response.bridge_name == "ArgusAI"
+        assert response.troubleshooting_hints == []
+
+    def test_connectivity_response_schema_failure(self):
+        """AC6: HomeKitConnectivityResponse validates failed test with issues."""
+        response = HomeKitConnectivityResponse(
+            mdns_visible=False,
+            discovered_as=None,
+            port_accessible=False,
+            firewall_issues=["Port 51826 may be blocked by firewall"],
+            bind_address="127.0.0.1",
+            port=51826,
+            bridge_name="ArgusAI",
+            test_timestamp=datetime.utcnow(),
+            troubleshooting_hints=[
+                "Ensure HomeKit is enabled and running",
+                "Check firewall settings for port 51826",
+                "Use 0.0.0.0 for bind_address to allow network access"
+            ]
+        )
+
+        assert response.mdns_visible is False
+        assert response.discovered_as is None
+        assert response.port_accessible is False
+        assert len(response.firewall_issues) == 1
+        assert "blocked" in response.firewall_issues[0]
+        assert len(response.troubleshooting_hints) == 3
+
+    def test_connectivity_response_bind_address_warning(self):
+        """AC6: Connectivity test detects localhost bind address issue."""
+        response = HomeKitConnectivityResponse(
+            mdns_visible=True,
+            discovered_as="ArgusAI._hap._tcp.local",
+            port_accessible=False,
+            firewall_issues=["Server bound to localhost only (127.0.0.1)"],
+            bind_address="127.0.0.1",
+            port=51826,
+            bridge_name="ArgusAI",
+            test_timestamp=datetime.utcnow(),
+            troubleshooting_hints=[
+                "Change bind_address to 0.0.0.0 or a specific network interface"
+            ]
+        )
+
+        assert response.bind_address == "127.0.0.1"
+        assert len(response.firewall_issues) == 1
+        assert "localhost" in response.firewall_issues[0]
+
+    def test_test_event_request_schema(self):
+        """HomeKitTestEventRequest validates correctly."""
+        request = HomeKitTestEventRequest(
+            camera_id="abc-123",
+            event_type="motion"
+        )
+
+        assert request.camera_id == "abc-123"
+        assert request.event_type == "motion"
+
+    def test_test_event_request_default_type(self):
+        """HomeKitTestEventRequest uses default event type."""
+        request = HomeKitTestEventRequest(
+            camera_id="abc-123"
+        )
+
+        assert request.event_type == "motion"
+
+    def test_test_event_response_schema(self):
+        """HomeKitTestEventResponse validates correctly."""
+        response = HomeKitTestEventResponse(
+            success=True,
+            message="Motion event triggered for Front Door",
+            delivered_to_clients=2
+        )
+
+        assert response.success is True
+        assert "Motion event" in response.message
+        assert response.delivered_to_clients == 2
+
+    def test_test_event_response_no_clients(self):
+        """HomeKitTestEventResponse handles zero clients."""
+        response = HomeKitTestEventResponse(
+            success=True,
+            message="Motion event triggered but no clients connected",
+            delivered_to_clients=0
+        )
+
+        assert response.success is True
+        assert response.delivered_to_clients == 0
+
+
+class TestConnectivityAPIEndpoints:
+    """Tests for HomeKit connectivity API endpoint behavior (Story P7-1.2)."""
+
+    def test_connectivity_test_response_format_success(self):
+        """AC6: Connectivity test success returns expected format."""
+        connectivity_response = {
+            "mdns_visible": True,
+            "discovered_as": "ArgusAI._hap._tcp.local",
+            "port_accessible": True,
+            "firewall_issues": [],
+            "bind_address": "0.0.0.0",
+            "port": 51826,
+            "bridge_name": "ArgusAI",
+            "test_timestamp": "2025-12-17T10:30:00Z",
+            "troubleshooting_hints": []
+        }
+
+        response = HomeKitConnectivityResponse(**connectivity_response)
+        assert response.mdns_visible is True
+        assert response.port_accessible is True
+        assert response.firewall_issues == []
+
+    def test_connectivity_test_response_format_failure(self):
+        """AC6: Connectivity test failure returns hints."""
+        connectivity_response = {
+            "mdns_visible": False,
+            "discovered_as": None,
+            "port_accessible": False,
+            "firewall_issues": ["Port 51826 blocked"],
+            "bind_address": "0.0.0.0",
+            "port": 51826,
+            "bridge_name": "ArgusAI",
+            "test_timestamp": "2025-12-17T10:30:00Z",
+            "troubleshooting_hints": [
+                "Check firewall settings",
+                "Ensure mDNS/Bonjour is enabled"
+            ]
+        }
+
+        response = HomeKitConnectivityResponse(**connectivity_response)
+        assert response.mdns_visible is False
+        assert len(response.troubleshooting_hints) == 2
+
+    def test_connectivity_test_detects_mdns_issues(self):
+        """AC6: Connectivity test identifies mDNS problems."""
+        connectivity_response = {
+            "mdns_visible": False,
+            "discovered_as": None,
+            "port_accessible": True,  # Port works but mDNS doesn't
+            "firewall_issues": ["mDNS multicast may be blocked"],
+            "bind_address": "0.0.0.0",
+            "port": 51826,
+            "bridge_name": "ArgusAI",
+            "test_timestamp": "2025-12-17T10:30:00Z",
+            "troubleshooting_hints": [
+                "Ensure Avahi/Bonjour is running",
+                "Check that mDNS multicast (224.0.0.251:5353) is allowed"
+            ]
+        }
+
+        response = HomeKitConnectivityResponse(**connectivity_response)
+        assert response.mdns_visible is False
+        assert response.port_accessible is True
+        assert "mDNS" in response.firewall_issues[0]
+
+    def test_connectivity_test_detects_port_issues(self):
+        """AC6: Connectivity test identifies port accessibility problems."""
+        connectivity_response = {
+            "mdns_visible": True,
+            "discovered_as": "ArgusAI._hap._tcp.local",
+            "port_accessible": False,  # mDNS works but port doesn't
+            "firewall_issues": ["TCP port 51826 not accessible"],
+            "bind_address": "0.0.0.0",
+            "port": 51826,
+            "bridge_name": "ArgusAI",
+            "test_timestamp": "2025-12-17T10:30:00Z",
+            "troubleshooting_hints": [
+                "Open TCP port 51826 in firewall",
+                "Check if another process is using port 51826"
+            ]
+        }
+
+        response = HomeKitConnectivityResponse(**connectivity_response)
+        assert response.mdns_visible is True
+        assert response.port_accessible is False
+        assert "TCP port" in response.firewall_issues[0]

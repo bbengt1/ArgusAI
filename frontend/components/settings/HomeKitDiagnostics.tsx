@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * HomeKitDiagnostics component (Story P7-1.1 AC6)
+ * HomeKitDiagnostics component (Story P7-1.1 AC6, P7-1.2)
  *
  * Displays diagnostic information for HomeKit troubleshooting including:
  * - Bridge status and mDNS advertising state
@@ -9,11 +9,14 @@
  * - Connected clients count
  * - Recent diagnostic logs with category filtering
  * - Warnings and errors prominently displayed
+ * - Connectivity test button (P7-1.2 AC6)
  */
 import React, { useState } from 'react';
 import {
   useHomekitDiagnostics,
+  useHomekitConnectivity,
   type HomekitDiagnosticEntry,
+  type HomekitConnectivityResult,
 } from '@/hooks/useHomekitStatus';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +35,10 @@ import {
   Filter,
   ChevronDown,
   ChevronUp,
+  Wifi,
+  TestTube,
+  Lightbulb,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -99,6 +106,152 @@ function DiagnosticLogEntry({ entry }: DiagnosticLogEntryProps) {
         <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-x-auto">
           {JSON.stringify(entry.details, null, 2)}
         </pre>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ConnectivityTestPanel component (Story P7-1.2 AC6)
+ *
+ * Displays the "Test Discovery" button and shows connectivity test results
+ * including mDNS visibility, port accessibility, and troubleshooting hints.
+ */
+function ConnectivityTestPanel() {
+  const [testResult, setTestResult] = useState<HomekitConnectivityResult | null>(null);
+  const connectivityMutation = useHomekitConnectivity();
+
+  const runConnectivityTest = async () => {
+    try {
+      const result = await connectivityMutation.mutateAsync();
+      setTestResult(result);
+    } catch (err) {
+      console.error('Connectivity test failed:', err);
+    }
+  };
+
+  return (
+    <div className="border rounded-lg p-4 bg-muted/30">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Wifi className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Discovery Test</span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={runConnectivityTest}
+          disabled={connectivityMutation.isPending}
+        >
+          {connectivityMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Testing...
+            </>
+          ) : (
+            <>
+              <TestTube className="h-4 w-4 mr-2" />
+              Test Discovery
+            </>
+          )}
+        </Button>
+      </div>
+
+      {connectivityMutation.isError && (
+        <Alert variant="destructive" className="mt-3">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Test Failed</AlertTitle>
+          <AlertDescription>
+            {connectivityMutation.error instanceof Error
+              ? connectivityMutation.error.message
+              : 'Connectivity test failed'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {testResult && (
+        <div className="mt-3 space-y-3">
+          {/* Test Results Grid */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {/* mDNS Visibility */}
+            <div className="flex items-center gap-2">
+              {testResult.mdns_visible ? (
+                <Check className="h-4 w-4 text-green-500" />
+              ) : (
+                <X className="h-4 w-4 text-red-500" />
+              )}
+              <span>mDNS Visible</span>
+            </div>
+
+            {/* Port Accessible */}
+            <div className="flex items-center gap-2">
+              {testResult.port_accessible ? (
+                <Check className="h-4 w-4 text-green-500" />
+              ) : (
+                <X className="h-4 w-4 text-red-500" />
+              )}
+              <span>Port {testResult.port} Accessible</span>
+            </div>
+
+            {/* Discovered As */}
+            {testResult.discovered_as && (
+              <div className="col-span-2 flex items-center gap-2">
+                <Radio className="h-4 w-4 text-muted-foreground" />
+                <span className="font-mono text-xs">{testResult.discovered_as}</span>
+              </div>
+            )}
+
+            {/* Bind Address */}
+            <div className="col-span-2 flex items-center gap-2">
+              <Network className="h-4 w-4 text-muted-foreground" />
+              <span className="font-mono text-xs">
+                {testResult.bind_address}:{testResult.port}
+              </span>
+            </div>
+          </div>
+
+          {/* Firewall Issues */}
+          {testResult.firewall_issues.length > 0 && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Firewall Issues Detected</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc list-inside mt-2">
+                  {testResult.firewall_issues.map((issue, i) => (
+                    <li key={i} className="text-sm">{issue}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Troubleshooting Hints */}
+          {testResult.troubleshooting_hints.length > 0 && (
+            <div className="border rounded-lg p-3 bg-blue-500/10 border-blue-500/30">
+              <div className="flex items-center gap-2 mb-2">
+                <Lightbulb className="h-4 w-4 text-blue-500" />
+                <span className="text-sm font-medium text-blue-500">Troubleshooting Tips</span>
+              </div>
+              <ul className="list-disc list-inside space-y-1">
+                {testResult.troubleshooting_hints.map((hint, i) => (
+                  <li key={i} className="text-sm text-muted-foreground">{hint}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {testResult.mdns_visible && testResult.port_accessible && testResult.firewall_issues.length === 0 && (
+            <Alert className="border-green-500 bg-green-500/10">
+              <Check className="h-4 w-4 text-green-500" />
+              <AlertTitle className="text-green-500">All Checks Passed</AlertTitle>
+              <AlertDescription>
+                HomeKit bridge &quot;{testResult.bridge_name}&quot; is discoverable and accessible.
+                It should appear in the Apple Home app.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
       )}
     </div>
   );
@@ -300,6 +453,9 @@ export function HomeKitDiagnostics({ enabled = true }: HomeKitDiagnosticsProps) 
             </div>
           </div>
         )}
+
+        {/* Connectivity Test Panel (Story P7-1.2 AC6) */}
+        <ConnectivityTestPanel />
 
         {/* Log Filters */}
         <div className="flex items-center gap-2">

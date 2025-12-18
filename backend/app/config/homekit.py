@@ -38,6 +38,9 @@ DEFAULT_PACKAGE_RESET_SECONDS = 60  # 60 seconds (packages persist longer)
 # Story P7-1.1: Diagnostic logging defaults
 DEFAULT_DIAGNOSTIC_LOG_SIZE = 100  # Maximum diagnostic log entries to retain
 
+# Story P7-1.2: Network binding defaults
+DEFAULT_BIND_ADDRESS = "0.0.0.0"  # Bind to all interfaces by default
+
 # Story P5-1.2: HomeKit category constants
 HOMEKIT_CATEGORY_BRIDGE = 2  # HAP category for Bridge accessory
 
@@ -251,6 +254,8 @@ class HomekitConfig:
         animal_reset_seconds: Seconds before animal sensor resets to False (Story P5-1.6)
         package_reset_seconds: Seconds before package sensor resets to False (Story P5-1.6)
         diagnostic_log_size: Maximum diagnostic log entries to retain (Story P7-1.1)
+        bind_address: IP address to bind to (Story P7-1.2, default 0.0.0.0 for all interfaces)
+        mdns_interface: Specific network interface for mDNS advertisement (Story P7-1.2, optional)
     """
     enabled: bool = False
     port: int = DEFAULT_HOMEKIT_PORT
@@ -266,6 +271,8 @@ class HomekitConfig:
     animal_reset_seconds: int = DEFAULT_ANIMAL_RESET_SECONDS
     package_reset_seconds: int = DEFAULT_PACKAGE_RESET_SECONDS
     diagnostic_log_size: int = DEFAULT_DIAGNOSTIC_LOG_SIZE
+    bind_address: str = DEFAULT_BIND_ADDRESS  # Story P7-1.2: IP to bind to
+    mdns_interface: Optional[str] = None  # Story P7-1.2: Network interface for mDNS
 
     @property
     def persist_file(self) -> str:
@@ -303,10 +310,17 @@ def get_homekit_config() -> HomekitConfig:
         HOMEKIT_ANIMAL_RESET_SECONDS: Animal sensor reset timeout (default: 30, Story P5-1.6)
         HOMEKIT_PACKAGE_RESET_SECONDS: Package sensor reset timeout (default: 60, Story P5-1.6)
         HOMEKIT_DIAGNOSTIC_LOG_SIZE: Max diagnostic log entries (default: 100, Story P7-1.1)
+        HOMEKIT_BIND_ADDRESS: IP address to bind to (default: 0.0.0.0, Story P7-1.2)
+        HOMEKIT_MDNS_INTERFACE: Specific network interface for mDNS (default: None, Story P7-1.2)
 
     Returns:
         HomekitConfig: Configuration instance
     """
+    # Story P7-1.2: Get mdns_interface, convert empty string to None
+    mdns_interface = os.getenv("HOMEKIT_MDNS_INTERFACE")
+    if mdns_interface == "":
+        mdns_interface = None
+
     return HomekitConfig(
         enabled=os.getenv("HOMEKIT_ENABLED", "false").lower() in ("true", "1", "yes"),
         port=int(os.getenv("HOMEKIT_PORT", str(DEFAULT_HOMEKIT_PORT))),
@@ -322,4 +336,6 @@ def get_homekit_config() -> HomekitConfig:
         animal_reset_seconds=int(os.getenv("HOMEKIT_ANIMAL_RESET_SECONDS", str(DEFAULT_ANIMAL_RESET_SECONDS))),
         package_reset_seconds=int(os.getenv("HOMEKIT_PACKAGE_RESET_SECONDS", str(DEFAULT_PACKAGE_RESET_SECONDS))),
         diagnostic_log_size=int(os.getenv("HOMEKIT_DIAGNOSTIC_LOG_SIZE", str(DEFAULT_DIAGNOSTIC_LOG_SIZE))),
+        bind_address=os.getenv("HOMEKIT_BIND_ADDRESS", DEFAULT_BIND_ADDRESS),
+        mdns_interface=mdns_interface,
     )

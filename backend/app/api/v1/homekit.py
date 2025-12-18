@@ -25,6 +25,7 @@ from app.models.camera import Camera
 from app.services.homekit_service import get_homekit_service, HomekitStatus
 from app.config.homekit import generate_pincode
 from app.schemas.homekit_diagnostics import HomeKitDiagnosticsResponse
+from app.schemas.homekit_connectivity import HomeKitConnectivityResponse
 
 logger = logging.getLogger(__name__)
 
@@ -661,6 +662,52 @@ async def remove_pairing(pairing_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to remove pairing: {str(e)}"
+        )
+
+
+# ============================================================================
+# Connectivity Test Endpoint (Story P7-1.2)
+# ============================================================================
+
+
+@router.post("/test-connectivity", response_model=HomeKitConnectivityResponse)
+async def test_connectivity():
+    """
+    Test HomeKit bridge connectivity (Story P7-1.2 AC1, AC2, AC6).
+
+    Performs connectivity checks to help troubleshoot HomeKit discovery issues:
+    - mDNS service visibility (Bonjour/Avahi)
+    - HAP port accessibility
+    - Firewall or network configuration issues
+
+    Returns diagnostic data including:
+    - Whether the HomeKit service is visible via mDNS
+    - Whether the HAP port is accessible
+    - List of detected issues and troubleshooting hints
+
+    Note: This test may take 2-3 seconds as it performs network checks.
+    """
+    try:
+        service = get_homekit_service()
+        result = await service.test_connectivity()
+
+        logger.info(
+            "HomeKit connectivity test completed",
+            extra={
+                "event_type": "homekit_connectivity_test",
+                "mdns_visible": result.mdns_visible,
+                "port_accessible": result.port_accessible,
+                "issues_count": len(result.firewall_issues)
+            }
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to run connectivity test: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to run connectivity test: {str(e)}"
         )
 
 

@@ -1885,6 +1885,27 @@ export const apiClient = {
     }> => {
       return apiFetch('/homekit/diagnostics');
     },
+
+    /**
+     * Test HomeKit bridge connectivity (Story P7-1.2)
+     * Checks mDNS visibility and port accessibility
+     * @returns Connectivity test results with troubleshooting hints
+     */
+    testConnectivity: async (): Promise<{
+      mdns_visible: boolean;
+      discovered_as: string | null;
+      port_accessible: boolean;
+      firewall_issues: string[];
+      bind_address: string;
+      port: number;
+      bridge_name: string;
+      test_timestamp: string;
+      troubleshooting_hints: string[];
+    }> => {
+      return apiFetch('/homekit/test-connectivity', {
+        method: 'POST',
+      });
+    },
   },
 
   // ============================================================================

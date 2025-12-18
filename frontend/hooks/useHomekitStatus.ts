@@ -53,6 +53,7 @@ export interface HomekitRemovePairingResponse {
 const HOMEKIT_QUERY_KEY = ['homekit', 'status'];
 const HOMEKIT_PAIRINGS_KEY = ['homekit', 'pairings'];
 const HOMEKIT_DIAGNOSTICS_KEY = ['homekit', 'diagnostics'];
+const HOMEKIT_CONNECTIVITY_KEY = ['homekit', 'connectivity'];
 
 // ============================================================================
 // Diagnostics Types (Story P7-1.1)
@@ -265,5 +266,50 @@ export function useHomekitDiagnostics(options?: {
     refetchInterval: options?.refetchInterval ?? 5000, // 5-second polling for diagnostics
     staleTime: 2000, // Consider data stale after 2 seconds
     retry: 1,
+  });
+}
+
+// ============================================================================
+// Connectivity Test Types and Hooks (Story P7-1.2)
+// ============================================================================
+
+/**
+ * Connectivity test result (Story P7-1.2)
+ */
+export interface HomekitConnectivityResult {
+  mdns_visible: boolean;
+  discovered_as: string | null;
+  port_accessible: boolean;
+  firewall_issues: string[];
+  bind_address: string;
+  port: number;
+  bridge_name: string;
+  test_timestamp: string;
+  troubleshooting_hints: string[];
+}
+
+/**
+ * Test HomeKit bridge connectivity (Story P7-1.2)
+ */
+async function testHomekitConnectivity(): Promise<HomekitConnectivityResult> {
+  return apiClient.homekit.testConnectivity();
+}
+
+/**
+ * Hook for testing HomeKit connectivity (Story P7-1.2 AC6)
+ *
+ * Uses a mutation pattern since connectivity tests are user-initiated
+ * and can take several seconds to complete.
+ */
+export function useHomekitConnectivity() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: testHomekitConnectivity,
+    mutationKey: HOMEKIT_CONNECTIVITY_KEY,
+    onSuccess: () => {
+      // Optionally refresh diagnostics after a connectivity test
+      queryClient.invalidateQueries({ queryKey: HOMEKIT_DIAGNOSTICS_KEY });
+    },
   });
 }
