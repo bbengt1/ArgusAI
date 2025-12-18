@@ -1,7 +1,8 @@
 /**
- * useHomekitStatus hook (Story P4-6.1, P5-1.8)
+ * useHomekitStatus hook (Story P4-6.1, P5-1.8, P7-1.1)
  *
  * TanStack Query hook for fetching and managing HomeKit integration status.
+ * Story P7-1.1 adds useHomekitDiagnostics hook for diagnostic data.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
@@ -51,6 +52,55 @@ export interface HomekitRemovePairingResponse {
 
 const HOMEKIT_QUERY_KEY = ['homekit', 'status'];
 const HOMEKIT_PAIRINGS_KEY = ['homekit', 'pairings'];
+const HOMEKIT_DIAGNOSTICS_KEY = ['homekit', 'diagnostics'];
+
+// ============================================================================
+// Diagnostics Types (Story P7-1.1)
+// ============================================================================
+
+/**
+ * Diagnostic log entry (Story P7-1.1)
+ */
+export interface HomekitDiagnosticEntry {
+  timestamp: string;
+  level: 'debug' | 'info' | 'warning' | 'error';
+  category: 'lifecycle' | 'pairing' | 'event' | 'network' | 'mdns';
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Network binding info (Story P7-1.1)
+ */
+export interface HomekitNetworkBinding {
+  ip: string;
+  port: number;
+  interface?: string | null;
+}
+
+/**
+ * Last event delivery info (Story P7-1.1)
+ */
+export interface HomekitLastEventDelivery {
+  camera_id: string;
+  sensor_type: string;
+  timestamp: string;
+  delivered: boolean;
+}
+
+/**
+ * Diagnostics response (Story P7-1.1)
+ */
+export interface HomekitDiagnosticsResponse {
+  bridge_running: boolean;
+  mdns_advertising: boolean;
+  network_binding: HomekitNetworkBinding | null;
+  connected_clients: number;
+  last_event_delivery: HomekitLastEventDelivery | null;
+  recent_logs: HomekitDiagnosticEntry[];
+  warnings: string[];
+  errors: string[];
+}
 
 /**
  * Fetch HomeKit status from the API
@@ -175,5 +225,45 @@ export function useHomekitRemovePairing() {
       queryClient.invalidateQueries({ queryKey: HOMEKIT_PAIRINGS_KEY });
       queryClient.invalidateQueries({ queryKey: HOMEKIT_QUERY_KEY });
     },
+  });
+}
+
+// ============================================================================
+// Diagnostics Hooks (Story P7-1.1)
+// ============================================================================
+
+/**
+ * Fetch HomeKit diagnostics from the API (Story P7-1.1)
+ */
+async function fetchHomekitDiagnostics(): Promise<HomekitDiagnosticsResponse> {
+  const data = await apiClient.homekit.getDiagnostics();
+  // Cast the API response to our typed interface (API returns generic strings, we type them)
+  return {
+    ...data,
+    recent_logs: data.recent_logs.map((log) => ({
+      ...log,
+      level: log.level as HomekitDiagnosticEntry['level'],
+      category: log.category as HomekitDiagnosticEntry['category'],
+    })),
+  };
+}
+
+/**
+ * Hook for fetching HomeKit diagnostics with polling support (Story P7-1.1 AC5, AC6)
+ *
+ * @param options.enabled - Whether to enable the query (default: true)
+ * @param options.refetchInterval - Polling interval in ms (default: 5000 for diagnostics panel)
+ */
+export function useHomekitDiagnostics(options?: {
+  enabled?: boolean;
+  refetchInterval?: number | false;
+}) {
+  return useQuery({
+    queryKey: HOMEKIT_DIAGNOSTICS_KEY,
+    queryFn: fetchHomekitDiagnostics,
+    enabled: options?.enabled ?? true,
+    refetchInterval: options?.refetchInterval ?? 5000, // 5-second polling for diagnostics
+    staleTime: 2000, // Consider data stale after 2 seconds
+    retry: 1,
   });
 }

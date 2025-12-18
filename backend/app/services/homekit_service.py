@@ -1,5 +1,5 @@
 """
-HomeKit service for Apple Home integration (Story P4-6.1, P4-6.2, P5-1.2, P5-1.3, P5-1.5, P5-1.6, P5-1.7)
+HomeKit service for Apple Home integration (Story P4-6.1, P4-6.2, P5-1.2, P5-1.3, P5-1.5, P5-1.6, P5-1.7, P7-1.1)
 
 Manages the HAP-python accessory server and exposes cameras as motion sensors.
 Story P4-6.2 adds motion event triggering with auto-reset timers.
@@ -8,6 +8,7 @@ Story P5-1.3 adds camera accessories with RTSP-to-SRTP streaming.
 Story P5-1.5 adds occupancy sensors for person-only detection with 5-minute timeout.
 Story P5-1.6 adds vehicle/animal/package sensors for detection-type-specific automations.
 Story P5-1.7 adds doorbell sensors for Protect doorbell ring events.
+Story P7-1.1 adds comprehensive diagnostic logging for troubleshooting.
 """
 import asyncio
 import logging
@@ -59,6 +60,14 @@ from app.services.homekit_camera import (
     HomeKitCameraAccessory,
     create_camera_accessory,
     check_ffmpeg_available,
+)
+from app.services.homekit_diagnostics import (
+    get_diagnostic_handler,
+    HomekitDiagnosticHandler,
+)
+from app.schemas.homekit_diagnostics import (
+    HomeKitDiagnosticsResponse,
+    NetworkBindingInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,6 +155,13 @@ class HomekitService:
 
         # Story P5-1.7: Doorbell sensors (stateless - no reset timers needed)
         self._doorbell_sensors: Dict[str, CameraDoorbellSensor] = {}
+
+        # Story P7-1.1: Initialize diagnostic handler
+        self._diagnostic_handler: HomekitDiagnosticHandler = get_diagnostic_handler(
+            max_entries=self.config.diagnostic_log_size
+        )
+        self._network_binding: Optional[NetworkBindingInfo] = None
+        self._mdns_advertising: bool = False
 
     @property
     def is_available(self) -> bool:
@@ -321,6 +337,41 @@ class HomekitService:
             error=self._error,
         )
 
+    def get_diagnostics(self) -> HomeKitDiagnosticsResponse:
+        """
+        Get diagnostic information for HomeKit troubleshooting (Story P7-1.1 AC5).
+
+        Returns:
+            HomeKitDiagnosticsResponse with bridge status, logs, warnings, and errors
+        """
+        return HomeKitDiagnosticsResponse(
+            bridge_running=self.is_running,
+            mdns_advertising=self._mdns_advertising,
+            network_binding=self._network_binding,
+            connected_clients=self._get_connected_client_count(),
+            last_event_delivery=self._diagnostic_handler.get_last_event_delivery(),
+            recent_logs=self._diagnostic_handler.get_recent_logs(),
+            warnings=self._diagnostic_handler.get_warnings(),
+            errors=self._diagnostic_handler.get_errors(),
+        )
+
+    def _get_connected_client_count(self) -> int:
+        """Get the number of connected HomeKit clients (Story P7-1.1)."""
+        if not self._driver or not self.is_running:
+            return 0
+        try:
+            # Check for active connections via state file
+            state_file = Path(self.config.persist_file)
+            if state_file.exists():
+                import json
+                with open(state_file, 'r') as f:
+                    state_data = json.load(f)
+                paired_clients = state_data.get('paired_clients', [])
+                return len(paired_clients)
+            return 0
+        except Exception:
+            return 0
+
     async def start(self, cameras: List[Any]) -> bool:
         """
         Start the HomeKit accessory server.
@@ -332,19 +383,34 @@ class HomekitService:
             True if started successfully, False otherwise
         """
         if not self.config.enabled:
-            logger.info("HomeKit integration is disabled")
+            logger.info(
+                "HomeKit integration is disabled",
+                extra={"diagnostic_category": "lifecycle"}
+            )
             return False
 
         if not HAP_AVAILABLE:
             self._error = "HAP-python not installed"
-            logger.error("HAP-python not installed. Install with: pip install HAP-python")
+            logger.error(
+                "HAP-python not installed. Install with: pip install HAP-python",
+                extra={"diagnostic_category": "lifecycle"}
+            )
             return False
 
         if self._running:
-            logger.warning("HomeKit service already running")
+            logger.warning(
+                "HomeKit service already running",
+                extra={"diagnostic_category": "lifecycle"}
+            )
             return True
 
         try:
+            # Story P7-1.1: Log lifecycle start
+            logger.info(
+                "Starting HomeKit bridge initialization",
+                extra={"diagnostic_category": "lifecycle"}
+            )
+
             # Ensure persistence directory exists
             self.config.ensure_persist_dir()
 
@@ -352,15 +418,36 @@ class HomekitService:
             ffmpeg_available, ffmpeg_msg = check_ffmpeg_available()
             self._ffmpeg_available = ffmpeg_available
             if ffmpeg_available:
-                logger.info(f"ffmpeg check: {ffmpeg_msg}")
+                logger.info(
+                    f"ffmpeg check: {ffmpeg_msg}",
+                    extra={"diagnostic_category": "lifecycle"}
+                )
             else:
-                logger.warning(f"ffmpeg not available - camera streaming disabled: {ffmpeg_msg}")
+                logger.warning(
+                    f"ffmpeg not available - camera streaming disabled: {ffmpeg_msg}",
+                    extra={"diagnostic_category": "lifecycle"}
+                )
 
             # Create accessory driver
             self._driver = AccessoryDriver(
                 port=self.config.port,
                 persist_file=self.config.persist_file,
                 pincode=self.pincode.encode('utf-8'),
+            )
+
+            # Story P7-1.1 AC4: Log network binding information
+            self._network_binding = NetworkBindingInfo(
+                ip="0.0.0.0",  # Default bind address
+                port=self.config.port,
+                interface=None
+            )
+            logger.info(
+                f"HomeKit HAP server binding to port {self.config.port}",
+                extra={
+                    "diagnostic_category": "network",
+                    "port": self.config.port,
+                    "ip": "0.0.0.0"
+                }
             )
 
             # Create bridge accessory
@@ -484,34 +571,68 @@ class HomekitService:
 
             self._running = True
             self._error = None
+            self._mdns_advertising = True  # Story P7-1.1: Track mDNS state
 
+            # Story P7-1.1 AC1: Log lifecycle completion with full details
             logger.info(
                 f"HomeKit accessory server started on port {self.config.port} "
                 f"with {len(self._sensors)} motion sensors, {len(self._occupancy_sensors)} occupancy sensors, "
-                f"{len(self._doorbell_sensors)} doorbell sensors, and {len(self._cameras)} cameras. "
-                f"Pairing code: {self.pincode}"
+                f"{len(self._doorbell_sensors)} doorbell sensors, and {len(self._cameras)} cameras",
+                extra={
+                    "diagnostic_category": "lifecycle",
+                    "port": self.config.port,
+                    "motion_count": len(self._sensors),
+                    "occupancy_count": len(self._occupancy_sensors),
+                    "doorbell_count": len(self._doorbell_sensors),
+                    "camera_count": len(self._cameras),
+                }
+            )
+
+            # Story P7-1.1: Log mDNS advertisement status
+            logger.info(
+                "HomeKit mDNS advertisement started",
+                extra={"diagnostic_category": "mdns"}
             )
 
             return True
 
         except Exception as e:
             self._error = str(e)
-            logger.error(f"Failed to start HomeKit service: {e}", exc_info=True)
+            logger.error(
+                f"Failed to start HomeKit service: {e}",
+                exc_info=True,
+                extra={"diagnostic_category": "lifecycle"}
+            )
             return False
 
     def _run_driver(self) -> None:
-        """Run the accessory driver in a separate thread."""
+        """Run the accessory driver in a separate thread (Story P7-1.1 AC1)."""
         try:
+            logger.debug(
+                "HomeKit HAP driver thread starting",
+                extra={"diagnostic_category": "lifecycle"}
+            )
             self._driver.start()
         except Exception as e:
             self._error = str(e)
-            logger.error(f"HomeKit driver error: {e}", exc_info=True)
+            self._mdns_advertising = False  # Story P7-1.1: Track mDNS state
+            logger.error(
+                f"HomeKit driver error: {e}",
+                exc_info=True,
+                extra={"diagnostic_category": "lifecycle"}
+            )
             self._running = False
 
     async def stop(self) -> None:
-        """Stop the HomeKit accessory server."""
+        """Stop the HomeKit accessory server (Story P7-1.1 AC1)."""
         if not self._running:
             return
+
+        # Story P7-1.1 AC1: Log lifecycle stop
+        logger.info(
+            "Stopping HomeKit accessory server",
+            extra={"diagnostic_category": "lifecycle"}
+        )
 
         try:
             # Story P4-6.2: Cancel all motion reset timers
@@ -558,10 +679,21 @@ class HomekitService:
             self._cameras.clear()  # Story P5-1.3: Clear camera accessories
             self._camera_id_mapping.clear()
 
-            logger.info("HomeKit accessory server stopped")
+            # Story P7-1.1: Update state tracking
+            self._mdns_advertising = False
+            self._network_binding = None
+
+            logger.info(
+                "HomeKit accessory server stopped",
+                extra={"diagnostic_category": "lifecycle"}
+            )
 
         except Exception as e:
-            logger.error(f"Error stopping HomeKit service: {e}", exc_info=True)
+            logger.error(
+                f"Error stopping HomeKit service: {e}",
+                exc_info=True,
+                extra={"diagnostic_category": "lifecycle"}
+            )
 
     def _get_camera_rtsp_url(self, camera: Any) -> Optional[str]:
         """
@@ -654,7 +786,7 @@ class HomekitService:
 
     def trigger_motion(self, camera_id: str, event_id: Optional[int] = None) -> bool:
         """
-        Trigger motion detection for a camera (Story P4-6.2).
+        Trigger motion detection for a camera (Story P4-6.2, P7-1.1 AC3).
 
         Sets motion_detected = True and starts/resets the auto-clear timer.
         If called again before timer expires, the timer is reset (extends motion period).
@@ -673,7 +805,12 @@ class HomekitService:
         if not sensor:
             logger.debug(
                 f"No HomeKit sensor found for camera: {camera_id} (resolved: {resolved_id})",
-                extra={"camera_id": camera_id, "event_id": event_id}
+                extra={
+                    "diagnostic_category": "event",
+                    "camera_id": camera_id,
+                    "event_id": event_id,
+                    "sensor_type": "motion"
+                }
             )
             return False
 
@@ -690,7 +827,12 @@ class HomekitService:
         if motion_duration >= self.config.max_motion_duration:
             logger.warning(
                 f"Max motion duration reached for camera {camera_id}, resetting",
-                extra={"camera_id": camera_id, "duration": motion_duration}
+                extra={
+                    "diagnostic_category": "event",
+                    "camera_id": camera_id,
+                    "duration": motion_duration,
+                    "sensor_type": "motion"
+                }
             )
             self._clear_motion_state(resolved_id)
             return True
@@ -701,12 +843,16 @@ class HomekitService:
         # Start new reset timer
         self._start_reset_timer(resolved_id)
 
+        # Story P7-1.1 AC3: Log characteristic update with sensor details
         logger.info(
             f"HomeKit motion triggered for camera: {sensor.name}",
             extra={
+                "diagnostic_category": "event",
                 "camera_id": camera_id,
                 "event_id": event_id,
-                "reset_seconds": self.config.motion_reset_seconds
+                "sensor_type": "motion",
+                "reset_seconds": self.config.motion_reset_seconds,
+                "delivered": True
             }
         )
 
@@ -783,10 +929,20 @@ class HomekitService:
             pass
 
     def _clear_motion_state(self, camera_id: str) -> None:
-        """Clear motion state and cleanup tracking for a camera."""
+        """Clear motion state and cleanup tracking for a camera (Story P7-1.1 AC3)."""
         sensor = self._sensors.get(camera_id)
         if sensor:
             sensor.clear_motion()
+            # Story P7-1.1 AC3: Log motion reset event
+            logger.debug(
+                f"HomeKit motion reset for camera: {sensor.name}",
+                extra={
+                    "diagnostic_category": "event",
+                    "camera_id": camera_id,
+                    "sensor_type": "motion",
+                    "reset_seconds": self.config.motion_reset_seconds
+                }
+            )
 
         # Clear tracking
         self._motion_start_times.pop(camera_id, None)

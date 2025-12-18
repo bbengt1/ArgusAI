@@ -1,5 +1,5 @@
 """
-HomeKit API endpoints (Story P5-1.1, P5-1.8)
+HomeKit API endpoints (Story P5-1.1, P5-1.8, P7-1.1)
 
 Endpoints for HomeKit bridge configuration and management:
 - GET /api/v1/homekit/status - Get HomeKit bridge status
@@ -9,6 +9,7 @@ Endpoints for HomeKit bridge configuration and management:
 - POST /api/v1/homekit/reset - Reset pairing state
 - GET /api/v1/homekit/pairings - List paired devices (Story P5-1.8)
 - DELETE /api/v1/homekit/pairings/{id} - Remove specific pairing (Story P5-1.8)
+- GET /api/v1/homekit/diagnostics - Get diagnostic info (Story P7-1.1)
 """
 import logging
 from typing import Optional, List
@@ -23,6 +24,7 @@ from app.models.homekit import HomeKitConfig, HomeKitAccessory
 from app.models.camera import Camera
 from app.services.homekit_service import get_homekit_service, HomekitStatus
 from app.config.homekit import generate_pincode
+from app.schemas.homekit_diagnostics import HomeKitDiagnosticsResponse
 
 logger = logging.getLogger(__name__)
 
@@ -659,4 +661,47 @@ async def remove_pairing(pairing_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to remove pairing: {str(e)}"
+        )
+
+
+# ============================================================================
+# Diagnostics Endpoint (Story P7-1.1)
+# ============================================================================
+
+
+@router.get("/diagnostics", response_model=HomeKitDiagnosticsResponse)
+async def get_diagnostics():
+    """
+    Get HomeKit diagnostic information for troubleshooting (Story P7-1.1 AC5).
+
+    Returns diagnostic data including:
+    - Bridge running status and mDNS advertising state
+    - Network binding information (IP, port)
+    - Connected client count
+    - Recent diagnostic log entries (newest first)
+    - Current warnings and errors
+
+    The response is optimized for troubleshooting HomeKit discovery
+    and event delivery issues.
+    """
+    try:
+        service = get_homekit_service()
+        diagnostics = service.get_diagnostics()
+
+        logger.debug(
+            "HomeKit diagnostics retrieved",
+            extra={
+                "event_type": "homekit_diagnostics_request",
+                "bridge_running": diagnostics.bridge_running,
+                "log_count": len(diagnostics.recent_logs)
+            }
+        )
+
+        return diagnostics
+
+    except Exception as e:
+        logger.error(f"Failed to get HomeKit diagnostics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get diagnostics: {str(e)}"
         )

@@ -1857,6 +1857,34 @@ export const apiClient = {
         method: 'DELETE',
       });
     },
+
+    /**
+     * Get HomeKit diagnostics (Story P7-1.1)
+     * @returns Diagnostic information for troubleshooting
+     */
+    getDiagnostics: async (): Promise<{
+      bridge_running: boolean;
+      mdns_advertising: boolean;
+      network_binding: { ip: string; port: number; interface?: string | null } | null;
+      connected_clients: number;
+      last_event_delivery: {
+        camera_id: string;
+        sensor_type: string;
+        timestamp: string;
+        delivered: boolean;
+      } | null;
+      recent_logs: Array<{
+        timestamp: string;
+        level: string;
+        category: string;
+        message: string;
+        details?: Record<string, unknown>;
+      }>;
+      warnings: string[];
+      errors: string[];
+    }> => {
+      return apiFetch('/homekit/diagnostics');
+    },
   },
 
   // ============================================================================

@@ -35,6 +35,9 @@ DEFAULT_VEHICLE_RESET_SECONDS = 30  # 30 seconds
 DEFAULT_ANIMAL_RESET_SECONDS = 30  # 30 seconds
 DEFAULT_PACKAGE_RESET_SECONDS = 60  # 60 seconds (packages persist longer)
 
+# Story P7-1.1: Diagnostic logging defaults
+DEFAULT_DIAGNOSTIC_LOG_SIZE = 100  # Maximum diagnostic log entries to retain
+
 # Story P5-1.2: HomeKit category constants
 HOMEKIT_CATEGORY_BRIDGE = 2  # HAP category for Bridge accessory
 
@@ -247,6 +250,7 @@ class HomekitConfig:
         vehicle_reset_seconds: Seconds before vehicle sensor resets to False (Story P5-1.6)
         animal_reset_seconds: Seconds before animal sensor resets to False (Story P5-1.6)
         package_reset_seconds: Seconds before package sensor resets to False (Story P5-1.6)
+        diagnostic_log_size: Maximum diagnostic log entries to retain (Story P7-1.1)
     """
     enabled: bool = False
     port: int = DEFAULT_HOMEKIT_PORT
@@ -261,6 +265,7 @@ class HomekitConfig:
     vehicle_reset_seconds: int = DEFAULT_VEHICLE_RESET_SECONDS
     animal_reset_seconds: int = DEFAULT_ANIMAL_RESET_SECONDS
     package_reset_seconds: int = DEFAULT_PACKAGE_RESET_SECONDS
+    diagnostic_log_size: int = DEFAULT_DIAGNOSTIC_LOG_SIZE
 
     @property
     def persist_file(self) -> str:
@@ -297,6 +302,7 @@ def get_homekit_config() -> HomekitConfig:
         HOMEKIT_VEHICLE_RESET_SECONDS: Vehicle sensor reset timeout (default: 30, Story P5-1.6)
         HOMEKIT_ANIMAL_RESET_SECONDS: Animal sensor reset timeout (default: 30, Story P5-1.6)
         HOMEKIT_PACKAGE_RESET_SECONDS: Package sensor reset timeout (default: 60, Story P5-1.6)
+        HOMEKIT_DIAGNOSTIC_LOG_SIZE: Max diagnostic log entries (default: 100, Story P7-1.1)
 
     Returns:
         HomekitConfig: Configuration instance
@@ -315,4 +321,5 @@ def get_homekit_config() -> HomekitConfig:
         vehicle_reset_seconds=int(os.getenv("HOMEKIT_VEHICLE_RESET_SECONDS", str(DEFAULT_VEHICLE_RESET_SECONDS))),
         animal_reset_seconds=int(os.getenv("HOMEKIT_ANIMAL_RESET_SECONDS", str(DEFAULT_ANIMAL_RESET_SECONDS))),
         package_reset_seconds=int(os.getenv("HOMEKIT_PACKAGE_RESET_SECONDS", str(DEFAULT_PACKAGE_RESET_SECONDS))),
+        diagnostic_log_size=int(os.getenv("HOMEKIT_DIAGNOSTIC_LOG_SIZE", str(DEFAULT_DIAGNOSTIC_LOG_SIZE))),
     )

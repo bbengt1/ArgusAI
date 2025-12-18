@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * HomekitSettings component (Story P4-6.1, P5-1.8)
+ * HomekitSettings component (Story P4-6.1, P5-1.8, P7-1.1)
  *
  * Settings UI for HomeKit integration with enable toggle, pairing status,
  * QR code display, pairings list, and reset functionality.
@@ -10,6 +10,9 @@
  * - Display list of paired devices (AC3)
  * - Remove individual pairings (AC4)
  * - Show count of paired users (AC5)
+ *
+ * Story P7-1.1 additions:
+ * - Diagnostics panel for troubleshooting (AC6)
  */
 import React, { useState } from 'react';
 import {
@@ -38,6 +41,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Loader2, AlertCircle, Check, X, RotateCcw, Smartphone, Trash2, Users, Shield, User } from 'lucide-react';
+import { HomeKitDiagnostics } from './HomeKitDiagnostics';
 
 /**
  * PairingsList subcomponent (Story P5-1.8 AC3, AC4)
@@ -414,6 +418,13 @@ export function HomekitSettings() {
           </Alert>
         )}
       </CardContent>
+
+      {/* Story P7-1.1 AC6: Diagnostics Panel */}
+      {status.enabled && (
+        <CardContent className="pt-0">
+          <HomeKitDiagnostics enabled={status.running} />
+        </CardContent>
+      )}
     </Card>
   );
 }
