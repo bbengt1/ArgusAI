@@ -1857,6 +1857,52 @@ export const apiClient = {
         method: 'DELETE',
       });
     },
+
+    /**
+     * Get HomeKit diagnostics (Story P7-1.1)
+     * @returns Diagnostic information for troubleshooting
+     */
+    getDiagnostics: async (): Promise<{
+      bridge_running: boolean;
+      mdns_advertising: boolean;
+      network_binding: { ip: string; port: number; interface?: string | null } | null;
+      connected_clients: number;
+      last_event_delivery: {
+        camera_id: string;
+        sensor_type: string;
+        timestamp: string;
+        delivered: boolean;
+      } | null;
+      recent_logs: Array<{
+        timestamp: string;
+        level: string;
+        category: string;
+        message: string;
+        details?: Record<string, unknown>;
+      }>;
+      warnings: string[];
+      errors: string[];
+    }> => {
+      return apiFetch('/homekit/diagnostics');
+    },
+
+    /**
+     * Test HomeKit connectivity (Story P7-1.2)
+     * @returns Connectivity test results including mDNS visibility and port accessibility
+     */
+    testConnectivity: async (): Promise<{
+      mdns_visible: boolean;
+      discovered_as: string | null;
+      port_accessible: boolean;
+      network_binding: { ip: string; port: number; interface?: string | null } | null;
+      firewall_issues: string[];
+      recommendations: string[];
+      test_duration_ms: number;
+    }> => {
+      return apiFetch('/homekit/test-connectivity', {
+        method: 'POST',
+      });
+    },
   },
 
   // ============================================================================

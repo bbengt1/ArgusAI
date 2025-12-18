@@ -1,0 +1,231 @@
+<story-context id="bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P7-1</epicId>
+    <storyId>P7-1.1</storyId>
+    <title>Add HomeKit Diagnostic Logging</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-17</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p7-1-1-add-homekit-diagnostic-logging.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system administrator</asA>
+    <iWant>comprehensive diagnostic logging for the HomeKit bridge including lifecycle events, pairing attempts, and characteristic updates</iWant>
+    <soThat>I can troubleshoot HomeKit discovery and event delivery issues effectively</soThat>
+    <tasks>
+      <task id="1" title="Create HomeKit Diagnostic Service">
+        <subtask>1.1 Create HomeKitDiagnosticEntry Pydantic schema</subtask>
+        <subtask>1.2 Create HomeKitDiagnosticsResponse Pydantic schema</subtask>
+        <subtask>1.3 Implement HomekitDiagnosticHandler class extending logging.Handler</subtask>
+        <subtask>1.4 Implement circular buffer for log retention (max 100 entries)</subtask>
+        <subtask>1.5 Add diagnostic_log_size field to HomekitConfig dataclass</subtask>
+      </task>
+      <task id="2" title="Add Lifecycle and Event Logging to HomeKit Service">
+        <subtask>2.1 Add structured logging to start() method with network binding info</subtask>
+        <subtask>2.2 Add structured logging to stop() method</subtask>
+        <subtask>2.3 Add structured logging to _run_driver() for HAP driver lifecycle</subtask>
+        <subtask>2.4 Log pairing events by monitoring state file changes</subtask>
+        <subtask>2.5 Add logging to trigger_motion(), trigger_occupancy(), and other methods</subtask>
+        <subtask>2.6 Log characteristic update delivery with camera_id and sensor type</subtask>
+      </task>
+      <task id="3" title="Create Diagnostics API Endpoint">
+        <subtask>3.1 Add GET /api/v1/homekit/diagnostics endpoint</subtask>
+        <subtask>3.2 Add method to HomekitService to retrieve diagnostic data</subtask>
+        <subtask>3.3 Return HomeKitDiagnosticsResponse with status, logs, warnings, errors</subtask>
+      </task>
+      <task id="4" title="Build Diagnostics UI Panel">
+        <subtask>4.1 Create HomeKitDiagnostics.tsx component</subtask>
+        <subtask>4.2 Add React Query hook useHomekitDiagnostics with 5-second polling</subtask>
+        <subtask>4.3 Display mDNS status, connected clients count</subtask>
+        <subtask>4.4 Display recent logs with category filtering</subtask>
+        <subtask>4.5 Display warnings and errors prominently</subtask>
+        <subtask>4.6 Integrate diagnostics panel into HomekitSettings.tsx</subtask>
+      </task>
+      <task id="5" title="Write Unit Tests">
+        <subtask>5.1 Test HomekitDiagnosticHandler captures log entries correctly</subtask>
+        <subtask>5.2 Test circular buffer behavior (max entries, FIFO)</subtask>
+        <subtask>5.3 Test /api/v1/homekit/diagnostics endpoint returns valid response</subtask>
+        <subtask>5.4 Test diagnostic log filtering by category and level</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Debug logging for HAP server lifecycle (start, stop, errors) is implemented</criterion>
+    <criterion id="2">All pairing attempts are logged with success/failure status</criterion>
+    <criterion id="3">Accessory characteristic updates (motion triggered, reset) are logged</criterion>
+    <criterion id="4">Network binding (IP, port) information is logged</criterion>
+    <criterion id="5">/api/v1/homekit/diagnostics endpoint returns recent logs</criterion>
+    <criterion id="6">Diagnostic info is displayed in Settings UI</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P7-1.md</path>
+        <title>Epic P7-1 Technical Specification</title>
+        <section>Detailed Design / Data Models and Contracts</section>
+        <snippet>Defines HomeKitDiagnosticEntry and HomeKitDiagnosticsResponse Pydantic schemas with fields for timestamp, level, category, message, details. Specifies circular buffer with 100 entries max.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P7-1.md</path>
+        <title>Epic P7-1 Technical Specification</title>
+        <section>APIs and Interfaces</section>
+        <snippet>GET /api/v1/homekit/diagnostics returns bridge_running, mdns_advertising, network_binding, connected_clients, last_event_delivery, recent_logs, warnings, errors.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P7-1.md</path>
+        <title>Epic P7-1 Technical Specification</title>
+        <section>Non-Functional Requirements</section>
+        <snippet>Performance: &lt;100ms response time, &lt;1MB memory. Security: No sensitive data in logs (PIN codes, pairing keys). Reliability: Must not crash HomeKit service.</snippet>
+      </doc>
+      <doc>
+        <path>CLAUDE.md</path>
+        <title>Project Overview</title>
+        <section>Phase 5 Architecture (HomeKit)</section>
+        <snippet>HomeKit integration uses HAP-python running in background thread. Bridge exposes cameras as motion/occupancy/vehicle/animal/package/doorbell sensors.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/services/homekit_service.py</path>
+        <kind>service</kind>
+        <symbol>HomekitService</symbol>
+        <lines>90-1454</lines>
+        <reason>Primary HomeKit service class. Add diagnostic methods and structured logging here. Contains start(), stop(), _run_driver(), trigger_motion() methods.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/homekit_service.py</path>
+        <kind>service</kind>
+        <symbol>HomekitStatus</symbol>
+        <lines>67-88</lines>
+        <reason>Status dataclass to extend with diagnostic fields like mdns_advertising, connected_clients.</reason>
+      </file>
+      <file>
+        <path>backend/app/config/homekit.py</path>
+        <kind>config</kind>
+        <symbol>HomekitConfig</symbol>
+        <lines>231-280</lines>
+        <reason>Configuration dataclass. Add diagnostic_log_size field here.</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/homekit.py</path>
+        <kind>router</kind>
+        <symbol>router</symbol>
+        <lines>29-663</lines>
+        <reason>API router for HomeKit endpoints. Add GET /api/v1/homekit/diagnostics endpoint here.</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/homekit.py</path>
+        <kind>schema</kind>
+        <symbol>HomeKitStatusResponse</symbol>
+        <lines>40-73</lines>
+        <reason>Existing status response schema. Reference pattern for new HomeKitDiagnosticsResponse schema.</reason>
+      </file>
+      <file>
+        <path>frontend/components/settings/HomekitSettings.tsx</path>
+        <kind>component</kind>
+        <symbol>HomekitSettings</symbol>
+        <lines>159-419</lines>
+        <reason>Main HomeKit settings UI component. Integrate diagnostics panel here.</reason>
+      </file>
+      <file>
+        <path>frontend/hooks/useHomekitStatus.ts</path>
+        <kind>hook</kind>
+        <symbol>useHomekitStatus, HOMEKIT_QUERY_KEY</symbol>
+        <lines>1-180</lines>
+        <reason>Existing HomeKit hooks. Add useHomekitDiagnostics hook following same pattern.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_api/test_homekit.py</path>
+        <kind>test</kind>
+        <symbol>TestHomeKitSchemas, TestHomeKitAPIEndpoints</symbol>
+        <lines>1-460</lines>
+        <reason>Existing HomeKit tests. Follow patterns for new diagnostics tests.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0" />
+        <package name="pydantic" version="2.10.0+" />
+        <package name="HAP-python" version="4.9.0+" />
+        <package name="python-json-logger" version="2.0.0+" />
+        <package name="pytest" version="7.4.3" />
+        <package name="pytest-asyncio" version="0.21.1" />
+      </python>
+      <node>
+        <package name="@tanstack/react-query" version="5.90.10" />
+        <package name="react" version="19.2.0" />
+        <package name="lucide-react" version="0.553.0" />
+        <package name="vitest" version="4.0.15" />
+        <package name="@testing-library/react" version="16.3.0" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="threading">HAP-python driver runs in separate background thread from main asyncio loop. Diagnostic handler must be thread-safe.</constraint>
+    <constraint type="memory">Circular buffer must cap at configurable max entries (default 100) to prevent memory growth.</constraint>
+    <constraint type="security">Diagnostic logs must NOT contain sensitive data: PIN codes, pairing keys, client identifiers beyond UUIDs.</constraint>
+    <constraint type="performance">Diagnostic log retrieval must be &lt;100ms. No impact on event processing when diagnostics not being queried.</constraint>
+    <constraint type="pattern">Follow existing Pydantic schema patterns in backend/app/api/v1/homekit.py</constraint>
+    <constraint type="pattern">Follow existing React Query hook patterns in frontend/hooks/useHomekitStatus.ts</constraint>
+    <constraint type="pattern">Use structured logging with python-json-logger and extra fields for filtering.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>GET /api/v1/homekit/diagnostics</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/homekit/diagnostics -> HomeKitDiagnosticsResponse</signature>
+      <path>backend/app/api/v1/homekit.py</path>
+    </interface>
+    <interface>
+      <name>HomeKitDiagnosticEntry</name>
+      <kind>Pydantic schema</kind>
+      <signature>HomeKitDiagnosticEntry(timestamp: datetime, level: str, category: str, message: str, details: Optional[dict])</signature>
+      <path>backend/app/schemas/homekit_diagnostics.py (new)</path>
+    </interface>
+    <interface>
+      <name>HomeKitDiagnosticsResponse</name>
+      <kind>Pydantic schema</kind>
+      <signature>HomeKitDiagnosticsResponse(bridge_running: bool, mdns_advertising: bool, network_binding: dict, connected_clients: int, last_event_delivery: Optional[dict], recent_logs: List[HomeKitDiagnosticEntry], warnings: List[str], errors: List[str])</signature>
+      <path>backend/app/schemas/homekit_diagnostics.py (new)</path>
+    </interface>
+    <interface>
+      <name>useHomekitDiagnostics</name>
+      <kind>React Query hook</kind>
+      <signature>useHomekitDiagnostics(options?: { enabled?: boolean; refetchInterval?: number }) => UseQueryResult&lt;HomekitDiagnosticsResponse&gt;</signature>
+      <path>frontend/hooks/useHomekitStatus.ts</path>
+    </interface>
+    <interface>
+      <name>HomekitService.get_diagnostics</name>
+      <kind>method</kind>
+      <signature>def get_diagnostics(self) -> HomeKitDiagnosticsResponse</signature>
+      <path>backend/app/services/homekit_service.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend: pytest with pytest-asyncio for async tests. Use fixtures from conftest.py for database and service mocking. Frontend: Vitest with React Testing Library. Follow existing test patterns in backend/tests/test_api/test_homekit.py and frontend/__tests__/.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_homekit.py</location>
+      <location>backend/tests/test_services/ (new test file)</location>
+      <location>frontend/__tests__/components/settings/ (new test file)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test that HomekitService logs lifecycle events on start() and stop() with correct category='lifecycle'</idea>
+      <idea ac="2">Test that pairing events are logged when state file changes (mock file watcher)</idea>
+      <idea ac="3">Test that trigger_motion() logs with category='event' including camera_id and sensor_type</idea>
+      <idea ac="4">Test that start() logs network binding info (IP, port) with category='network'</idea>
+      <idea ac="5">Test /api/v1/homekit/diagnostics returns valid HomeKitDiagnosticsResponse with recent_logs</idea>
+      <idea ac="5">Test circular buffer drops oldest entries when max exceeded</idea>
+      <idea ac="6">Test HomeKitDiagnostics component renders diagnostic data and updates on 5s interval</idea>
+    </ideas>
+  </tests>
+</story-context>

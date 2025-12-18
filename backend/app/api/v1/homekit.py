@@ -1,5 +1,5 @@
 """
-HomeKit API endpoints (Story P5-1.1, P5-1.8)
+HomeKit API endpoints (Story P5-1.1, P5-1.8, P7-1.1, P7-1.2)
 
 Endpoints for HomeKit bridge configuration and management:
 - GET /api/v1/homekit/status - Get HomeKit bridge status
@@ -9,6 +9,8 @@ Endpoints for HomeKit bridge configuration and management:
 - POST /api/v1/homekit/reset - Reset pairing state
 - GET /api/v1/homekit/pairings - List paired devices (Story P5-1.8)
 - DELETE /api/v1/homekit/pairings/{id} - Remove specific pairing (Story P5-1.8)
+- GET /api/v1/homekit/diagnostics - Get diagnostic info (Story P7-1.1)
+- POST /api/v1/homekit/test-connectivity - Test mDNS and port accessibility (Story P7-1.2)
 """
 import logging
 from typing import Optional, List
@@ -23,6 +25,7 @@ from app.models.homekit import HomeKitConfig, HomeKitAccessory
 from app.models.camera import Camera
 from app.services.homekit_service import get_homekit_service, HomekitStatus
 from app.config.homekit import generate_pincode
+from app.schemas.homekit_diagnostics import HomeKitDiagnosticsResponse, HomeKitConnectivityTestResponse
 
 logger = logging.getLogger(__name__)
 
@@ -659,4 +662,94 @@ async def remove_pairing(pairing_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to remove pairing: {str(e)}"
+        )
+
+
+# ============================================================================
+# Diagnostics Endpoint (Story P7-1.1)
+# ============================================================================
+
+
+@router.get("/diagnostics", response_model=HomeKitDiagnosticsResponse)
+async def get_diagnostics():
+    """
+    Get HomeKit diagnostic information for troubleshooting (Story P7-1.1 AC5).
+
+    Returns diagnostic data including:
+    - Bridge running status and mDNS advertising state
+    - Network binding information (IP, port)
+    - Connected client count
+    - Recent diagnostic log entries (newest first)
+    - Current warnings and errors
+
+    The response is optimized for troubleshooting HomeKit discovery
+    and event delivery issues.
+    """
+    try:
+        service = get_homekit_service()
+        diagnostics = service.get_diagnostics()
+
+        logger.debug(
+            "HomeKit diagnostics retrieved",
+            extra={
+                "event_type": "homekit_diagnostics_request",
+                "bridge_running": diagnostics.bridge_running,
+                "log_count": len(diagnostics.recent_logs)
+            }
+        )
+
+        return diagnostics
+
+    except Exception as e:
+        logger.error(f"Failed to get HomeKit diagnostics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get diagnostics: {str(e)}"
+        )
+
+
+# ============================================================================
+# Connectivity Test Endpoint (Story P7-1.2)
+# ============================================================================
+
+
+@router.post("/test-connectivity", response_model=HomeKitConnectivityTestResponse)
+async def test_connectivity():
+    """
+    Test HomeKit bridge connectivity for troubleshooting (Story P7-1.2 AC1, AC2, AC6).
+
+    Performs the following tests:
+    - mDNS visibility: Checks if the _hap._tcp service is discoverable via Bonjour/mDNS
+    - Port accessibility: Tests if the HAP port (default 51826) is reachable
+
+    Returns diagnostic information including:
+    - mdns_visible: Whether the service was discovered
+    - discovered_as: The service name as discovered (e.g., 'ArgusAI._hap._tcp.local')
+    - port_accessible: Whether TCP connection to HAP port succeeded
+    - firewall_issues: List of detected network/firewall problems
+    - recommendations: Troubleshooting suggestions
+
+    Note: This test takes approximately 3-5 seconds due to mDNS discovery timeout.
+    """
+    try:
+        service = get_homekit_service()
+        result = await service.test_connectivity()
+
+        logger.info(
+            "HomeKit connectivity test completed",
+            extra={
+                "event_type": "homekit_connectivity_test",
+                "mdns_visible": result.mdns_visible,
+                "port_accessible": result.port_accessible,
+                "test_duration_ms": result.test_duration_ms
+            }
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to test HomeKit connectivity: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to test connectivity: {str(e)}"
         )
