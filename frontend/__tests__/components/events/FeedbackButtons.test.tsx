@@ -523,10 +523,13 @@ describe('FeedbackButtons', () => {
       const onFeedbackChange = vi.fn()
 
       // Make the mutation call the onSuccess callback
+      // Component expects data.feedback shape in onSuccess callback
       mockSubmitMutate.mockImplementation((params, options) => {
         options?.onSuccess?.({
-          ...mockFeedback,
-          rating: params.rating,
+          feedback: {
+            ...mockFeedback,
+            rating: params.rating,
+          },
         })
       })
 

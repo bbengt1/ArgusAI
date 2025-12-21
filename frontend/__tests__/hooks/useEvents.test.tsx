@@ -43,9 +43,9 @@ const mockApiClient = apiClient as {
   }
 }
 
-// Sample event data
+// Sample event data - use numeric string ID that can be converted to number
 const mockEvent: IEvent = {
-  id: 'evt-1',
+  id: '1',
   camera_id: 'cam-1',
   timestamp: '2024-01-15T10:00:00Z',
   description: 'Person detected at front door',
@@ -109,10 +109,8 @@ describe('useEvents hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(mockApiClient.events.list).toHaveBeenCalledWith(
-        {},
-        { skip: 0, limit: 5 }
-      )
+      // Implementation passes all params in a single object
+      expect(mockApiClient.events.list).toHaveBeenCalledWith({ skip: 0, limit: 5 })
       expect(result.current.data).toEqual(mockEventsResponse)
     })
 
@@ -127,10 +125,7 @@ describe('useEvents hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(mockApiClient.events.list).toHaveBeenCalledWith(
-        {},
-        { skip: 0, limit: 10 }
-      )
+      expect(mockApiClient.events.list).toHaveBeenCalledWith({ skip: 0, limit: 10 })
     })
 
     it('handles API error', async () => {
@@ -182,7 +177,9 @@ describe('useEvents hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(mockApiClient.events.list).toHaveBeenCalledWith(filters, {
+      // Filters and pagination are combined into a single object
+      expect(mockApiClient.events.list).toHaveBeenCalledWith({
+        ...filters,
         skip: 0,
         limit: 20,
       })
@@ -192,7 +189,7 @@ describe('useEvents hooks', () => {
       // First page: offset 0, 20 events returned, 40 total
       const firstPageEvents = Array.from({ length: 20 }, (_, i) => ({
         ...mockEvent,
-        id: `evt-${i + 1}`,
+        id: `${i + 1}`,
       }))
       const firstPage: IEventsResponse = {
         events: firstPageEvents,
@@ -203,7 +200,7 @@ describe('useEvents hooks', () => {
       // Second page: offset 20, 20 more events
       const secondPageEvents = Array.from({ length: 20 }, (_, i) => ({
         ...mockEvent,
-        id: `evt-${i + 21}`,
+        id: `${i + 21}`,
       }))
       const secondPage: IEventsResponse = {
         events: secondPageEvents,
@@ -236,10 +233,7 @@ describe('useEvents hooks', () => {
 
       expect(mockApiClient.events.list).toHaveBeenCalledTimes(2)
       // The pageParam for second page should be 20 (offset 0 + 20 events)
-      expect(mockApiClient.events.list).toHaveBeenLastCalledWith(
-        {},
-        { skip: 20, limit: 20 }
-      )
+      expect(mockApiClient.events.list).toHaveBeenLastCalledWith({ skip: 20, limit: 20 })
     })
 
     it('indicates no more pages when all data loaded', async () => {
@@ -290,10 +284,11 @@ describe('useEvents hooks', () => {
       })
 
       await act(async () => {
-        await result.current.mutateAsync('evt-1')
+        await result.current.mutateAsync('1')
       })
 
-      expect(mockApiClient.events.delete).toHaveBeenCalledWith('evt-1')
+      // ID is converted to number in the hook
+      expect(mockApiClient.events.delete).toHaveBeenCalledWith(1)
     })
 
     it('shows success toast on delete', async () => {
@@ -305,7 +300,7 @@ describe('useEvents hooks', () => {
       })
 
       await act(async () => {
-        await result.current.mutateAsync('evt-1')
+        await result.current.mutateAsync('1')
       })
 
       expect(toast.success).toHaveBeenCalledWith('Event deleted successfully')
@@ -321,7 +316,7 @@ describe('useEvents hooks', () => {
 
       try {
         await act(async () => {
-          await result.current.mutateAsync('evt-1')
+          await result.current.mutateAsync('1')
         })
       } catch {
         // Expected to throw
@@ -335,7 +330,7 @@ describe('useEvents hooks', () => {
       const multiEventResponse: IEventsResponse = {
         events: [
           mockEvent,
-          { ...mockEvent, id: 'evt-2' },
+          { ...mockEvent, id: '2' },
         ],
         total_count: 2,
         offset: 0,
@@ -363,7 +358,7 @@ describe('useEvents hooks', () => {
 
       // Start deletion but don't await
       act(() => {
-        deleteResult.current.mutate('evt-1')
+        deleteResult.current.mutate('1')
       })
 
       // Check that the event was optimistically removed
@@ -372,9 +367,9 @@ describe('useEvents hooks', () => {
           pages: IEventsResponse[]
         } | undefined
 
-        // The optimistic update should have filtered out evt-1
+        // The optimistic update should have filtered out event with id '1'
         expect(
-          cachedData?.pages[0].events.find((e: IEvent) => e.id === 'evt-1')
+          cachedData?.pages[0].events.find((e: IEvent) => e.id === '1')
         ).toBeUndefined()
       })
     })

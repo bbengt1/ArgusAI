@@ -22,7 +22,7 @@ vi.mock('@/lib/api-client', () => ({
   apiClient: {
     cameras: {
       list: vi.fn(),
-      getById: vi.fn(),
+      get: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -42,7 +42,7 @@ describe('useCamerasQuery hooks', () => {
 
   const mockCameras = [
     {
-      id: 'cam-1',
+      id: 1,
       name: 'Front Door',
       rtsp_url: 'rtsp://192.168.1.100/stream',
       source_type: 'rtsp' as const,
@@ -51,7 +51,7 @@ describe('useCamerasQuery hooks', () => {
       updated_at: '2024-06-01T00:00:00Z',
     },
     {
-      id: 'cam-2',
+      id: 2,
       name: 'Back Yard',
       rtsp_url: 'rtsp://192.168.1.101/stream',
       source_type: 'rtsp' as const,
@@ -105,11 +105,13 @@ describe('useCamerasQuery hooks', () => {
 
       expect(result.current.data).toEqual(mockCameras);
       expect(apiClient.cameras.list).toHaveBeenCalledTimes(1);
-      expect(apiClient.cameras.list).toHaveBeenCalledWith({});
+      // Implementation calls list() without arguments, filtering is done client-side
+      expect(apiClient.cameras.list).toHaveBeenCalled();
     });
 
-    it('passes filter parameters to API', async () => {
-      (apiClient.cameras.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce([mockCameras[0]]);
+    it('filters cameras client-side based on is_enabled', async () => {
+      // Return both cameras, filtering happens client-side
+      (apiClient.cameras.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockCameras);
 
       const { result } = renderHook(() => useCamerasQuery({ is_enabled: true }), { wrapper });
 
@@ -117,7 +119,10 @@ describe('useCamerasQuery hooks', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(apiClient.cameras.list).toHaveBeenCalledWith({ is_enabled: true });
+      // API is called without filter parameters - filtering is done client-side
+      expect(apiClient.cameras.list).toHaveBeenCalled();
+      // Should only return enabled cameras
+      expect(result.current.data).toEqual([mockCameras[0]]);
     });
 
     it('handles fetch error', async () => {
@@ -187,23 +192,24 @@ describe('useCamerasQuery hooks', () => {
     const mockCamera = mockCameras[0];
 
     it('fetches single camera when ID is provided', async () => {
-      (apiClient.cameras.getById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockCamera);
+      (apiClient.cameras.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockCamera);
 
-      const { result } = renderHook(() => useCameraQuery('cam-1'), { wrapper });
+      const { result } = renderHook(() => useCameraQuery('1'), { wrapper });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
       expect(result.current.data).toEqual(mockCamera);
-      expect(apiClient.cameras.getById).toHaveBeenCalledWith('cam-1');
+      // ID is converted to number in the hook
+      expect(apiClient.cameras.get).toHaveBeenCalledWith(1);
     });
 
     it('does not fetch when ID is null', () => {
       const { result } = renderHook(() => useCameraQuery(null), { wrapper });
 
       expect(result.current.isLoading).toBe(false);
-      expect(apiClient.cameras.getById).not.toHaveBeenCalled();
+      expect(apiClient.cameras.get).not.toHaveBeenCalled();
     });
   });
 
@@ -216,7 +222,7 @@ describe('useCamerasQuery hooks', () => {
     };
 
     const createdCamera = {
-      id: 'cam-3',
+      id: 3,
       name: 'New Camera',
       rtsp_url: 'rtsp://192.168.1.102/stream',
       source_type: 'rtsp' as const,
@@ -285,12 +291,13 @@ describe('useCamerasQuery hooks', () => {
 
       await act(async () => {
         await result.current.mutateAsync({
-          id: 'cam-1',
+          id: '1',
           data: { name: 'Updated Camera Name' },
         });
       });
 
-      expect(apiClient.cameras.update).toHaveBeenCalledWith('cam-1', { name: 'Updated Camera Name' });
+      // ID is converted to number in the hook
+      expect(apiClient.cameras.update).toHaveBeenCalledWith(1, { name: 'Updated Camera Name' });
     });
 
     it('handles update error', async () => {
@@ -301,7 +308,7 @@ describe('useCamerasQuery hooks', () => {
 
       await expect(
         result.current.mutateAsync({
-          id: 'cam-1',
+          id: '1',
           data: { name: 'New Name' },
         })
       ).rejects.toThrow('Update failed');
@@ -315,10 +322,11 @@ describe('useCamerasQuery hooks', () => {
       const { result } = renderHook(() => useCameraDelete(), { wrapper });
 
       await act(async () => {
-        await result.current.mutateAsync('cam-1');
+        await result.current.mutateAsync('1');
       });
 
-      expect(apiClient.cameras.delete).toHaveBeenCalledWith('cam-1');
+      // ID is converted to number in the hook
+      expect(apiClient.cameras.delete).toHaveBeenCalledWith(1);
     });
 
     it('invalidates camera list cache on success', async () => {
@@ -337,7 +345,7 @@ describe('useCamerasQuery hooks', () => {
       // Delete camera
       const { result: deleteResult } = renderHook(() => useCameraDelete(), { wrapper });
       await act(async () => {
-        await deleteResult.current.mutateAsync('cam-1');
+        await deleteResult.current.mutateAsync('1');
       });
 
       // Wait for cache invalidation to trigger refetch
@@ -352,7 +360,7 @@ describe('useCamerasQuery hooks', () => {
 
       const { result } = renderHook(() => useCameraDelete(), { wrapper });
 
-      await expect(result.current.mutateAsync('cam-1')).rejects.toThrow('Delete failed');
+      await expect(result.current.mutateAsync('1')).rejects.toThrow('Delete failed');
     });
   });
 });
