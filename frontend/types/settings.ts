@@ -52,6 +52,10 @@ export interface SystemSettings {
 
   // Story P8-2.5: Frame Sampling Strategy Selection
   frame_sampling_strategy?: FrameSamplingStrategy;  // Frame selection strategy (default: uniform)
+
+  // Story P8-3.2: Full Motion Video Storage
+  store_motion_videos?: boolean;  // Download and store full motion videos (default: false)
+  video_retention_days?: number;  // Days to retain videos (default: 30)
 }
 
 export interface StorageStats {

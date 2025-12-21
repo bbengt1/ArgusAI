@@ -20,6 +20,7 @@ import { ReanalyzedIndicator } from './ReanalyzedIndicator';
 import { FeedbackButtons } from './FeedbackButtons';
 import { AnomalyBadge } from './AnomalyBadge';
 import { FrameGalleryModal } from './FrameGalleryModal';
+import { VideoPlayerModal } from '@/components/video/VideoPlayerModal';
 import { cn } from '@/lib/utils';
 
 interface EventCardProps {
@@ -61,6 +62,8 @@ export const EventCard = memo(function EventCard({
   const [imageError, setImageError] = useState(false);
   // Story P8-2.2: Frame gallery modal state
   const [frameGalleryOpen, setFrameGalleryOpen] = useState(false);
+  // Story P8-3.2: Video player modal state
+  const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
 
   // Story P2-4.4: Check if event has correlations
   const hasCorrelations = event.correlated_events && event.correlated_events.length > 0;
@@ -174,6 +177,21 @@ export const EventCard = memo(function EventCard({
               />
               {/* Story P4-7.3: Anomaly Badge (AC1) */}
               <AnomalyBadge score={event.anomaly_score} />
+              {/* Story P8-3.2: Video indicator (AC2.6, AC2.7) */}
+              {event.video_path && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setVideoPlayerOpen(true);
+                  }}
+                  className="p-1 rounded hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  aria-label="Play motion video"
+                  title="Watch motion video"
+                >
+                  <Video className="w-4 h-4 text-blue-600" />
+                </button>
+              )}
               {event.source_type && (
                 <SourceTypeBadge sourceType={event.source_type} />
               )}
@@ -248,6 +266,15 @@ export const EventCard = memo(function EventCard({
         eventId={event.id}
         open={frameGalleryOpen}
         onOpenChange={setFrameGalleryOpen}
+      />
+
+      {/* Story P8-3.2: Video Player Modal (AC2.7, AC2.8, AC2.9) */}
+      <VideoPlayerModal
+        open={videoPlayerOpen}
+        onOpenChange={setVideoPlayerOpen}
+        eventId={event.id}
+        cameraName={event.camera_name}
+        timestamp={event.timestamp}
       />
     </Card>
   );

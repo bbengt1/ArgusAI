@@ -17,6 +17,9 @@ export const generalSettingsSchema = z.object({
   time_format: z.enum(['12h', '24h']),
   // Story P8-2.3: Configurable frame count for AI analysis
   analysis_frame_count: z.union([z.literal(5), z.literal(10), z.literal(15), z.literal(20)]).optional(),
+  // Story P8-3.2: Full motion video storage
+  store_motion_videos: z.boolean().optional(),
+  video_retention_days: z.number().min(1).max(365).optional(),
 });
 
 // AI Models Settings Schema

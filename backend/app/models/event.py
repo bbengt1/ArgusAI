@@ -46,6 +46,7 @@ class Event(Base):
         audio_confidence: Confidence score (0.0-1.0) for audio event detection (Story P6-3.2)
         audio_duration_ms: Duration of detected audio event in milliseconds (Story P6-3.2)
         delivery_carrier: Detected delivery carrier - fedex/ups/usps/amazon/dhl (Story P7-2.1)
+        video_path: Path to stored full motion video file (Story P8-3.2)
         created_at: Record creation timestamp (UTC with timezone)
     """
 
@@ -109,6 +110,8 @@ class Event(Base):
     audio_duration_ms = Column(Integer, nullable=True)  # Duration of audio event in milliseconds (null = not detected)
     # Story P7-2.1: Delivery carrier detection
     delivery_carrier = Column(String(32), nullable=True)  # 'fedex', 'ups', 'usps', 'amazon', 'dhl' (null = not detected)
+    # Story P8-3.2: Full motion video storage
+    video_path = Column(String(500), nullable=True)  # Path to stored video file (null = no video stored)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

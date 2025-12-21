@@ -186,6 +186,18 @@ class SystemSettings(BaseModel):
         description="Frame sampling strategy: uniform (fixed interval), adaptive (content-aware), or hybrid (uniform + adaptive filter)"
     )
 
+    # Story P8-3.2: Full Motion Video Storage
+    store_motion_videos: bool = Field(
+        default=False,
+        description="Download and store full motion videos from Protect cameras"
+    )
+    video_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        description="Number of days to retain stored videos (separate from event retention)"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -319,6 +331,14 @@ class SystemSettingsUpdate(BaseModel):
     # Story P8-2.5: Frame Sampling Strategy Selection
     frame_sampling_strategy: Optional[Literal["uniform", "adaptive", "hybrid"]] = Field(
         None, description="Frame sampling strategy: uniform (default), adaptive, or hybrid"
+    )
+
+    # Story P8-3.2: Full Motion Video Storage
+    store_motion_videos: Optional[bool] = Field(
+        None, description="Download and store full motion videos from Protect cameras (default: false)"
+    )
+    video_retention_days: Optional[int] = Field(
+        None, ge=1, le=365, description="Number of days to retain stored videos (default: 30)"
     )
 
 

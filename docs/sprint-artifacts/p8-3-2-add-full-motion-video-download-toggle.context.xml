@@ -1,0 +1,190 @@
+<story-context id="p8-3-2" v="1.0">
+  <metadata>
+    <epicId>P8-3</epicId>
+    <storyId>P8-3.2</storyId>
+    <title>Add Full Motion Video Download Toggle</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-21</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p8-3-2-add-full-motion-video-download-toggle.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to optionally download and store full motion videos from Protect</iWant>
+    <soThat>I can review complete clips, not just extracted frames</soThat>
+    <tasks>
+      - Task 1: Add Video Storage Setting (AC: 2.1, 2.2, 2.3)
+        - 1.1: Add `store_motion_videos` boolean to system settings schema in backend
+        - 1.2: Add `video_retention_days` integer to system settings (default: 30)
+        - 1.3: Create `VideoStorageWarningModal` component in frontend
+        - 1.4: Add "Store Motion Videos" toggle to GeneralSettings.tsx
+        - 1.5: Implement warning modal display on toggle enable
+        - 1.6: Wire up setting save with confirmation
+      - Task 2: Implement VideoStorageService (AC: 2.4, 2.5)
+        - 2.1: Create `backend/app/services/video_storage_service.py`
+        - 2.2: Implement `download_video(event_id, protect_event)` method using uiprotect
+        - 2.3: Create `data/videos/` directory on first use
+        - 2.4: Save video as `{event_id}.mp4`
+        - 2.5: Handle download failures gracefully (log but don't block event processing)
+        - 2.6: Add metrics for video download (count, size, duration)
+      - Task 3: Add video_path to Event Model (AC: 2.5)
+        - 3.1: Add `video_path = Column(String, nullable=True)` to Event model
+        - 3.2: Create Alembic migration for new column
+        - 3.3: Update event schemas to include video_path
+      - Task 4: Integrate Video Download into Event Pipeline (AC: 2.4)
+        - 4.1: Modify `protect_event_handler.py` to check `store_motion_videos` setting
+        - 4.2: Call `video_storage_service.download_video()` when setting enabled
+        - 4.3: Update event.video_path after successful download
+        - 4.4: Continue normal processing regardless of video download success/failure
+      - Task 5: Create Video API Endpoints (AC: 2.8, 2.9)
+        - 5.1: Add `GET /api/v1/events/{event_id}/video` endpoint for streaming
+        - 5.2: Add `GET /api/v1/events/{event_id}/video/download` for forced download
+        - 5.3: Return 404 if video not available
+        - 5.4: Support range requests for seeking (HTTP 206)
+      - Task 6: Create VideoPlayerModal Component (AC: 2.6, 2.7, 2.8, 2.9)
+        - 6.1: Create `frontend/components/video/VideoPlayerModal.tsx`
+        - 6.2: Use HTML5 video element with controls
+        - 6.3: Add download button with proper filename
+        - 6.4: Implement loading and error states
+        - 6.5: Use Radix Dialog for accessible modal
+      - Task 7: Add Video Icon to Event Cards (AC: 2.6, 2.7)
+        - 7.1: Check event.video_path in EventCard component
+        - 7.2: Display video icon when video available
+        - 7.3: Open VideoPlayerModal on icon click
+        - 7.4: Style icon consistently with other event card actions
+      - Task 8: Implement Video Retention/Cleanup (AC: 2.10)
+        - 8.1: Add video cleanup to existing retention job
+        - 8.2: Use `video_retention_days` setting for video-specific retention
+        - 8.3: Delete video files and clear video_path in database
+        - 8.4: Log video cleanup statistics
+      - Task 9: Write Tests
+        - 9.1: Unit tests for VideoStorageService
+        - 9.2: Integration tests for video API endpoints
+        - 9.3: Component tests for VideoPlayerModal
+        - 9.4: Test settings toggle with warning modal
+        - 9.5: Test video retention/cleanup
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="2.1">Given Settings > General, when viewing, then "Store Motion Videos" toggle visible</ac>
+    <ac id="2.2">Given toggle change, when enabling, then storage warning modal appears</ac>
+    <ac id="2.3">Given warning modal, when user confirms, then setting saved</ac>
+    <ac id="2.4">Given video storage enabled, when Protect event captured, then video downloaded</ac>
+    <ac id="2.5">Given video downloaded, when stored, then saved to `data/videos/{event_id}.mp4`</ac>
+    <ac id="2.6">Given event with video, when viewing card, then video icon displayed</ac>
+    <ac id="2.7">Given video icon click, when modal opens, then video player displayed</ac>
+    <ac id="2.8">Given video player, when playing, then video streams correctly</ac>
+    <ac id="2.9">Given video modal, when download clicked, then file downloads</ac>
+    <ac id="2.10">Given retention policy, when cleanup runs, then old videos deleted</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P8-3.md" title="Epic P8-3 Tech Spec" section="P8-3.2">
+        Detailed design for video storage including VideoStorageService, VideoPlayerModal, API endpoints, and data models.
+      </doc>
+      <doc path="docs/architecture-phase8.md" title="Phase 8 Architecture" section="Video Storage">
+        ADR specifying original MP4 storage at data/videos/{event_id}.mp4, no re-encoding overhead.
+      </doc>
+      <doc path="docs/epics-phase8.md" title="Phase 8 Epics" section="Story P8-3.2">
+        Story requirements for full motion video download with storage warning and video player modal.
+      </doc>
+    </docs>
+    <code>
+      <file path="backend/app/services/clip_service.py" kind="service" symbol="ClipService" lines="82-718" reason="Existing clip download logic using uiprotect - reuse download patterns and error handling">
+        ClipService handles temporary clip downloads from Protect using uiprotect library. Similar download mechanism needed for persistent video storage.
+      </file>
+      <file path="backend/app/services/protect_event_handler.py" kind="service" symbol="ProtectEventHandler" lines="94-200" reason="Event processing pipeline where video download should be triggered">
+        Handles real-time Protect events through filtering, snapshot retrieval, and AI analysis. Video download integration point after event capture.
+      </file>
+      <file path="backend/app/models/event.py" kind="model" symbol="Event" lines="9-133" reason="Event model needs video_path column addition">
+        Current event model with existing columns for thumbnails, frames, and various analysis metadata. Add video_path similar to thumbnail_path.
+      </file>
+      <file path="backend/app/services/cleanup_service.py" kind="service" symbol="CleanupService" lines="32-150" reason="Retention/cleanup service to extend for video cleanup">
+        Handles batch deletion of old events, thumbnails, and frames. Extend for video file cleanup with separate retention policy.
+      </file>
+      <file path="backend/app/api/v1/events.py" kind="api" symbol="router" lines="2078-2220" reason="Events API with frames endpoints - add similar video endpoints">
+        Existing frame endpoints for streaming. Add video streaming/download endpoints following same patterns.
+      </file>
+      <file path="frontend/components/settings/CostWarningModal.tsx" kind="component" symbol="CostWarningModal" reason="Existing warning modal pattern to reuse for video storage warning">
+        Modal component for cost warnings in settings. Similar modal needed for video storage disk space warning.
+      </file>
+      <file path="frontend/app/settings/page.tsx" kind="page" symbol="SettingsPage" lines="1-100" reason="Settings page structure where video toggle will be added">
+        Main settings page with tabs, form state management, and modal dialogs. Add video storage toggle in General tab.
+      </file>
+      <file path="frontend/components/events/EventCard.tsx" kind="component" symbol="EventCard" reason="Event card needs video icon when video available">
+        Event card component displaying thumbnails, descriptions, actions. Add video icon and modal trigger.
+      </file>
+      <file path="frontend/lib/api-client.ts" kind="client" symbol="apiClient" reason="API client needs video endpoint methods">
+        Typed API client with methods for all backend endpoints. Add getEventVideo() and downloadEventVideo() methods.
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="uiprotect" version=">=6.0.0" reason="Video clip download from Protect cameras (existing)"/>
+        <package name="aiofiles" version=">=23.0.0" reason="Async file operations for video storage (existing)"/>
+        <package name="alembic" reason="Database migration for video_path column"/>
+      </python>
+      <node>
+        <!-- No new dependencies needed - uses native HTML5 video element -->
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <interfaces>
+    <interface name="GET /api/v1/events/{event_id}/video" kind="REST endpoint">
+      Stream event video with Content-Type: video/mp4. Returns 404 if video not available.
+    </interface>
+    <interface name="GET /api/v1/events/{event_id}/video/download" kind="REST endpoint">
+      Force download video with Content-Disposition: attachment and filename argusai-event-{event_id}.mp4.
+    </interface>
+    <interface name="VideoStorageService.download_video()" kind="service method">
+      async download_video(event_id: str, controller_id: str, camera_id: str, event_start: datetime, event_end: datetime) -> Optional[Path]
+      Downloads video from Protect and saves to data/videos/{event_id}.mp4. Returns path on success, None on failure.
+    </interface>
+    <interface name="CleanupService.cleanup_old_videos()" kind="service method">
+      async cleanup_old_videos(retention_days: int) -> Dict[str, Any]
+      Deletes videos older than retention period, clears video_path in database. Returns stats.
+    </interface>
+  </interfaces>
+
+  <constraints>
+    <constraint source="architecture">Video files stored as original MP4 from Protect - no re-encoding</constraint>
+    <constraint source="architecture">Video location: data/videos/{event_id}.mp4</constraint>
+    <constraint source="architecture">Separate video retention (default 30 days) from event retention</constraint>
+    <constraint source="tech-spec">Video download must not block event processing pipeline</constraint>
+    <constraint source="tech-spec">Video streaming must support range requests for seeking</constraint>
+    <constraint source="tech-spec">Storage warning modal required when enabling video storage</constraint>
+    <constraint source="patterns">Use existing service patterns from clip_service.py and cleanup_service.py</constraint>
+    <constraint source="patterns">Use Radix Dialog for accessible modal components</constraint>
+    <constraint source="testing">Unit tests for service, integration tests for API, component tests for frontend</constraint>
+  </constraints>
+
+  <tests>
+    <standards>
+      Backend: pytest with pytest-asyncio for async tests. Use TestClient for API integration tests.
+      Frontend: vitest with React Testing Library for component tests. Mock API calls with msw or manual mocks.
+      Follow existing test patterns in backend/tests/ and frontend/__tests__/.
+    </standards>
+    <locations>
+      backend/tests/test_services/test_video_storage_service.py (new)
+      backend/tests/test_api/test_events_video.py (new)
+      frontend/__tests__/components/video/VideoPlayerModal.test.tsx (new)
+      frontend/__tests__/components/settings/GeneralSettings.test.tsx (extend)
+    </locations>
+    <ideas>
+      <idea ac="2.1">test_video_storage_toggle_visible - verify toggle renders in settings</idea>
+      <idea ac="2.2">test_warning_modal_opens_on_enable - modal appears when toggling on</idea>
+      <idea ac="2.3">test_setting_saved_after_confirm - setting persists after modal confirm</idea>
+      <idea ac="2.4">test_video_download_triggered - video downloaded when setting enabled and event captured</idea>
+      <idea ac="2.5">test_video_stored_correctly - video saved to correct path with correct content</idea>
+      <idea ac="2.6">test_video_icon_displayed - icon shown on event cards with video</idea>
+      <idea ac="2.7">test_video_modal_opens - modal opens when video icon clicked</idea>
+      <idea ac="2.8">test_video_streams_correctly - video plays via streaming endpoint</idea>
+      <idea ac="2.9">test_video_download_works - download button triggers file download</idea>
+      <idea ac="2.10">test_video_cleanup - old videos deleted by retention job</idea>
+    </ideas>
+  </tests>
+</story-context>

@@ -164,6 +164,8 @@ class EventResponse(BaseModel):
     # Story P7-2.1: Delivery carrier detection
     delivery_carrier: Optional[str] = Field(None, description="Detected delivery carrier (fedex/ups/usps/amazon/dhl)")
     delivery_carrier_display: Optional[str] = Field(None, description="Human-readable carrier name (FedEx/UPS/USPS/Amazon/DHL)")
+    # Story P8-3.2: Full motion video storage
+    video_path: Optional[str] = Field(None, description="Path to stored full motion video file")
 
     @field_validator('objects_detected', mode='before')
     @classmethod

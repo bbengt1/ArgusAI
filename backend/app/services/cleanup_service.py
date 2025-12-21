@@ -55,7 +55,13 @@ class CleanupService:
             'data',
             'thumbnails'
         )
-        logger.info(f"CleanupService initialized with thumbnail dir: {self.thumbnail_base_dir}")
+        # Story P8-3.2: Video storage directory for cleanup
+        self.video_base_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            'data',
+            'videos'
+        )
+        logger.info(f"CleanupService initialized with thumbnail dir: {self.thumbnail_base_dir}, video dir: {self.video_base_dir}")
 
     async def cleanup_old_events(
         self,
@@ -387,6 +393,118 @@ class CleanupService:
                 "thumbnails_mb": 0.0,
                 "total_mb": 0.0,
                 "event_count": 0
+            }
+        finally:
+            db.close()
+
+
+    async def cleanup_old_videos(
+        self,
+        video_retention_days: int
+    ) -> Dict[str, Any]:
+        """
+        Clean up videos older than video retention period (Story P8-3.2 AC2.10)
+
+        Deletes video files older than video_retention_days and clears
+        video_path in the database for those events.
+
+        This is a separate retention policy from event retention, allowing
+        users to keep events longer while purging video files earlier.
+
+        Args:
+            video_retention_days: Number of days to retain videos
+
+        Returns:
+            Dict with cleanup statistics:
+            {
+                "videos_deleted": int,
+                "space_freed_mb": float,
+                "events_updated": int
+            }
+        """
+        logger.info(f"Starting video cleanup: retention_days={video_retention_days}")
+
+        # Calculate cutoff date
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=video_retention_days)
+
+        videos_deleted = 0
+        events_updated = 0
+        space_freed_bytes = 0
+
+        db = self.session_factory()
+        try:
+            # Find events with videos older than retention period
+            events_with_videos = db.query(Event.id, Event.video_path, Event.timestamp).filter(
+                Event.video_path.isnot(None),
+                Event.timestamp < cutoff_date
+            ).all()
+
+            logger.info(f"Found {len(events_with_videos)} events with videos older than {video_retention_days} days")
+
+            for event in events_with_videos:
+                if not event.video_path:
+                    continue
+
+                # Build full path to video file
+                video_filename = os.path.basename(event.video_path)
+                video_path = os.path.join(self.video_base_dir, video_filename)
+
+                # Delete video file if exists
+                if os.path.exists(video_path):
+                    try:
+                        file_size = os.path.getsize(video_path)
+                        os.remove(video_path)
+                        space_freed_bytes += file_size
+                        videos_deleted += 1
+                        logger.debug(
+                            f"Deleted video {video_filename}",
+                            extra={
+                                "event_id": event.id,
+                                "video_path": video_path,
+                                "file_size_bytes": file_size
+                            }
+                        )
+                    except OSError as e:
+                        logger.warning(
+                            f"Failed to delete video {video_path}: {e}",
+                            extra={
+                                "event_id": event.id,
+                                "video_path": video_path,
+                                "error": str(e)
+                            }
+                        )
+                        continue
+
+                # Clear video_path in database
+                db.query(Event).filter(Event.id == event.id).update(
+                    {"video_path": None},
+                    synchronize_session=False
+                )
+                events_updated += 1
+
+            db.commit()
+
+            stats = {
+                "videos_deleted": videos_deleted,
+                "space_freed_mb": round(space_freed_bytes / (1024 * 1024), 2),
+                "events_updated": events_updated
+            }
+
+            logger.info(
+                f"Video cleanup complete: {videos_deleted} videos deleted, {stats['space_freed_mb']} MB freed",
+                extra=stats
+            )
+
+            return stats
+
+        except Exception as e:
+            logger.error(f"Error during video cleanup: {e}", exc_info=True)
+            db.rollback()
+            return {
+                "videos_deleted": 0,
+                "space_freed_mb": 0.0,
+                "events_updated": 0,
+                "error": str(e)
             }
         finally:
             db.close()

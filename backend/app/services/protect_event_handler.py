@@ -56,6 +56,7 @@ from app.services.snapshot_service import get_snapshot_service, SnapshotResult
 from app.services.clip_service import get_clip_service
 from app.services.frame_extractor import get_frame_extractor
 from app.services.frame_storage_service import get_frame_storage_service
+from app.services.video_storage_service import get_video_storage_service
 
 if TYPE_CHECKING:
     from app.services.ai_service import AIResult
@@ -2086,6 +2087,55 @@ class ProtectEventHandler:
                     }
                 )
 
+            # Story P8-3.2: Download full motion video if setting enabled (fire-and-forget)
+            try:
+                from app.models.system_setting import SystemSetting
+                store_videos_setting = db.query(SystemSetting).filter(
+                    SystemSetting.key == 'store_motion_videos'
+                ).first()
+                store_videos = store_videos_setting and store_videos_setting.value.lower() == 'true'
+
+                if store_videos:
+                    # Get controller_id and camera_id from the camera
+                    controller_id = getattr(camera, 'protect_controller_id', None)
+                    protect_camera_id = getattr(camera, 'protect_camera_id', None)
+
+                    if controller_id and protect_camera_id:
+                        # Calculate event time window (use snapshot timestamp +/- 5 seconds)
+                        from datetime import timedelta
+                        event_start = snapshot_result.timestamp - timedelta(seconds=5)
+                        event_end = snapshot_result.timestamp + timedelta(seconds=5)
+
+                        # Fire-and-forget video download
+                        asyncio.create_task(
+                            self._download_and_store_video(
+                                event_id=event.id,
+                                controller_id=controller_id,
+                                camera_id=protect_camera_id,
+                                event_start=event_start,
+                                event_end=event_end
+                            )
+                        )
+                        logger.debug(
+                            f"Started background video download for event {event.id}",
+                            extra={
+                                "event_type": "video_download_started",
+                                "event_id": event.id,
+                                "camera_id": camera.id
+                            }
+                        )
+            except Exception as video_err:
+                # Don't fail event creation if video download fails to start
+                logger.warning(
+                    f"Failed to start video download for event {event.id}: {video_err}",
+                    extra={
+                        "event_type": "video_download_start_error",
+                        "event_id": event.id,
+                        "error_type": type(video_err).__name__,
+                        "error_message": str(video_err)
+                    }
+                )
+
             logger.info(
                 f"Protect event stored: {event.id} for camera '{camera.name}'",
                 extra={
@@ -2593,6 +2643,85 @@ class ProtectEventHandler:
                     "error_message": str(e)
                 }
             )
+
+    async def _download_and_store_video(
+        self,
+        event_id: str,
+        controller_id: str,
+        camera_id: str,
+        event_start: datetime,
+        event_end: datetime
+    ) -> None:
+        """
+        Download and store a full motion video for an event (Story P8-3.2 AC2.4, AC2.5).
+
+        This method runs as a background task and does NOT block event processing.
+        It downloads the video using VideoStorageService and updates the event's
+        video_path in the database.
+
+        Args:
+            event_id: UUID of the event
+            controller_id: UUID of the Protect controller
+            camera_id: Native Protect camera ID
+            event_start: Start time of the clip
+            event_end: End time of the clip
+
+        Note:
+            - Failures are logged but never propagated
+            - Updates event.video_path on success
+        """
+        try:
+            video_storage_service = get_video_storage_service()
+
+            # Download video to permanent storage
+            video_path = await video_storage_service.download_video(
+                event_id=event_id,
+                controller_id=controller_id,
+                camera_id=camera_id,
+                event_start=event_start,
+                event_end=event_end
+            )
+
+            if video_path:
+                # Update event with video_path
+                db = SessionLocal()
+                try:
+                    event = db.query(Event).filter(Event.id == event_id).first()
+                    if event:
+                        event.video_path = str(video_path.name)  # Store just the filename
+                        db.commit()
+                        logger.info(
+                            f"Video stored and event updated for {event_id}",
+                            extra={
+                                "event_type": "video_stored",
+                                "event_id": event_id,
+                                "video_path": str(video_path)
+                            }
+                        )
+                finally:
+                    db.close()
+            else:
+                logger.debug(
+                    f"Video download returned None for event {event_id} (may be expected)",
+                    extra={
+                        "event_type": "video_download_no_result",
+                        "event_id": event_id
+                    }
+                )
+
+        except Exception as e:
+            logger.error(
+                f"Video download/storage failed for event {event_id}: {e}",
+                extra={
+                    "event_type": "video_storage_error",
+                    "event_id": event_id,
+                    "controller_id": controller_id,
+                    "camera_id": camera_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                }
+            )
+            # Don't re-raise - this is a background task
 
 
 # Global singleton instance

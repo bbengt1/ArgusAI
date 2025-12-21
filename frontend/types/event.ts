@@ -128,6 +128,8 @@ export interface IEvent {
   feedback?: IEventFeedback | null;     // User feedback on this event's description
   // Story P4-7.2: Anomaly scoring
   anomaly_score?: number | null;        // Anomaly score 0.0-1.0 (null = not scored)
+  // Story P8-3.2: Full motion video storage
+  video_path?: string | null;           // Path to stored video file (null = no video stored)
 }
 
 /**

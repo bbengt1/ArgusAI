@@ -9,8 +9,8 @@ Provides REST API for AI-generated semantic event management:
 - GET /events/export - Export events to JSON or CSV
 - DELETE /events/cleanup - Manual cleanup of old events
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Request, Response
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, desc, asc, text
 from typing import Optional
@@ -47,6 +47,8 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 # Thumbnail storage directory
 THUMBNAIL_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'thumbnails')
+# Video storage directory (Story P8-3.2)
+VIDEO_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'videos')
 
 
 def _normalize_thumbnail_path(thumbnail_path: str) -> str:
@@ -2250,4 +2252,230 @@ async def get_event_frame_image(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get event frame"
+        )
+
+
+# =============================================================================
+# Story P8-3.2: Video Streaming and Download Endpoints
+# =============================================================================
+
+@router.get("/{event_id}/video")
+async def stream_event_video(
+    event_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Stream event video with support for range requests (Story P8-3.2)
+
+    Returns the full motion video for an event, supporting HTTP range requests
+    for seeking and partial content delivery.
+
+    Args:
+        event_id: UUID of the event
+        request: FastAPI request object for range header parsing
+
+    Returns:
+        StreamingResponse with video/mp4 content type
+
+    Raises:
+        404: Event not found or video not available
+        500: Internal server error
+
+    Example:
+        GET /events/123e4567-e89b-12d3-a456-426614174000/video
+    """
+    try:
+        # Get event from database
+        event = db.query(Event).filter(Event.id == event_id).first()
+
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        # Check if video exists
+        if not event.video_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No video available for event {event_id}"
+            )
+
+        # Build full path to video file
+        video_file = os.path.join(VIDEO_DIR, os.path.basename(event.video_path))
+
+        if not os.path.exists(video_file):
+            logger.warning(
+                f"Video file not found on disk: {video_file}",
+                extra={"event_id": event_id, "video_path": event.video_path}
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video file not found on disk"
+            )
+
+        file_size = os.path.getsize(video_file)
+
+        # Parse Range header for partial content support
+        range_header = request.headers.get("range")
+
+        if range_header:
+            # Parse range header (format: "bytes=start-end")
+            range_match = range_header.replace("bytes=", "").split("-")
+            start = int(range_match[0]) if range_match[0] else 0
+            end = int(range_match[1]) if range_match[1] else file_size - 1
+
+            # Validate range
+            if start >= file_size or end >= file_size or start > end:
+                raise HTTPException(
+                    status_code=status.HTTP_416_REQUESTED_RANGE_NOT_SATISFIABLE,
+                    detail=f"Invalid range: {range_header}"
+                )
+
+            content_length = end - start + 1
+
+            # Stream partial content
+            def generate_partial():
+                with open(video_file, 'rb') as f:
+                    f.seek(start)
+                    remaining = content_length
+                    chunk_size = 8192
+                    while remaining > 0:
+                        read_size = min(chunk_size, remaining)
+                        chunk = f.read(read_size)
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                        yield chunk
+
+            logger.debug(
+                f"Streaming video range {start}-{end} for event {event_id}",
+                extra={"event_id": event_id, "start": start, "end": end}
+            )
+
+            return StreamingResponse(
+                generate_partial(),
+                status_code=206,
+                media_type="video/mp4",
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{file_size}",
+                    "Content-Length": str(content_length),
+                    "Accept-Ranges": "bytes",
+                    "Cache-Control": "public, max-age=86400",
+                }
+            )
+        else:
+            # Stream full file
+            def generate_full():
+                with open(video_file, 'rb') as f:
+                    chunk_size = 8192
+                    while True:
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        yield chunk
+
+            logger.debug(
+                f"Streaming full video for event {event_id}",
+                extra={"event_id": event_id, "file_size": file_size}
+            )
+
+            return StreamingResponse(
+                generate_full(),
+                media_type="video/mp4",
+                headers={
+                    "Content-Length": str(file_size),
+                    "Accept-Ranges": "bytes",
+                    "Cache-Control": "public, max-age=86400",
+                }
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to stream video for event {event_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to stream event video"
+        )
+
+
+@router.get("/{event_id}/video/download")
+async def download_event_video(
+    event_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Download event video as attachment (Story P8-3.2)
+
+    Forces browser to download the video file rather than streaming it inline.
+
+    Args:
+        event_id: UUID of the event
+
+    Returns:
+        FileResponse with Content-Disposition: attachment
+
+    Raises:
+        404: Event not found or video not available
+        500: Internal server error
+
+    Example:
+        GET /events/123e4567-e89b-12d3-a456-426614174000/video/download
+    """
+    try:
+        # Get event from database
+        event = db.query(Event).filter(Event.id == event_id).first()
+
+        if not event:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Event {event_id} not found"
+            )
+
+        # Check if video exists
+        if not event.video_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No video available for event {event_id}"
+            )
+
+        # Build full path to video file
+        video_file = os.path.join(VIDEO_DIR, os.path.basename(event.video_path))
+
+        if not os.path.exists(video_file):
+            logger.warning(
+                f"Video file not found on disk: {video_file}",
+                extra={"event_id": event_id, "video_path": event.video_path}
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video file not found on disk"
+            )
+
+        # Generate filename with event ID for uniqueness
+        filename = f"argusai-event-{event_id}.mp4"
+
+        logger.debug(
+            f"Downloading video for event {event_id}",
+            extra={"event_id": event_id, "filename": filename}
+        )
+
+        return FileResponse(
+            path=video_file,
+            media_type="video/mp4",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "public, max-age=86400",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download video for event {event_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to download event video"
         )

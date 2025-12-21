@@ -27,6 +27,7 @@ import {
   Bell,
   Network,
   BarChart3,
+  Sparkles,
 } from 'lucide-react';
 
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -58,7 +59,9 @@ import { MQTTSettings } from '@/components/settings/MQTTSettings';
 import { HomekitSettings } from '@/components/settings/HomekitSettings';
 import { AnomalySettings } from '@/components/settings/AnomalySettings';
 import { MotionEventsExport } from '@/components/settings/MotionEventsExport';
+import { PromptRefinementModal } from '@/components/settings/PromptRefinementModal';
 import { CostWarningModal } from '@/components/settings/CostWarningModal';
+import { VideoStorageWarningModal } from '@/components/settings/VideoStorageWarningModal';
 import { FrameSamplingStrategySelector, type FrameSamplingStrategy } from '@/components/settings/FrameSamplingStrategySelector';
 import { ControllerForm, type ControllerData, DeleteControllerDialog, DiscoveredCameraList } from '@/components/protect';
 import { useQuery } from '@tanstack/react-query';
@@ -99,6 +102,12 @@ export default function SettingsPage() {
   // Story P8-2.3: Frame count setting state
   const [costWarningOpen, setCostWarningOpen] = useState(false);
   const [pendingFrameCount, setPendingFrameCount] = useState<5 | 10 | 15 | 20 | null>(null);
+
+  // Story P8-3.2: Video storage setting state
+  const [videoStorageWarningOpen, setVideoStorageWarningOpen] = useState(false);
+
+  // Story P8-3.3: Prompt refinement modal state
+  const [promptRefinementOpen, setPromptRefinementOpen] = useState(false);
 
   // Query for existing Protect controllers
   const controllersQuery = useQuery({
@@ -472,6 +481,75 @@ export default function SettingsPage() {
                       }}
                     />
                   </div>
+
+                  {/* Story P8-3.2: Video Storage Settings */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="store-motion-videos">Store Motion Videos</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Download and store full motion clips from Protect cameras for complete video review.
+                        </p>
+                      </div>
+                      <Switch
+                        id="store-motion-videos"
+                        checked={form.watch('store_motion_videos') || false}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            // Show warning before enabling
+                            setVideoStorageWarningOpen(true);
+                          } else {
+                            // Disable immediately
+                            apiClient.settings.update({ store_motion_videos: false })
+                              .then(() => {
+                                form.setValue('store_motion_videos', false, { shouldDirty: false });
+                                toast.success('Video storage disabled');
+                              })
+                              .catch((error) => {
+                                console.error('Failed to save video storage setting:', error);
+                                toast.error('Failed to save setting');
+                              });
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {form.watch('store_motion_videos') && (
+                      <div className="space-y-2 pl-4 border-l-2 border-muted">
+                        <Label htmlFor="video-retention-days">Video Retention (Days)</Label>
+                        <Select
+                          value={String(form.watch('video_retention_days') || 30)}
+                          onValueChange={async (value) => {
+                            const days = parseInt(value, 10);
+                            try {
+                              await apiClient.settings.update({ video_retention_days: days });
+                              form.setValue('video_retention_days', days, { shouldDirty: false });
+                              toast.success(`Video retention set to ${days} days`);
+                            } catch (error) {
+                              console.error('Failed to save video retention:', error);
+                              toast.error('Failed to save video retention setting');
+                            }
+                          }}
+                        >
+                          <SelectTrigger id="video-retention-days" className="w-48">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="7">7 days</SelectItem>
+                            <SelectItem value="14">14 days</SelectItem>
+                            <SelectItem value="30">30 days (default)</SelectItem>
+                            <SelectItem value="60">60 days</SelectItem>
+                            <SelectItem value="90">90 days</SelectItem>
+                            <SelectItem value="180">180 days</SelectItem>
+                            <SelectItem value="365">365 days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Videos older than this will be automatically deleted. This is separate from event retention.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -496,6 +574,25 @@ export default function SettingsPage() {
                 }}
                 onCancel={() => {
                   setPendingFrameCount(null);
+                }}
+              />
+
+              {/* Story P8-3.2: Video Storage Warning Modal */}
+              <VideoStorageWarningModal
+                open={videoStorageWarningOpen}
+                onOpenChange={setVideoStorageWarningOpen}
+                onConfirm={async () => {
+                  try {
+                    await apiClient.settings.update({ store_motion_videos: true });
+                    form.setValue('store_motion_videos', true, { shouldDirty: false });
+                    toast.success('Video storage enabled');
+                  } catch (error) {
+                    console.error('Failed to enable video storage:', error);
+                    toast.error('Failed to enable video storage');
+                  }
+                }}
+                onCancel={() => {
+                  // Don't change the setting
                 }}
               />
             </TabsContent>
@@ -533,17 +630,29 @@ export default function SettingsPage() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="description-prompt">Prompt Template</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          form.setValue('description_prompt', 'Describe what you see in this image in one concise sentence. Focus on objects, people, and actions.', { shouldDirty: true });
-                          toast.success('Prompt reset to default');
-                        }}
-                      >
-                        Reset to Default
-                      </Button>
+                      <div className="flex gap-2">
+                        {/* Story P8-3.3: AI-Assisted Prompt Refinement Button */}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPromptRefinementOpen(true)}
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Refine with AI
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            form.setValue('description_prompt', 'Describe what you see in this image in one concise sentence. Focus on objects, people, and actions.', { shouldDirty: true });
+                            toast.success('Prompt reset to default');
+                          }}
+                        >
+                          Reset to Default
+                        </Button>
+                      </div>
                     </div>
                     <Textarea
                       id="description-prompt"
@@ -557,6 +666,16 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Story P8-3.3: Prompt Refinement Modal */}
+              <PromptRefinementModal
+                open={promptRefinementOpen}
+                onOpenChange={setPromptRefinementOpen}
+                currentPrompt={form.watch('description_prompt') || ''}
+                onAccept={(newPrompt) => {
+                  form.setValue('description_prompt', newPrompt, { shouldDirty: true });
+                }}
+              />
             </TabsContent>
 
             {/* AI Usage Tab - Story P3-7.2 */}

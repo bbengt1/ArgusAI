@@ -140,17 +140,7 @@
   --offset: 16px !important;
   bottom: var(--offset) !important;
   top: auto !important;
-  /* Mobile: bottom-left */
-  left: var(--offset) !important;
-  right: auto !important;
-}
-
-@media (min-width: 1024px) {
-  [data-sonner-toaster] {
-    /* Desktop: top-right */
-    left: auto !important;
-    right: var(--offset) !important;
-    top: var(--offset) !important;
-    bottom: auto !important;
-  }
+  /* Always bottom-right */
+  left: auto !important;
+  right: var(--offset) !important;
 }
