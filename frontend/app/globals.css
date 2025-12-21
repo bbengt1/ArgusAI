@@ -134,3 +134,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Fix Sonner toast positioning - ensure it stays within viewport */
+[data-sonner-toaster] {
+  --offset: 16px !important;
+  right: var(--offset) !important;
+  bottom: var(--offset) !important;
+  left: auto !important;
+  top: auto !important;
+}
