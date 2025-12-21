@@ -300,6 +300,11 @@ class SystemSettingsUpdate(BaseModel):
         None, description="Automatically create new vehicle when no match found (default: true)"
     )
 
+    # Story P8-2.3: Configurable Frame Count Setting
+    analysis_frame_count: Optional[Literal[5, 10, 15, 20]] = Field(
+        None, description="Number of frames to extract for AI analysis (default: 10)"
+    )
+
 
 # Story P3-7.1: AI Usage Response Schemas for Cost Tracking
 
