@@ -1526,9 +1526,10 @@ export const apiClient = {
       error: string | null;
       available: boolean;
     }> => {
-      return apiFetch('/homekit/settings', {
-        method: 'PUT',
-        body: JSON.stringify({ enabled }),
+      // Backend has separate /enable and /disable endpoints
+      const endpoint = enabled ? '/homekit/enable' : '/homekit/disable';
+      return apiFetch(endpoint, {
+        method: 'POST',
       });
     },
 
