@@ -408,9 +408,9 @@ generate_systemd_service() {
 
     # Backend service
     print_step "Creating backend service file..."
-    cat > "$SERVICE_DIR/live-object-backend.service" << EOF
+    cat > "$SERVICE_DIR/argusai-backend.service" << EOF
 [Unit]
-Description=Live Object AI Classifier - Backend API
+Description=ArgusAI - Backend API
 After=network.target
 
 [Service]
@@ -426,7 +426,7 @@ RestartSec=10
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=live-object-backend
+SyslogIdentifier=argusai-backend
 
 # Security hardening
 NoNewPrivileges=true
@@ -435,14 +435,14 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
-    print_success "Created: $SERVICE_DIR/live-object-backend.service"
+    print_success "Created: $SERVICE_DIR/argusai-backend.service"
 
     # Frontend service
     print_step "Creating frontend service file..."
-    cat > "$SERVICE_DIR/live-object-frontend.service" << EOF
+    cat > "$SERVICE_DIR/argusai-frontend.service" << EOF
 [Unit]
-Description=Live Object AI Classifier - Frontend
-After=network.target live-object-backend.service
+Description=ArgusAI - Frontend
+After=network.target argusai-backend.service
 
 [Service]
 Type=simple
@@ -456,7 +456,7 @@ RestartSec=10
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=live-object-frontend
+SyslogIdentifier=argusai-frontend
 
 # Security hardening
 NoNewPrivileges=true
@@ -465,14 +465,14 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
-    print_success "Created: $SERVICE_DIR/live-object-frontend.service"
+    print_success "Created: $SERVICE_DIR/argusai-frontend.service"
 
     echo ""
     print_info "To install systemd services:"
     print_info "  sudo cp $SERVICE_DIR/*.service /etc/systemd/system/"
     print_info "  sudo systemctl daemon-reload"
-    print_info "  sudo systemctl enable live-object-backend live-object-frontend"
-    print_info "  sudo systemctl start live-object-backend live-object-frontend"
+    print_info "  sudo systemctl enable argusai-backend argusai-frontend"
+    print_info "  sudo systemctl start argusai-backend argusai-frontend"
 }
 
 generate_launchd_plist() {
@@ -481,7 +481,7 @@ generate_launchd_plist() {
     local PLIST_DIR="$SCRIPT_DIR/services"
     mkdir -p "$PLIST_DIR"
 
-    local LABEL_PREFIX="com.liveobject"
+    local LABEL_PREFIX="com.argusai"
 
     # Backend plist
     print_step "Creating backend plist file..."
@@ -519,10 +519,10 @@ generate_launchd_plist() {
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/live-object-backend.log</string>
+    <string>/tmp/argusai-backend.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/tmp/live-object-backend.error.log</string>
+    <string>/tmp/argusai-backend.error.log</string>
 </dict>
 </plist>
 EOF
@@ -555,10 +555,10 @@ EOF
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/tmp/live-object-frontend.log</string>
+    <string>/tmp/argusai-frontend.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/tmp/live-object-frontend.error.log</string>
+    <string>/tmp/argusai-frontend.error.log</string>
 </dict>
 </plist>
 EOF
