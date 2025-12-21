@@ -642,7 +642,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -663,9 +663,9 @@ async def cors_http_exception_handler(request: Request, exc: HTTPException):
 
     # Build CORS headers if origin is allowed
     cors_headers = {}
-    if origin in settings.CORS_ORIGINS or "*" in settings.CORS_ORIGINS:
+    if origin in settings.cors_origins_list or "*" in settings.cors_origins_list:
         cors_headers = {
-            "Access-Control-Allow-Origin": origin or settings.CORS_ORIGINS[0],
+            "Access-Control-Allow-Origin": origin or settings.cors_origins_list[0],
             "Access-Control-Allow-Credentials": "true",
         }
 
