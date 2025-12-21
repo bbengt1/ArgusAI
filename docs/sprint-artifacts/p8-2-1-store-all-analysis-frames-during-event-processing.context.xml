@@ -1,0 +1,158 @@
+<story-context id="p8-2-1-store-all-analysis-frames-during-event-processing" v="1.0">
+  <metadata>
+    <epicId>P8-2</epicId>
+    <storyId>P8-2.1</storyId>
+    <title>Store All Analysis Frames During Event Processing</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-20</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p8-2-1-store-all-analysis-frames-during-event-processing.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>all frames used for AI analysis to be stored</iWant>
+    <soThat>I can review exactly what the AI saw when generating descriptions</soThat>
+    <tasks>
+      <task id="1">Create EventFrame database model with id, event_id (FK), frame_number, frame_path, timestamp_offset_ms, width, height, file_size_bytes, created_at columns</task>
+      <task id="2">Create Alembic migration for event_frames table with foreign key to events and index on event_id</task>
+      <task id="3">Create FrameStorageService with save_frames() and delete_frames() methods</task>
+      <task id="4">Integrate frame storage into protect_event_handler.py where frames are extracted</task>
+      <task id="5">Implement cascade deletion for frames (SQLAlchemy relationship + file cleanup)</task>
+      <task id="6">Update cleanup_service.py to delete frame files during retention cleanup</task>
+      <task id="7">Create Pydantic schemas for EventFrame API responses</task>
+      <task id="8">Write unit and integration tests for all new components</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1.1">Given multi-frame analysis, when frames are extracted, then all frames saved to data/frames/{event_id}/</ac>
+    <ac id="1.2">Given frame storage, when frames saved, then EventFrame records created in database</ac>
+    <ac id="1.3">Given frame metadata, when stored, then includes frame_number, path, timestamp_offset_ms</ac>
+    <ac id="1.4">Given event deletion, when cascade occurs, then frame files and records deleted</ac>
+    <ac id="1.5">Given retention policy, when cleanup runs, then old frames deleted with events</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P8-2.md</path>
+        <title>Epic P8-2 Technical Specification</title>
+        <section>Data Models and Contracts</section>
+        <snippet>Defines EventFrame model with id, event_id, frame_number, frame_path, timestamp_offset_ms columns. Storage pattern: data/frames/{event_id}/frame_NNN.jpg</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture-phase8.md</path>
+        <title>Phase 8 Architecture</title>
+        <section>Data Architecture, ADR-P8-001</section>
+        <snippet>Frame Storage decision: Filesystem + DB metadata matching thumbnail pattern. JPEG quality 85 (~50KB per frame). Files stored in data/frames/{event_id}/ with naming frame_{NNN}.jpg</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase8.md</path>
+        <title>Phase 8 Epic Breakdown</title>
+        <section>Story P8-2.1</section>
+        <snippet>Save all extracted frames to data/frames/{event_id}/, create EventFrame records linked to event, apply same retention policy as thumbnails</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>backend/app/services/frame_extractor.py</path>
+        <kind>service</kind>
+        <symbol>FrameExtractor</symbol>
+        <lines>37-798</lines>
+        <reason>Existing frame extraction service with extract_frames_with_timestamps() method. Returns (frames_bytes[], timestamps[]). Currently frames are discarded after AI analysis - need to persist them.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>service</kind>
+        <symbol>_multi_frame_analysis</symbol>
+        <lines>1530-1676</lines>
+        <reason>Integration point where frames are extracted. Lines 1555-1560 call extract_frames_with_timestamps(). Lines 1613-1615 store frames in instance variables _last_extracted_frames and _last_frame_timestamps. Add frame persistence call here.</reason>
+      </file>
+      <file>
+        <path>backend/app/models/event.py</path>
+        <kind>model</kind>
+        <symbol>Event</symbol>
+        <lines>1-131</lines>
+        <reason>Event model to add frames relationship. Already has key_frames_base64 field for storing thumbnails. Add frames = relationship("EventFrame", back_populates="event", cascade="all, delete-orphan")</reason>
+      </file>
+      <file>
+        <path>backend/app/models/__init__.py</path>
+        <kind>module</kind>
+        <symbol>__all__</symbol>
+        <lines>1-50</lines>
+        <reason>Must add EventFrame import and export to __all__ list</reason>
+      </file>
+      <file>
+        <path>backend/app/services/cleanup_service.py</path>
+        <kind>service</kind>
+        <symbol>CleanupService</symbol>
+        <lines>31-390</lines>
+        <reason>Data retention service that deletes old events and thumbnails. Extend cleanup_old_events() to also delete frame directories for events being deleted.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_frame_extractor.py</path>
+        <kind>test</kind>
+        <symbol>TestFrameExtractor</symbol>
+        <reason>Existing frame extractor tests. Add tests for new FrameStorageService.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package>sqlalchemy>=2.0.36</package>
+        <package>alembic>=1.14.0</package>
+        <package>opencv-python>=4.12.0</package>
+        <package>pillow>=10.0.0</package>
+        <package>pytest>=7.4.3</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="storage">Frame files stored in data/frames/{event_id}/ directory matching thumbnail pattern in data/thumbnails/</constraint>
+    <constraint type="naming">Frame filenames: frame_{NNN}.jpg where NNN is zero-padded frame number (001, 002, etc.)</constraint>
+    <constraint type="quality">JPEG quality 85, max width 1280px, target ~50KB per frame</constraint>
+    <constraint type="cascade">Event deletion must cascade to: 1) EventFrame DB records (via SQLAlchemy), 2) Frame files (via event listener or service call)</constraint>
+    <constraint type="pattern">Follow existing singleton service pattern (FrameStorageService with get_frame_storage_service())</constraint>
+    <constraint type="async">Frame storage should not block event processing pipeline - save asynchronously after AI analysis</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>FrameStorageService.save_frames</name>
+      <kind>function signature</kind>
+      <signature>async def save_frames(self, event_id: UUID, frames: List[bytes], timestamps: List[int]) -> List[EventFrame]</signature>
+      <path>backend/app/services/frame_storage_service.py</path>
+    </interface>
+    <interface>
+      <name>FrameStorageService.delete_frames</name>
+      <kind>function signature</kind>
+      <signature>async def delete_frames(self, event_id: UUID) -> None</signature>
+      <path>backend/app/services/frame_storage_service.py</path>
+    </interface>
+    <interface>
+      <name>EventFrame model</name>
+      <kind>SQLAlchemy model</kind>
+      <signature>class EventFrame(Base): id, event_id, frame_number, frame_path, timestamp_offset_ms, width, height, file_size_bytes, created_at</signature>
+      <path>backend/app/models/event_frame.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Backend tests use pytest with pytest-asyncio for async code. Mock external services. Test files in backend/tests/test_services/ and backend/tests/test_models/. Use TestClient for API tests.</standards>
+    <locations>
+      <location>backend/tests/test_services/test_frame_storage_service.py</location>
+      <location>backend/tests/test_models/test_event_frame.py</location>
+    </locations>
+    <ideas>
+      <idea ac="1.1">test_save_frames_creates_directory_and_files - Verify frames saved to data/frames/{event_id}/ with correct naming</idea>
+      <idea ac="1.2">test_save_frames_creates_db_records - Verify EventFrame records created with correct event_id foreign key</idea>
+      <idea ac="1.3">test_frame_metadata_stored_correctly - Verify frame_number, frame_path, timestamp_offset_ms, width, height populated</idea>
+      <idea ac="1.4">test_event_deletion_cascades_to_frames - Verify deleting event removes both DB records and frame files</idea>
+      <idea ac="1.5">test_cleanup_service_removes_frames - Verify retention cleanup deletes frame directories for old events</idea>
+      <idea>test_save_frames_with_empty_list - Edge case: empty frames list should not create directory</idea>
+      <idea>test_save_frames_handles_existing_directory - Edge case: directory already exists should not error</idea>
+      <idea>test_delete_frames_handles_missing_directory - Edge case: deleting non-existent frames should not error</idea>
+    </ideas>
+  </tests>
+</story-context>

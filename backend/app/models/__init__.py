@@ -5,6 +5,7 @@ from app.models.motion_event import MotionEvent
 from app.models.system_setting import SystemSetting
 from app.models.ai_usage import AIUsage
 from app.models.event import Event
+from app.models.event_frame import EventFrame
 from app.models.alert_rule import AlertRule, WebhookLog
 from app.models.user import User
 from app.models.system_notification import SystemNotification
@@ -28,6 +29,7 @@ __all__ = [
     "SystemSetting",
     "AIUsage",
     "Event",
+    "EventFrame",
     "AlertRule",
     "WebhookLog",
     "User",

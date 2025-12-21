@@ -55,6 +55,7 @@ from app.models.event import Event
 from app.services.snapshot_service import get_snapshot_service, SnapshotResult
 from app.services.clip_service import get_clip_service
 from app.services.frame_extractor import get_frame_extractor
+from app.services.frame_storage_service import get_frame_storage_service
 
 if TYPE_CHECKING:
     from app.services.ai_service import AIResult
@@ -1942,6 +1943,40 @@ class ProtectEventHandler:
             db.add(event)
             db.commit()
             db.refresh(event)
+
+            # Story P8-2.1: Save extracted frames to filesystem after event is stored
+            if extracted_frames and store_frames:
+                try:
+                    frame_storage_service = get_frame_storage_service()
+                    # Convert float timestamps (seconds) to int milliseconds
+                    timestamps_ms = [int(ts * 1000) for ts in extracted_timestamps]
+                    await frame_storage_service.save_frames(
+                        event_id=event.id,
+                        frames=extracted_frames,
+                        timestamps_ms=timestamps_ms,
+                        db=db
+                    )
+                    logger.info(
+                        f"Stored {len(extracted_frames)} analysis frames for event {event.id}",
+                        extra={
+                            "event_type": "analysis_frames_stored",
+                            "event_id": event.id,
+                            "camera_id": camera.id,
+                            "frame_count": len(extracted_frames)
+                        }
+                    )
+                except Exception as e:
+                    # Don't fail event creation if frame storage fails
+                    logger.warning(
+                        f"Failed to store analysis frames for event {event.id}: {e}",
+                        extra={
+                            "event_type": "analysis_frames_storage_error",
+                            "event_id": event.id,
+                            "camera_id": camera.id,
+                            "error_type": type(e).__name__,
+                            "error_message": str(e)
+                        }
+                    )
 
             logger.info(
                 f"Protect event stored: {event.id} for camera '{camera.name}'",

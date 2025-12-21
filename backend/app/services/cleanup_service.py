@@ -24,6 +24,7 @@ from sqlalchemy import text
 
 from app.models.event import Event
 from app.core.database import SessionLocal
+from app.services.frame_storage_service import get_frame_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +94,12 @@ class CleanupService:
         total_events_deleted = 0
         total_thumbnails_deleted = 0
         total_thumbnails_failed = 0
+        total_frames_deleted = 0
         total_space_freed = 0.0
         batches_processed = 0
+
+        # Get frame storage service for cleanup
+        frame_storage_service = get_frame_storage_service()
 
         # Batch deletion loop
         while True:
@@ -120,7 +125,22 @@ class CleanupService:
                 total_thumbnails_failed += thumbnail_stats["failed"]
                 total_space_freed += thumbnail_stats["space_freed_mb"]
 
-                # Delete event records (cascade deletes ai_usage via foreign key)
+                # Story P8-2.1 AC1.5: Delete frame files for each event in batch
+                for event in events_batch:
+                    try:
+                        frames_deleted = frame_storage_service.delete_frames_sync(event.id)
+                        total_frames_deleted += frames_deleted
+                    except Exception as frame_e:
+                        logger.warning(
+                            f"Failed to delete frames for event {event.id}: {frame_e}",
+                            extra={
+                                "event_type": "frame_cleanup_error",
+                                "event_id": event.id,
+                                "error": str(frame_e)
+                            }
+                        )
+
+                # Delete event records (cascade deletes ai_usage and event_frames via foreign key)
                 db.query(Event).filter(Event.id.in_(batch_event_ids)).delete(
                     synchronize_session=False
                 )
@@ -135,7 +155,8 @@ class CleanupService:
                         "batch_number": batches_processed,
                         "events_in_batch": batch_size_actual,
                         "thumbnails_deleted": thumbnail_stats["deleted"],
-                        "thumbnails_failed": thumbnail_stats["failed"]
+                        "thumbnails_failed": thumbnail_stats["failed"],
+                        "frames_deleted": total_frames_deleted
                     }
                 )
 
@@ -155,12 +176,13 @@ class CleanupService:
             "events_deleted": total_events_deleted,
             "thumbnails_deleted": total_thumbnails_deleted,
             "thumbnails_failed": total_thumbnails_failed,
+            "frames_deleted": total_frames_deleted,  # Story P8-2.1 AC1.5
             "space_freed_mb": round(total_space_freed, 2),
             "batches_processed": batches_processed
         }
 
         logger.info(
-            f"Cleanup complete: {total_events_deleted} events deleted across {batches_processed} batches",
+            f"Cleanup complete: {total_events_deleted} events deleted, {total_frames_deleted} frames deleted across {batches_processed} batches",
             extra=stats
         )
 
