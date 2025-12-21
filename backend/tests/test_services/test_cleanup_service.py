@@ -358,7 +358,10 @@ class TestCleanupService:
                 # Verify values
                 assert storage_info["database_mb"] > 0
                 assert storage_info["thumbnails_mb"] > 0
-                assert storage_info["total_mb"] == storage_info["database_mb"] + storage_info["thumbnails_mb"]
+                # Use pytest.approx for floating-point comparison
+                assert storage_info["total_mb"] == pytest.approx(
+                    storage_info["database_mb"] + storage_info["thumbnails_mb"], rel=1e-2
+                )
                 assert storage_info["event_count"] == 10
 
             finally:

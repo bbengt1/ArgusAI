@@ -42,9 +42,9 @@ const mockApiClient = apiClient as {
   }
 }
 
-// Base mock event for tests
+// Base mock event for tests - use numeric string ID for Number() conversion
 const createMockEvent = (overrides?: Partial<IEvent>): IEvent => ({
-  id: 'evt-123',
+  id: '123',
   camera_id: 'cam-456-abcd-efgh',
   camera_name: 'Front Door',
   timestamp: '2024-01-15T10:30:00Z',
@@ -66,9 +66,9 @@ const createMockEvent = (overrides?: Partial<IEvent>): IEvent => ({
 
 // Create multiple events for navigation testing
 const createMockEvents = (): IEvent[] => [
-  createMockEvent({ id: 'evt-1', description: 'First event' }),
-  createMockEvent({ id: 'evt-2', description: 'Second event' }),
-  createMockEvent({ id: 'evt-3', description: 'Third event' }),
+  createMockEvent({ id: '1', description: 'First event' }),
+  createMockEvent({ id: '2', description: 'Second event' }),
+  createMockEvent({ id: '3', description: 'Third event' }),
 ]
 
 describe('EventDetailModal', () => {
@@ -320,7 +320,8 @@ describe('EventDetailModal', () => {
       await user.click(confirmButton)
 
       await waitFor(() => {
-        expect(mockApiClient.events.delete).toHaveBeenCalledWith('evt-123')
+        // useDeleteEvent hook converts string ID to number
+        expect(mockApiClient.events.delete).toHaveBeenCalledWith(123)
       })
     })
 

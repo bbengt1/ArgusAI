@@ -29,6 +29,9 @@ beforeEach(() => {
 vi.mock('@/lib/api-client', () => ({
   apiClient: {
     cameras: {
+      test: vi.fn(),
+    },
+    discovery: {
       testConnection: vi.fn(),
     },
   },
@@ -110,13 +113,16 @@ vi.mock('@/components/cameras/AnalysisModeSelector', () => ({
 
 const mockApiClient = apiClient as {
   cameras: {
+    test: ReturnType<typeof vi.fn>
+  }
+  discovery: {
     testConnection: ReturnType<typeof vi.fn>
   }
 }
 
-// Base mock camera for edit mode tests
+// Base mock camera for edit mode tests - use numeric string ID for Number() conversion
 const createMockCamera = (overrides?: Partial<ICamera>): ICamera => ({
-  id: 'cam-123',
+  id: '123',
   name: 'Test Camera',
   type: 'rtsp',
   rtsp_url: 'rtsp://192.168.1.100:554/stream',
@@ -341,7 +347,7 @@ describe('CameraForm', () => {
         success: true,
         message: 'Connection successful',
       }
-      mockApiClient.cameras.testConnection.mockResolvedValueOnce(testResult)
+      mockApiClient.cameras.test.mockResolvedValueOnce(testResult)
 
       const camera = createMockCamera()
       render(<CameraForm initialData={camera} onSubmit={mockOnSubmit} />)
@@ -351,7 +357,8 @@ describe('CameraForm', () => {
       await waitFor(() => {
         expect(screen.getByText('Connection successful')).toBeInTheDocument()
       })
-      expect(mockApiClient.cameras.testConnection).toHaveBeenCalledWith('cam-123')
+      // Component calls Number(initialData.id) which converts '123' to 123
+      expect(mockApiClient.cameras.test).toHaveBeenCalledWith(123)
     })
 
     it('shows error message on connection failure', async () => {
@@ -360,7 +367,7 @@ describe('CameraForm', () => {
         success: false,
         message: 'Connection refused',
       }
-      mockApiClient.cameras.testConnection.mockResolvedValueOnce(testResult)
+      mockApiClient.cameras.test.mockResolvedValueOnce(testResult)
 
       const camera = createMockCamera()
       render(<CameraForm initialData={camera} onSubmit={mockOnSubmit} />)
@@ -374,7 +381,7 @@ describe('CameraForm', () => {
 
     it('shows API error message on request failure', async () => {
       const user = userEvent.setup()
-      mockApiClient.cameras.testConnection.mockRejectedValueOnce(
+      mockApiClient.cameras.test.mockRejectedValueOnce(
         new ApiError('Network timeout')
       )
 
@@ -390,7 +397,7 @@ describe('CameraForm', () => {
 
     it('shows generic error message on unknown error', async () => {
       const user = userEvent.setup()
-      mockApiClient.cameras.testConnection.mockRejectedValueOnce(new Error('Unknown'))
+      mockApiClient.cameras.test.mockRejectedValueOnce(new Error('Unknown'))
 
       const camera = createMockCamera()
       render(<CameraForm initialData={camera} onSubmit={mockOnSubmit} />)
@@ -405,7 +412,7 @@ describe('CameraForm', () => {
     it('shows loading state during test', async () => {
       const user = userEvent.setup()
       let resolveTest: (value: ICameraTestResponse) => void
-      mockApiClient.cameras.testConnection.mockImplementationOnce(
+      mockApiClient.cameras.test.mockImplementationOnce(
         () => new Promise((resolve) => { resolveTest = resolve })
       )
 
@@ -432,7 +439,7 @@ describe('CameraForm', () => {
         message: 'Connection successful',
         thumbnail: 'data:image/jpeg;base64,/9j/4AAQ...',
       }
-      mockApiClient.cameras.testConnection.mockResolvedValueOnce(testResult)
+      mockApiClient.cameras.test.mockResolvedValueOnce(testResult)
 
       const camera = createMockCamera()
       render(<CameraForm initialData={camera} onSubmit={mockOnSubmit} />)

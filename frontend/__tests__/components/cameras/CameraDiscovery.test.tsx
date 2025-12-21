@@ -31,10 +31,9 @@ import type {
 vi.mock('@/lib/api-client', () => ({
   apiClient: {
     discovery: {
-      getStatus: vi.fn(),
-      startScan: vi.fn(),
+      status: vi.fn(),
+      start: vi.fn(),
       getDeviceDetails: vi.fn(),
-      clearCache: vi.fn(),
     },
   },
   ApiError: class ApiError extends Error {
