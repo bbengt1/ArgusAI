@@ -183,7 +183,7 @@ export function FrameGalleryModal({ eventId, open, onOpenChange }: FrameGalleryM
                     variant="ghost"
                     size="icon"
                     className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full disabled:opacity-30"
-                    onClick={() => navigateFrame('prev')}
+                    onClick={(e) => { e.stopPropagation(); navigateFrame('prev'); }}
                     disabled={selectedIndex === 0}
                     aria-label="Previous frame"
                   >
@@ -193,7 +193,7 @@ export function FrameGalleryModal({ eventId, open, onOpenChange }: FrameGalleryM
                     variant="ghost"
                     size="icon"
                     className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full disabled:opacity-30"
-                    onClick={() => navigateFrame('next')}
+                    onClick={(e) => { e.stopPropagation(); navigateFrame('next'); }}
                     disabled={selectedIndex === frames.length - 1}
                     aria-label="Next frame"
                   >
@@ -229,7 +229,7 @@ export function FrameGalleryModal({ eventId, open, onOpenChange }: FrameGalleryM
                   <button
                     key={frame.id}
                     type="button"
-                    onClick={() => setSelectedIndex(index)}
+                    onClick={(e) => { e.stopPropagation(); setSelectedIndex(index); }}
                     className={`flex-shrink-0 w-16 h-12 rounded overflow-hidden border-2 transition-all ${
                       index === selectedIndex
                         ? 'border-purple-500 ring-2 ring-purple-500/30'
