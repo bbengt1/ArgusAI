@@ -138,8 +138,16 @@
 /* Fix Sonner toast positioning - ensure it stays within viewport */
 [data-sonner-toaster] {
   --offset: 16px !important;
-  right: var(--offset) !important;
   bottom: var(--offset) !important;
-  left: auto !important;
   top: auto !important;
+  right: auto !important;
+  /* Account for sidebar width (240px / 15rem) on desktop */
+  left: var(--offset) !important;
+}
+
+@media (min-width: 1024px) {
+  [data-sonner-toaster] {
+    /* On desktop, position after the sidebar (240px + 16px offset) */
+    left: calc(240px + var(--offset)) !important;
+  }
 }
