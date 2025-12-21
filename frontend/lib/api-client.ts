@@ -1457,7 +1457,7 @@ export const apiClient = {
         is_enabled_for_ai: boolean;
         smart_detection_types: string[];
       } }>(`/protect/controllers/${controllerId}/cameras/${protectCameraId}/enable`, {
-        method: 'PUT',
+        method: 'POST',
       });
       return response.data;
     },
@@ -1476,7 +1476,7 @@ export const apiClient = {
         protect_camera_id: string;
         is_enabled_for_ai: boolean;
       } }>(`/protect/controllers/${controllerId}/cameras/${protectCameraId}/disable`, {
-        method: 'PUT',
+        method: 'POST',
       });
       return response.data;
     },

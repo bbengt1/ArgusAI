@@ -73,8 +73,8 @@ PUT    /api/v1/protect/controllers/{id}     # Update controller
 DELETE /api/v1/protect/controllers/{id}     # Delete controller
 POST   /api/v1/protect/controllers/test     # Test connection (no persistence)
 GET    /api/v1/protect/controllers/{id}/cameras           # Discover cameras
-PUT    /api/v1/protect/controllers/{id}/cameras/{cam}/enable   # Enable for AI
-PUT    /api/v1/protect/controllers/{id}/cameras/{cam}/disable  # Disable for AI
+POST   /api/v1/protect/controllers/{id}/cameras/{cam}/enable   # Enable for AI
+POST   /api/v1/protect/controllers/{id}/cameras/{cam}/disable  # Disable for AI
 PUT    /api/v1/protect/controllers/{id}/cameras/{cam}/filters  # Set event filters
 ```
 
