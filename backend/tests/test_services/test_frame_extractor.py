@@ -39,16 +39,16 @@ class TestFrameExtractorConstants:
     """Test service constants are properly defined"""
 
     def test_default_frame_count(self):
-        """AC1: Verify default frame count is 5"""
-        assert FRAME_EXTRACT_DEFAULT_COUNT == 5
+        """AC1: Verify default frame count is 10 (Story P8-2.3)"""
+        assert FRAME_EXTRACT_DEFAULT_COUNT == 10
 
     def test_min_frame_count(self):
         """AC3/FR8: Verify minimum frame count is 3"""
         assert FRAME_EXTRACT_MIN_COUNT == 3
 
     def test_max_frame_count(self):
-        """AC3/FR8: Verify maximum frame count is 10"""
-        assert FRAME_EXTRACT_MAX_COUNT == 10
+        """AC3/FR8: Verify maximum frame count is 20 (Story P8-2.3)"""
+        assert FRAME_EXTRACT_MAX_COUNT == 20
 
     def test_jpeg_quality(self):
         """AC1: Verify JPEG quality is 85%"""

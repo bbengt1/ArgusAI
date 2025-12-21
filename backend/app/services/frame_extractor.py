@@ -1,12 +1,17 @@
 """
-FrameExtractor for extracting frames from video clips (Story P3-2.1, P3-2.2)
+FrameExtractor for extracting frames from video clips (Story P3-2.1, P3-2.2, P8-2.4)
 
 Provides functionality to:
 - Extract multiple frames from video clips for AI analysis
-- Select frames using evenly-spaced strategy (first/last guaranteed)
+- Select frames using evenly-spaced or adaptive strategy (P8-2.4)
 - Filter out blurry or empty frames using Laplacian variance (Story P3-2.2)
 - Encode frames as JPEG with configurable quality
 - Resize frames to max width for optimal AI token cost
+
+Sampling Strategies (P8-2.4):
+- uniform: Evenly-spaced frame selection (first/last guaranteed)
+- adaptive: Content-aware selection using histogram + SSIM comparison
+- hybrid: Extract more candidates uniformly, then filter adaptively
 
 Architecture Reference: docs/architecture.md#Phase-3-Service-Architecture
 """
@@ -557,19 +562,24 @@ class FrameExtractor:
         clip_path: Path,
         frame_count: int = 5,
         strategy: str = "evenly_spaced",
-        filter_blur: bool = True
+        filter_blur: bool = True,
+        sampling_strategy: str = "uniform"
     ) -> Tuple[List[bytes], List[float]]:
         """
-        Extract frames from a video clip with their timestamps (Story P3-7.5).
+        Extract frames from a video clip with their timestamps (Story P3-7.5, P8-2.4).
 
         Similar to extract_frames but also returns frame timestamps in seconds
         for display in the key frames gallery.
 
         Args:
             clip_path: Path to the video file (MP4)
-            frame_count: Number of frames to extract (3-10, default 5)
-            strategy: Selection strategy (currently only "evenly_spaced")
+            frame_count: Number of frames to extract (3-20, default 5)
+            strategy: DEPRECATED - use sampling_strategy instead
             filter_blur: If True (default), filter out blurry/empty frames
+            sampling_strategy: Frame selection strategy (Story P8-2.4):
+                - "uniform": Evenly-spaced selection (default, legacy behavior)
+                - "adaptive": Content-aware selection using histogram + SSIM
+                - "hybrid": Extract more candidates, then filter adaptively
 
         Returns:
             Tuple of (frames, timestamps):
@@ -581,7 +591,8 @@ class FrameExtractor:
             extra={
                 "event_type": "frame_extraction_with_timestamps_start",
                 "clip_path": str(clip_path),
-                "frame_count": frame_count
+                "frame_count": frame_count,
+                "sampling_strategy": sampling_strategy
             }
         )
 
@@ -590,6 +601,19 @@ class FrameExtractor:
             frame_count = FRAME_EXTRACT_MIN_COUNT
         elif frame_count > FRAME_EXTRACT_MAX_COUNT:
             frame_count = FRAME_EXTRACT_MAX_COUNT
+
+        # Validate sampling_strategy
+        valid_strategies = ["uniform", "adaptive", "hybrid"]
+        if sampling_strategy not in valid_strategies:
+            logger.warning(
+                f"Invalid sampling_strategy '{sampling_strategy}', using 'uniform'",
+                extra={
+                    "event_type": "invalid_sampling_strategy",
+                    "provided": sampling_strategy,
+                    "fallback": "uniform"
+                }
+            )
+            sampling_strategy = "uniform"
 
         try:
             with av.open(str(clip_path)) as container:
@@ -619,8 +643,15 @@ class FrameExtractor:
                 if total_frames <= 0:
                     return [], []
 
-                # Calculate which frames to extract
-                indices = self._calculate_frame_indices(total_frames, frame_count)
+                # Story P8-2.4: For adaptive/hybrid, extract more candidate frames
+                if sampling_strategy in ["adaptive", "hybrid"]:
+                    # Extract 3x the target count as candidates for adaptive selection
+                    candidate_count = min(total_frames, frame_count * 3)
+                    indices = self._calculate_frame_indices(total_frames, candidate_count)
+                else:
+                    # Calculate which frames to extract (uniform strategy)
+                    indices = self._calculate_frame_indices(total_frames, frame_count)
+
                 if not indices:
                     return [], []
 
@@ -645,6 +676,48 @@ class FrameExtractor:
                             break
 
                     current_frame_index += 1
+
+                # Story P8-2.4: Apply adaptive sampling if enabled
+                if sampling_strategy in ["adaptive", "hybrid"] and len(extracted_frames) > frame_count:
+                    from app.services.adaptive_sampler import get_adaptive_sampler
+
+                    adaptive_sampler = get_adaptive_sampler()
+
+                    # Prepare frames and timestamps for adaptive selection
+                    candidate_frames = [f[2] for f in extracted_frames]  # rgb arrays
+                    candidate_timestamps_ms = [f[0] * (1000.0 / fps) for f in extracted_frames]
+
+                    # Select diverse frames
+                    selected = await adaptive_sampler.select_diverse_frames(
+                        frames=candidate_frames,
+                        timestamps_ms=candidate_timestamps_ms,
+                        target_count=frame_count,
+                        fps=fps
+                    )
+
+                    # Build final frames list from selection
+                    # Map selected indices back to extracted_frames
+                    selected_indices = set()
+                    final_extracted = []
+                    for idx, _, ts_ms in selected:
+                        # Find the extracted frame with matching original index
+                        for ef in extracted_frames:
+                            ef_ts_ms = ef[0] * (1000.0 / fps)
+                            if abs(ef_ts_ms - ts_ms) < 1.0:  # Within 1ms tolerance
+                                final_extracted.append(ef)
+                                break
+
+                    extracted_frames = final_extracted
+
+                    logger.info(
+                        f"Adaptive sampling selected {len(extracted_frames)} diverse frames from {len(candidate_frames)} candidates",
+                        extra={
+                            "event_type": "adaptive_sampling_applied",
+                            "candidate_count": len(candidate_frames),
+                            "selected_count": len(extracted_frames),
+                            "sampling_strategy": sampling_strategy
+                        }
+                    )
 
                 # Apply blur filtering if enabled
                 if filter_blur:
@@ -710,7 +783,8 @@ class FrameExtractor:
                         "event_type": "frame_extraction_with_timestamps_success",
                         "clip_path": str(clip_path),
                         "frames_extracted": len(frames),
-                        "timestamps": timestamps
+                        "timestamps": timestamps,
+                        "sampling_strategy": sampling_strategy
                     }
                 )
 

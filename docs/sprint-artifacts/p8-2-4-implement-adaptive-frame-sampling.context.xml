@@ -1,0 +1,215 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P8-2</epicId>
+    <storyId>4</storyId>
+    <title>Implement Adaptive Frame Sampling</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-20</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p8-2-4-implement-adaptive-frame-sampling.md</sourceStoryPath>
+    <githubIssue>https://github.com/bbengt1/ArgusAI/issues/85</githubIssue>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>to select frames based on content changes rather than fixed intervals</iWant>
+    <soThat>analysis captures key moments while reducing redundant frames</soThat>
+    <tasks>
+      <task id="1" title="Create AdaptiveSampler service class">
+        <subtask id="1.1">Create backend/app/services/adaptive_sampler.py module</subtask>
+        <subtask id="1.2">Implement calculate_histogram_similarity() using OpenCV</subtask>
+        <subtask id="1.3">Implement calculate_ssim_similarity() using OpenCV</subtask>
+        <subtask id="1.4">Create AdaptiveSampler class with configurable thresholds</subtask>
+        <subtask id="1.5">Set histogram threshold to 0.98 and SSIM threshold to 0.95</subtask>
+      </task>
+      <task id="2" title="Implement adaptive sampling algorithm">
+        <subtask id="2.1">Implement select_diverse_frames() method</subtask>
+        <subtask id="2.2">Always select first frame as anchor</subtask>
+        <subtask id="2.3">Apply two-stage filtering: histogram then SSIM</subtask>
+        <subtask id="2.4">Enforce minimum 500ms temporal spacing</subtask>
+        <subtask id="2.5">Implement uniform fallback for static videos</subtask>
+        <subtask id="2.6">Return list of (index, frame, timestamp) tuples</subtask>
+      </task>
+      <task id="3" title="Integrate into frame extraction">
+        <subtask id="3.1">Update frame_extractor.py to accept sampling strategy</subtask>
+        <subtask id="3.2">Call AdaptiveSampler when strategy is adaptive/hybrid</subtask>
+        <subtask id="3.3">For hybrid: extract more candidates, then filter</subtask>
+        <subtask id="3.4">Ensure output matches configured analysis_frame_count</subtask>
+        <subtask id="3.5">Add sampling strategy to event metadata</subtask>
+      </task>
+      <task id="4" title="Add logging for frame selection">
+        <subtask id="4.1">Log frame selection decisions with similarity scores</subtask>
+        <subtask id="4.2">Log skipped frames with reasons</subtask>
+        <subtask id="4.3">Log final selected indices and timestamps</subtask>
+        <subtask id="4.4">Add Prometheus metrics for sampling</subtask>
+      </task>
+      <task id="5" title="Write unit tests">
+        <subtask id="5.1">Test histogram comparison returns 0-1</subtask>
+        <subtask id="5.2">Test SSIM comparison returns 0-1</subtask>
+        <subtask id="5.3">Test similar frames are filtered</subtask>
+        <subtask id="5.4">Test temporal spacing enforced</subtask>
+        <subtask id="5.5">Test fallback to uniform</subtask>
+        <subtask id="5.6">Test target count respected</subtask>
+      </task>
+      <task id="6" title="Write integration tests">
+        <subtask id="6.1">Test end-to-end with adaptive sampling</subtask>
+        <subtask id="6.2">Test with synthetic video with scene changes</subtask>
+        <subtask id="6.3">Test with static video (fallback)</subtask>
+        <subtask id="6.4">Test stored frames use adaptive selection</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC4.1">Given adaptive mode, when sampling, then histogram comparison used as pre-filter</criterion>
+    <criterion id="AC4.2">Given similar frames (histogram >0.98), then SSIM comparison applied</criterion>
+    <criterion id="AC4.3">Given frames >95% similar (SSIM), then redundant frame skipped</criterion>
+    <criterion id="AC4.4">Given sampling, when complete, then configured frame count respected</criterion>
+    <criterion id="AC4.5">Given temporal coverage, when sampling, then minimum 500ms spacing enforced</criterion>
+    <criterion id="AC4.6">Given static video, when insufficient diverse frames, then uniform fallback used</criterion>
+    <criterion id="AC4.7">Given sampling, when complete, then frame selection logged for debugging</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P8-2.md</path>
+        <title>Epic Technical Specification: Video Analysis Enhancements</title>
+        <section>P8-2.4: Implement Adaptive Frame Sampling</section>
+        <snippet>Use hybrid histogram + SSIM approach. Histogram threshold: 0.98, SSIM threshold: 0.95. Minimum temporal spacing: 500ms. Performance target: &lt;500ms for 10 frames from 100 candidates.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase8.md</path>
+        <title>ArgusAI Phase 8 Epic Breakdown</title>
+        <section>Story P8-2.4: Implement Adaptive Frame Sampling</section>
+        <snippet>Detect scene changes, weight frames by motion magnitude, ensure minimum 500ms between frames. Fallback to uniform if video is static.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p8-2-3-add-configurable-frame-count-setting.md</path>
+        <title>Previous Story: Configurable Frame Count</title>
+        <section>Completion Notes</section>
+        <snippet>analysis_frame_count loaded in protect_event_handler.py:1555-1568. FRAME_EXTRACT_DEFAULT_COUNT=10, MAX=20. Use settings pattern for new sampling strategy.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>backend/app/services/frame_extractor.py</path>
+        <kind>service</kind>
+        <symbol>FrameExtractor</symbol>
+        <lines>37-798</lines>
+        <reason>Core frame extraction service to extend with adaptive sampling strategy parameter. Has extract_frames_with_timestamps() method used by protect_event_handler.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/frame_extractor.py</path>
+        <kind>method</kind>
+        <symbol>_calculate_frame_indices</symbol>
+        <lines>76-115</lines>
+        <reason>Current uniform frame selection algorithm. Adaptive sampler replaces this logic when strategy is adaptive/hybrid.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/frame_extractor.py</path>
+        <kind>method</kind>
+        <symbol>_is_frame_usable</symbol>
+        <lines>165-208</lines>
+        <reason>Existing blur detection using Laplacian variance. Reference pattern for quality checks.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>integration</kind>
+        <symbol>frame extraction call</symbol>
+        <lines>1570-1575</lines>
+        <reason>Integration point where frame_extractor.extract_frames_with_timestamps() is called. Needs to pass sampling_strategy parameter.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/similarity_service.py</path>
+        <kind>reference</kind>
+        <symbol>cosine_similarity</symbol>
+        <lines>51-86</lines>
+        <reason>Reference pattern for numpy-based similarity calculation. Similar pattern for histogram/SSIM comparison.</reason>
+      </artifact>
+      <artifact>
+        <path>backend/tests/test_services/test_frame_extractor.py</path>
+        <kind>test</kind>
+        <symbol>TestFrameExtractor</symbol>
+        <lines>all</lines>
+        <reason>Existing frame extractor tests. Add adaptive sampler tests following same patterns.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package>opencv-python>=4.12.0</package>
+        <note>cv2.compareHist() for histogram, cv2.quality.QualitySSIM_compute() or manual SSIM</note>
+      </python>
+      <python>
+        <package>numpy>=1.24.0</package>
+        <note>Array operations for frame data</note>
+      </python>
+      <python>
+        <package>av>=12.0.0</package>
+        <note>PyAV for video decoding</note>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="performance">Frame extraction including adaptive sampling must complete in &lt;2 seconds for 100 candidate frames</constraint>
+    <constraint type="performance">Histogram comparison: &lt;1ms per frame</constraint>
+    <constraint type="performance">SSIM comparison: &lt;10ms per frame</constraint>
+    <constraint type="performance">Total adaptive sampling: &lt;500ms for 10 frames from 100 candidates</constraint>
+    <constraint type="architecture">AdaptiveSampler as separate service module following singleton pattern like FrameExtractor</constraint>
+    <constraint type="architecture">Two-stage filtering: fast histogram pre-filter, then SSIM for borderline cases</constraint>
+    <constraint type="reliability">Fallback to uniform sampling if adaptive algorithm fails or video is static</constraint>
+    <constraint type="logging">Log frame selection decisions with similarity scores for debugging</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>AdaptiveSampler.select_diverse_frames</name>
+      <kind>method</kind>
+      <signature>async def select_diverse_frames(self, frames: List[np.ndarray], timestamps: List[float], target_count: int, min_spacing_ms: float = 500.0) -> List[Tuple[int, np.ndarray, float]]</signature>
+      <path>backend/app/services/adaptive_sampler.py</path>
+    </interface>
+    <interface>
+      <name>AdaptiveSampler.calculate_histogram_similarity</name>
+      <kind>method</kind>
+      <signature>def calculate_histogram_similarity(self, frame1: np.ndarray, frame2: np.ndarray) -> float</signature>
+      <path>backend/app/services/adaptive_sampler.py</path>
+    </interface>
+    <interface>
+      <name>AdaptiveSampler.calculate_ssim_similarity</name>
+      <kind>method</kind>
+      <signature>def calculate_ssim_similarity(self, frame1: np.ndarray, frame2: np.ndarray) -> float</signature>
+      <path>backend/app/services/adaptive_sampler.py</path>
+    </interface>
+    <interface>
+      <name>FrameExtractor.extract_frames_with_timestamps</name>
+      <kind>method</kind>
+      <signature>async def extract_frames_with_timestamps(self, clip_path: Path, frame_count: int = 5, strategy: str = "evenly_spaced", filter_blur: bool = True, sampling_strategy: str = "uniform") -> Tuple[List[bytes], List[float]]</signature>
+      <path>backend/app/services/frame_extractor.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      pytest with pytest-asyncio for async tests. Follow existing patterns in backend/tests/test_services/.
+      Create test_adaptive_sampler.py for unit tests. Mock frame data using numpy arrays.
+      Use similar fixture patterns as test_frame_extractor.py.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_adaptive_sampler.py</location>
+      <location>backend/tests/test_services/test_frame_extractor.py (extend)</location>
+      <location>backend/tests/test_integration/test_adaptive_sampling.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC4.1">Test that histogram comparison is called before SSIM in adaptive mode</idea>
+      <idea ac="AC4.2">Test that SSIM is only called when histogram similarity > 0.98</idea>
+      <idea ac="AC4.3">Test that frames with SSIM > 0.95 are skipped</idea>
+      <idea ac="AC4.4">Test output frame count matches target_count parameter</idea>
+      <idea ac="AC4.5">Test frames are at least 500ms apart in output</idea>
+      <idea ac="AC4.6">Test fallback with video of identical frames returns uniform selection</idea>
+      <idea ac="AC4.7">Test logging output contains similarity scores and selection decisions</idea>
+      <idea>Test with synthetic frames: identical frames, gradually changing, scene cuts</idea>
+      <idea>Test edge cases: single frame video, 2 frames, more frames requested than available</idea>
+    </ideas>
+  </tests>
+</story-context>
