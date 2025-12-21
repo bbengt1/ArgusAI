@@ -140,14 +140,15 @@
   --offset: 16px !important;
   bottom: var(--offset) !important;
   top: auto !important;
-  right: auto !important;
-  /* Account for sidebar width (240px / 15rem) on desktop */
+  /* Mobile: bottom-left */
   left: var(--offset) !important;
+  right: auto !important;
 }
 
 @media (min-width: 1024px) {
   [data-sonner-toaster] {
-    /* On desktop, position after the sidebar (240px + 16px offset) */
-    left: calc(240px + var(--offset)) !important;
+    /* Desktop: bottom-right */
+    left: auto !important;
+    right: var(--offset) !important;
   }
 }
