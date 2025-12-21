@@ -653,10 +653,10 @@ export const apiClient = {
     },
 
     /**
-     * Get cost cap status (Story P3-3.4)
+     * Get cost cap status (Story P3-7.3)
      */
     getCostCapStatus: async (): Promise<ICostCapStatus> => {
-      return apiFetch('/ai/cost-cap/status');
+      return apiFetch('/system/ai-cost-status');
     },
 
     /**
