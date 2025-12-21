@@ -460,10 +460,17 @@ export default function SettingsPage() {
                 open={costWarningOpen}
                 onOpenChange={setCostWarningOpen}
                 newValue={pendingFrameCount || 10}
-                onConfirm={() => {
+                onConfirm={async () => {
                   if (pendingFrameCount) {
-                    form.setValue('analysis_frame_count', pendingFrameCount, { shouldDirty: true });
-                    toast.success(`Frame count updated to ${pendingFrameCount}`);
+                    try {
+                      // Save immediately to backend
+                      await apiClient.settings.update({ analysis_frame_count: pendingFrameCount });
+                      form.setValue('analysis_frame_count', pendingFrameCount, { shouldDirty: false });
+                      toast.success(`Frame count updated to ${pendingFrameCount}`);
+                    } catch (error) {
+                      console.error('Failed to save frame count:', error);
+                      toast.error('Failed to save frame count setting');
+                    }
                   }
                   setPendingFrameCount(null);
                 }}
