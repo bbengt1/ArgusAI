@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 SIMILARITY_THRESHOLD = 0.95  # SSIM threshold for filtering similar frames
 SIMILARITY_RESIZE_DIM = 256  # Resize frames for faster SSIM comparison
 
+# Motion scoring configuration (Story P9-2.3)
+MOTION_SCORE_MULTIPLIER = 10.0  # Multiplier to normalize optical flow magnitude to 0-100
+
 # Frame extraction configuration (Story P3-2.1, FR8, P8-2.3)
 FRAME_EXTRACT_DEFAULT_COUNT = 10  # Story P8-2.3: Changed from 5 to 10
 FRAME_EXTRACT_MIN_COUNT = 3
@@ -321,6 +324,171 @@ class FrameExtractor:
         )
 
         return filtered_frames, filtered_indices
+
+    def calculate_motion_score(
+        self,
+        prev_frame: np.ndarray,
+        curr_frame: np.ndarray,
+        resize_dim: int = 256
+    ) -> float:
+        """
+        Calculate motion score between two consecutive frames (Story P9-2.3).
+
+        Uses optical flow (Farneback algorithm) to measure motion magnitude
+        between frames. Normalized to 0-100 scale.
+
+        Args:
+            prev_frame: Previous frame as RGB numpy array (H, W, 3)
+            curr_frame: Current frame as RGB numpy array (H, W, 3)
+            resize_dim: Dimension to resize frames for faster processing (default 256)
+
+        Returns:
+            Motion score between 0 and 100
+            - 0 = no motion (identical frames)
+            - 100 = maximum motion (high speed movement)
+        """
+        # Convert to grayscale
+        prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_RGB2GRAY)
+        curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_RGB2GRAY)
+
+        # Resize for faster computation
+        prev_gray = cv2.resize(prev_gray, (resize_dim, resize_dim))
+        curr_gray = cv2.resize(curr_gray, (resize_dim, resize_dim))
+
+        # Calculate optical flow using Farneback algorithm
+        flow = cv2.calcOpticalFlowFarneback(
+            prev_gray, curr_gray, None,
+            pyr_scale=0.5,
+            levels=3,
+            winsize=15,
+            iterations=3,
+            poly_n=5,
+            poly_sigma=1.2,
+            flags=0
+        )
+
+        # Calculate magnitude of flow vectors
+        magnitude, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+
+        # Calculate mean magnitude and normalize to 0-100
+        mean_magnitude = float(np.mean(magnitude))
+        score = min(100.0, mean_magnitude * MOTION_SCORE_MULTIPLIER)
+
+        return round(score, 2)
+
+    def score_frames_by_motion(
+        self,
+        frames: List[np.ndarray],
+        indices: Optional[List[int]] = None
+    ) -> List[Tuple[np.ndarray, int, float]]:
+        """
+        Score a list of frames by motion activity (Story P9-2.3).
+
+        Calculates motion score for each frame based on optical flow to
+        adjacent frames. First frame gets score based on comparison to second.
+
+        Args:
+            frames: List of frames as RGB numpy arrays
+            indices: Optional list of original frame indices
+
+        Returns:
+            List of tuples (frame, index, motion_score)
+            Sorted by original index (chronological order)
+
+        Example:
+            frames -> [(frame1, 0, 45.2), (frame2, 1, 78.3), (frame3, 2, 12.1)]
+        """
+        if not frames:
+            logger.warning(
+                "No frames provided to score_frames_by_motion",
+                extra={"event_type": "motion_scoring_empty_input"}
+            )
+            return []
+
+        if len(frames) == 1:
+            # Single frame, no motion can be calculated
+            idx = indices[0] if indices else 0
+            return [(frames[0], idx, 0.0)]
+
+        # Generate indices if not provided
+        if indices is None:
+            indices = list(range(len(frames)))
+
+        scored_frames: List[Tuple[np.ndarray, int, float]] = []
+
+        for i in range(len(frames)):
+            if i == 0:
+                # First frame: compare to second frame
+                score = self.calculate_motion_score(frames[0], frames[1])
+            elif i == len(frames) - 1:
+                # Last frame: compare to previous frame
+                score = self.calculate_motion_score(frames[-2], frames[-1])
+            else:
+                # Middle frame: average of motion to prev and next
+                score_prev = self.calculate_motion_score(frames[i - 1], frames[i])
+                score_next = self.calculate_motion_score(frames[i], frames[i + 1])
+                score = (score_prev + score_next) / 2
+
+            scored_frames.append((frames[i], indices[i], round(score, 2)))
+
+        # Log scoring results
+        scores = [s[2] for s in scored_frames]
+        logger.info(
+            f"Motion scoring complete: {len(frames)} frames, scores range {min(scores):.1f}-{max(scores):.1f}",
+            extra={
+                "event_type": "motion_scoring_complete",
+                "frame_count": len(frames),
+                "min_score": min(scores),
+                "max_score": max(scores),
+                "avg_score": round(sum(scores) / len(scores), 2)
+            }
+        )
+
+        return scored_frames
+
+    def select_top_frames_by_score(
+        self,
+        scored_frames: List[Tuple[np.ndarray, int, float]],
+        target_count: int,
+        sort_chronologically: bool = True
+    ) -> List[Tuple[np.ndarray, int, float]]:
+        """
+        Select top N frames by motion score (Story P9-2.3).
+
+        Args:
+            scored_frames: List of (frame, index, score) tuples
+            target_count: Number of frames to select
+            sort_chronologically: If True, sort by index before returning
+
+        Returns:
+            List of top-scoring frames, optionally sorted by index
+        """
+        if not scored_frames:
+            return []
+
+        if target_count >= len(scored_frames):
+            result = scored_frames
+        else:
+            # Sort by score descending, select top N
+            sorted_by_score = sorted(scored_frames, key=lambda x: x[2], reverse=True)
+            result = sorted_by_score[:target_count]
+
+        # AC-2.3.4: Sort chronologically for context
+        if sort_chronologically:
+            result = sorted(result, key=lambda x: x[1])
+
+        logger.debug(
+            f"Selected top {len(result)} frames from {len(scored_frames)}",
+            extra={
+                "event_type": "frame_selection_by_score",
+                "input_count": len(scored_frames),
+                "output_count": len(result),
+                "selected_indices": [f[1] for f in result],
+                "selected_scores": [f[2] for f in result]
+            }
+        )
+
+        return result
 
     def _is_frame_usable(self, frame: np.ndarray) -> bool:
         """

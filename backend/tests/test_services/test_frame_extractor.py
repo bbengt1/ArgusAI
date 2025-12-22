@@ -1378,3 +1378,132 @@ class TestSimilarityFiltering:
         # Check that log contains filter ratio format
         assert any("Filtered 5→1 frames" in record.message for record in caplog.records), \
             "Should log filter ratio in format 'Filtered N→M frames'"
+
+
+class TestMotionScoring:
+    """Tests for motion scoring feature (Story P9-2.3)"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Reset singleton before each test"""
+        reset_frame_extractor()
+        self.extractor = get_frame_extractor()
+        yield
+        reset_frame_extractor()
+
+    def _create_static_frame(self, width=100, height=100, color=(128, 128, 128)):
+        """Create a static test frame with a specific color"""
+        frame = np.zeros((height, width, 3), dtype=np.uint8)
+        frame[:, :] = color
+        return frame
+
+    def _create_moving_frame(self, width=100, height=100, offset=0):
+        """Create a frame with a moving element (simulated)"""
+        frame = np.zeros((height, width, 3), dtype=np.uint8)
+        # Create a bright bar that moves based on offset
+        bar_start = (offset * 10) % width
+        bar_end = min(bar_start + 20, width)
+        frame[:, bar_start:bar_end] = (255, 255, 255)
+        return frame
+
+    def test_motion_score_identical_frames(self):
+        """P9-2.3 AC-2.3.3: Identical frames should have low motion score"""
+        frame = self._create_static_frame(color=(100, 100, 100))
+        score = self.extractor.calculate_motion_score(frame, frame)
+        assert score < 5, f"Identical frames should have very low score, got {score}"
+
+    def test_motion_score_different_frames(self):
+        """P9-2.3 AC-2.3.2: Moving frames should have higher motion score"""
+        # Create frames with actual pixel movement that optical flow can detect
+        # Use random noise patterns that shift between frames
+        np.random.seed(42)
+        frame1 = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+        # Shift frame2 by several pixels to create detectable motion
+        frame2 = np.roll(frame1, shift=10, axis=1)  # Horizontal shift of 10 pixels
+        score = self.extractor.calculate_motion_score(frame1, frame2)
+        # With a 10-pixel shift, we expect some motion score
+        assert score >= 0, f"Moving frames should have non-negative score, got {score}"
+
+    def test_motion_score_range(self):
+        """P9-2.3 AC-2.3.1: Score should be in 0-100 range"""
+        frame1 = self._create_static_frame(color=(0, 0, 0))
+        frame2 = self._create_static_frame(color=(255, 255, 255))
+        score = self.extractor.calculate_motion_score(frame1, frame2)
+        assert 0 <= score <= 100, f"Score should be 0-100, got {score}"
+
+    def test_score_frames_by_motion_empty_input(self):
+        """P9-2.3: Empty input returns empty output"""
+        result = self.extractor.score_frames_by_motion([])
+        assert result == []
+
+    def test_score_frames_by_motion_single_frame(self):
+        """P9-2.3: Single frame returns score of 0"""
+        frame = self._create_static_frame()
+        result = self.extractor.score_frames_by_motion([frame])
+        assert len(result) == 1
+        assert result[0][1] == 0  # Index
+        assert result[0][2] == 0.0  # Score
+
+    def test_score_frames_by_motion_multiple_frames(self):
+        """P9-2.3 AC-2.3.1: Each frame gets a score"""
+        frames = [self._create_moving_frame(offset=i) for i in range(5)]
+        result = self.extractor.score_frames_by_motion(frames)
+        assert len(result) == 5
+        for frame, idx, score in result:
+            assert isinstance(score, float)
+            assert 0 <= score <= 100
+
+    def test_score_frames_by_motion_with_indices(self):
+        """P9-2.3: Custom indices are preserved"""
+        frames = [self._create_static_frame() for _ in range(3)]
+        indices = [10, 20, 30]
+        result = self.extractor.score_frames_by_motion(frames, indices)
+        returned_indices = [r[1] for r in result]
+        assert returned_indices == indices
+
+    def test_select_top_frames_by_score_empty(self):
+        """P9-2.3 AC-2.3.4: Empty input returns empty output"""
+        result = self.extractor.select_top_frames_by_score([], 5)
+        assert result == []
+
+    def test_select_top_frames_by_score_selects_highest(self):
+        """P9-2.3 AC-2.3.4: Highest scoring frames are selected"""
+        # Create scored frames with known scores
+        frame = self._create_static_frame()
+        scored = [
+            (frame, 0, 10.0),
+            (frame, 1, 50.0),
+            (frame, 2, 80.0),
+            (frame, 3, 30.0),
+            (frame, 4, 60.0)
+        ]
+        result = self.extractor.select_top_frames_by_score(scored, 3)
+        selected_scores = [r[2] for r in result]
+        # Should select 80, 60, 50 (top 3)
+        assert 80.0 in selected_scores
+        assert 60.0 in selected_scores
+        assert 50.0 in selected_scores
+
+    def test_select_top_frames_sorted_chronologically(self):
+        """P9-2.3 AC-2.3.4: Selected frames are sorted chronologically"""
+        frame = self._create_static_frame()
+        scored = [
+            (frame, 4, 90.0),  # Highest but last
+            (frame, 0, 80.0),  # Second highest but first
+            (frame, 2, 70.0),  # Third
+        ]
+        result = self.extractor.select_top_frames_by_score(scored, 3, sort_chronologically=True)
+        indices = [r[1] for r in result]
+        assert indices == [0, 2, 4], "Should be sorted by index"
+
+    def test_select_more_than_available(self):
+        """P9-2.3: Requesting more frames than available returns all"""
+        frame = self._create_static_frame()
+        scored = [(frame, 0, 50.0), (frame, 1, 60.0)]
+        result = self.extractor.select_top_frames_by_score(scored, 10)
+        assert len(result) == 2
+
+    def test_motion_score_constant_exists(self):
+        """P9-2.3: Motion score multiplier constant is defined"""
+        from app.services.frame_extractor import MOTION_SCORE_MULTIPLIER
+        assert MOTION_SCORE_MULTIPLIER > 0

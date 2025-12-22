@@ -507,7 +507,7 @@ development_status:
   epic-p9-2: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P9-2.md
   p9-2-1-investigate-and-fix-frame-capture-timing: done
   p9-2-2-implement-similarity-based-frame-filtering: done
-  p9-2-3-add-motion-scoring-to-frame-selection: backlog
+  p9-2-3-add-motion-scoring-to-frame-selection: done
   p9-2-4-add-configurable-frame-count-setting: backlog
   p9-2-5-store-all-analysis-frames-to-filesystem: backlog
   p9-2-6-build-frame-gallery-modal-component: backlog
