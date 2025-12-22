@@ -355,7 +355,7 @@ export function usePushNotifications(): UsePushNotificationsReturn {
           p256dh: subscriptionJson.keys.p256dh!,
           auth: subscriptionJson.keys.auth!,
         },
-        device_name: navigator.userAgent,
+        user_agent: navigator.userAgent,
       });
 
       // Update state

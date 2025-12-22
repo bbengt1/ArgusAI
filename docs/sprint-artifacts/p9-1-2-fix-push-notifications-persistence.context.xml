@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story="p9-1-2-fix-push-notifications-persistence">
+  <metadata>
+    <created>2025-12-22</created>
+    <agent>Claude Opus 4.5</agent>
+    <story-file>docs/sprint-artifacts/p9-1-2-fix-push-notifications-persistence.md</story-file>
+  </metadata>
+
+  <summary>
+    This story addresses a bug where push notifications only work for the first event
+    after enabling, then fail for subsequent events. The issue appears to be related
+    to subscription persistence or service worker handling.
+  </summary>
+
+  <architecture>
+    <flow>
+      Event Processor → send_event_notification() → broadcast_event_notification()
+      → _send_to_subscription() → pywebpush → Push Service (FCM/Mozilla) → Browser
+    </flow>
+
+    <components>
+      <component name="Frontend Service Worker" path="frontend/public/sw.js">
+        Handles incoming push events and displays notifications.
+        Key events: push, notificationclick, notificationclose
+      </component>
+
+      <component name="Frontend Hook" path="frontend/hooks/usePushNotifications.ts">
+        Manages push subscription lifecycle:
+        - Service worker registration
+        - Permission requests
+        - Subscription creation via pushManager.subscribe()
+        - Backend registration via apiClient.push.subscribe()
+      </component>
+
+      <component name="Backend Push API" path="backend/app/api/v1/push.py">
+        REST endpoints for subscription management:
+        - GET /push/vapid-public-key - Get VAPID public key
+        - POST /push/subscribe - Register subscription (upsert)
+        - DELETE /push/subscribe - Remove subscription
+        - POST /push/test - Send test notification
+        - GET/PUT /push/preferences - Notification preferences
+      </component>
+
+      <component name="Push Notification Service" path="backend/app/services/push_notification_service.py">
+        Core notification sending logic:
+        - send_notification() - Single subscription
+        - broadcast_notification() - All subscriptions
+        - broadcast_event_notification() - With preference filtering
+        - _send_to_subscription() - Actual pywebpush call with retry
+      </component>
+
+      <component name="Subscription Model" path="backend/app/models/push_subscription.py">
+        SQLAlchemy model storing:
+        - id (UUID)
+        - endpoint (unique, push service URL)
+        - p256dh_key, auth_key (encryption keys)
+        - user_agent (browser info)
+        - created_at, last_used_at (timestamps)
+      </component>
+
+      <component name="Event Processor" path="backend/app/services/event_processor.py">
+        Calls send_event_notification() after event creation (line 854-890).
+        Uses asyncio.create_task() for fire-and-forget notification sending.
+      </component>
+    </components>
+  </architecture>
+
+  <push-notification-flow>
+    <step number="1">Event is created by event processor</step>
+    <step number="2">send_event_notification() is called as fire-and-forget task</step>
+    <step number="3">PushNotificationService.broadcast_event_notification() called</step>
+    <step number="4">Query all PushSubscription records from database</step>
+    <step number="5">For each subscription, check notification preferences</step>
+    <step number="6">_send_to_subscription() calls pywebpush.webpush()</step>
+    <step number="7">On success: update last_used_at, commit</step>
+    <step number="8">On 404/410: DELETE subscription from database</step>
+    <step number="9">On other error: retry with exponential backoff (up to 3 times)</step>
+  </push-notification-flow>
+
+  <subscription-lifecycle>
+    <phase name="Creation">
+      1. Frontend requests VAPID public key from backend
+      2. Frontend calls pushManager.subscribe() with VAPID key
+      3. Browser contacts push service (FCM/Mozilla) and gets subscription
+      4. Frontend sends subscription (endpoint + keys) to backend
+      5. Backend stores in push_subscriptions table (upsert by endpoint)
+      6. Backend creates default NotificationPreference for subscription
+    </phase>
+
+    <phase name="Notification">
+      1. Event processor creates event
+      2. send_event_notification() called with event details
+      3. Service queries all subscriptions
+      4. For each valid subscription, sends via pywebpush
+      5. On success, updates last_used_at timestamp
+    </phase>
+
+    <phase name="Invalidation">
+      Subscriptions are ONLY deleted when push service returns:
+      - 404 Not Found
+      - 410 Gone
+      These indicate the subscription no longer exists at the push service.
+    </phase>
+  </subscription-lifecycle>
+
+  <potential-bug-causes>
+    <cause id="1" likelihood="high">
+      Database session management issue - session might be closed before
+      commit completes, causing subscription to appear valid but with stale data.
+    </cause>
+
+    <cause id="2" likelihood="medium">
+      VAPID key inconsistency - if keys change between requests, push service
+      may reject subsequent notifications.
+    </cause>
+
+    <cause id="3" likelihood="medium">
+      Frontend re-creating subscription unnecessarily - if usePushNotifications hook
+      creates new subscription each time, old one might be invalidated.
+    </cause>
+
+    <cause id="4" likelihood="low">
+      Service worker not properly handling multiple push events - unlikely since
+      each push event should be independent.
+    </cause>
+
+    <cause id="5" likelihood="low">
+      Browser throttling - browsers may throttle notifications, but this typically
+      doesn't cause complete failure.
+    </cause>
+  </potential-bug-causes>
+
+  <investigation-notes>
+    The code at push_notification_service.py:499-503 has a comment from Story P8-1.3
+    indicating previous work was done on subscription preservation:
+
+    "Note (Story P8-1.3): This method preserves subscriptions unless the push
+    service explicitly returns 410 Gone or 404 Not Found. The last_used_at
+    timestamp is updated on successful sends but does not invalidate the
+    subscription."
+
+    The send_event_notification() function at line 886-988 creates its own
+    database session if none is provided, and includes enhanced logging for
+    debugging notification flow.
+  </investigation-notes>
+
+  <acceptance-criteria>
+    <ac id="AC-1.2.1">Given push is enabled, when first event occurs, then notification is received</ac>
+    <ac id="AC-1.2.2">Given push is enabled, when second event occurs, then notification is received</ac>
+    <ac id="AC-1.2.3">Given push is enabled, when 10th event occurs, then notification is received</ac>
+    <ac id="AC-1.2.4">Given page is refreshed, when event occurs, then notification still works</ac>
+    <ac id="AC-1.2.5">Given browser is restarted, when event occurs, then notification still works</ac>
+  </acceptance-criteria>
+
+  <related-code>
+    <file path="frontend/public/sw.js" purpose="Service worker handling push events"/>
+    <file path="frontend/hooks/usePushNotifications.ts" purpose="Frontend push subscription management"/>
+    <file path="backend/app/api/v1/push.py" purpose="Push API endpoints"/>
+    <file path="backend/app/services/push_notification_service.py" purpose="Core notification service"/>
+    <file path="backend/app/models/push_subscription.py" purpose="Subscription data model"/>
+    <file path="backend/app/services/event_processor.py" purpose="Event pipeline integration"/>
+  </related-code>
+</story-context>

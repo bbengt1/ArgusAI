@@ -1910,7 +1910,7 @@ export const apiClient = {
     /**
      * Subscribe to push notifications
      * @param subscription Push subscription data
-     * @returns Subscription confirmation
+     * @returns Subscription confirmation with id, endpoint, and created_at
      */
     subscribe: async (subscription: {
       endpoint: string;
@@ -1918,11 +1918,11 @@ export const apiClient = {
         p256dh: string;
         auth: string;
       };
-      device_name?: string;
+      user_agent?: string;
     }): Promise<{
-      success: boolean;
-      message: string;
-      subscription_id: string;
+      id: string;
+      endpoint: string;
+      created_at: string;
     }> => {
       return apiFetch('/push/subscribe', {
         method: 'POST',
@@ -1933,14 +1933,11 @@ export const apiClient = {
     /**
      * Unsubscribe from push notifications
      * @param endpoint Push subscription endpoint
-     * @returns Unsubscription confirmation
+     * @returns void (204 No Content)
      */
-    unsubscribe: async (endpoint: string): Promise<{
-      success: boolean;
-      message: string;
-    }> => {
-      return apiFetch('/push/unsubscribe', {
-        method: 'POST',
+    unsubscribe: async (endpoint: string): Promise<void> => {
+      await apiFetch('/push/subscribe', {
+        method: 'DELETE',
         body: JSON.stringify({ endpoint }),
       });
     },

@@ -329,6 +329,33 @@ async def unsubscribe(
         )
 
 
+@router.post("/unsubscribe", status_code=status.HTTP_204_NO_CONTENT)
+async def unsubscribe_post(
+    request: UnsubscribeRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Unsubscribe from push notifications (POST alias for backward compatibility).
+
+    This is an alias for DELETE /subscribe endpoint for clients that don't support
+    DELETE requests with a body. Removes the push subscription from the database.
+
+    **Request Body:**
+    ```json
+    {
+        "endpoint": "https://fcm.googleapis.com/fcm/send/..."
+    }
+    ```
+
+    **Status Codes:**
+    - 204: Successfully unsubscribed
+    - 404: Subscription not found
+    - 500: Internal server error
+    """
+    # Delegate to the main unsubscribe function
+    return await unsubscribe(request, db)
+
+
 @router.get("/subscriptions", response_model=SubscriptionsListResponse)
 async def list_subscriptions(
     db: Session = Depends(get_db)
