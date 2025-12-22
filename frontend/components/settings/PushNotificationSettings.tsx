@@ -129,18 +129,38 @@ function PermissionDeniedBanner() {
  * Unsupported Browser Banner
  */
 function UnsupportedBanner() {
+  // Check if the issue is HTTP vs HTTPS
+  const isInsecureOrigin = typeof window !== 'undefined' &&
+    !window.isSecureContext &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+
   return (
     <Alert className="mt-4">
       <Info className="h-4 w-4" />
       <AlertTitle>Push Notifications Not Available</AlertTitle>
       <AlertDescription>
-        <p>
-          Your browser does not support push notifications. To receive notifications,
-          please use a modern browser like Chrome, Firefox, Edge, or Safari 16+.
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          On iOS, push notifications require installing this app as a PWA (Add to Home Screen).
-        </p>
+        {isInsecureOrigin ? (
+          <>
+            <p>
+              Push notifications require a <strong>secure connection (HTTPS)</strong>.
+              You are currently accessing this site over HTTP.
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              To enable push notifications, configure HTTPS for your server or access via localhost.
+            </p>
+          </>
+        ) : (
+          <>
+            <p>
+              Your browser does not support push notifications. To receive notifications,
+              please use a modern browser like Chrome, Firefox, Edge, or Safari 16+.
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              On iOS, push notifications require installing this app as a PWA (Add to Home Screen).
+            </p>
+          </>
+        )}
       </AlertDescription>
     </Alert>
   );

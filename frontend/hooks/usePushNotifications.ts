@@ -150,10 +150,15 @@ export function usePushNotifications(): UsePushNotificationsReturn {
   const swRegistrationInProgress = useRef(false);
 
   // Check browser support
+  // Note: Push API requires HTTPS (secure context) except for localhost
+  const isSecureContext = typeof window !== 'undefined' &&
+    (window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
   const isPushSupported = typeof window !== 'undefined' &&
     'Notification' in window &&
     'serviceWorker' in navigator &&
-    'PushManager' in window;
+    'PushManager' in window &&
+    isSecureContext;
 
   const hasServiceWorker = typeof navigator !== 'undefined' &&
     'serviceWorker' in navigator;
