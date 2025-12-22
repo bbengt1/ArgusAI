@@ -59,7 +59,7 @@ export function useDeleteEvent() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (eventId: string) => apiClient.events.delete(Number(eventId)),
+    mutationFn: (eventId: string) => apiClient.events.delete(eventId),
     onMutate: async (eventId) => {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['events'] });

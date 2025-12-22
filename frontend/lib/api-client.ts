@@ -370,7 +370,7 @@ export const apiClient = {
     /**
      * Delete single event
      */
-    delete: async (id: number): Promise<void> => {
+    delete: async (id: string): Promise<void> => {
       return apiFetch(`/events/${id}`, {
         method: 'DELETE',
       });
