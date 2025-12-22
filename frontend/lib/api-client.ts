@@ -456,10 +456,14 @@ export const apiClient = {
     /**
      * Submit feedback for an event's AI description (Story P4-5.1)
      * @param eventId Event ID
-     * @param feedback Feedback data (rating, optional correction)
+     * @param feedback Feedback data (rating, optional correction, optional correction_type)
      * @returns Updated event with feedback
      */
-    submitFeedback: async (eventId: string, feedback: { rating: 'helpful' | 'not_helpful'; correction?: string | null }): Promise<IEvent> => {
+    submitFeedback: async (eventId: string, feedback: {
+      rating: 'helpful' | 'not_helpful';
+      correction?: string | null;
+      correction_type?: 'not_package' | null;  // Story P9-3.3
+    }): Promise<IEvent> => {
       return apiFetch(`/events/${eventId}/feedback`, {
         method: 'POST',
         body: JSON.stringify(feedback),

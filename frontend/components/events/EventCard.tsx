@@ -252,10 +252,12 @@ export const EventCard = memo(function EventCard({
           )}
 
           {/* Story P4-5.1: Feedback Buttons (AC1, AC2, AC8, AC9, AC10) */}
+          {/* Story P9-3.3: Pass smart_detection_type for package feedback */}
           <div className="flex justify-end mt-2">
             <FeedbackButtons
               eventId={event.id}
               existingFeedback={event.feedback}
+              smartDetectionType={event.smart_detection_type}
             />
           </div>
         </div>

@@ -1,5 +1,6 @@
 /**
  * Story P4-5.1: Feedback Collection UI
+ * Story P9-3.3: Package False Positive Feedback
  *
  * Custom hooks for managing event feedback using TanStack Query mutations.
  */
@@ -12,6 +13,7 @@ interface SubmitFeedbackParams {
   eventId: string;
   rating: 'helpful' | 'not_helpful';
   correction?: string;
+  correction_type?: 'not_package';  // Story P9-3.3: Correction type
 }
 
 /**
@@ -25,8 +27,12 @@ export function useSubmitFeedback() {
   const queryClient = useQueryClient();
 
   return useMutation<IEvent, ApiError, SubmitFeedbackParams>({
-    mutationFn: async ({ eventId, rating, correction }) => {
-      const feedback = { rating, correction: correction ?? null };
+    mutationFn: async ({ eventId, rating, correction, correction_type }) => {
+      const feedback = {
+        rating,
+        correction: correction ?? null,
+        correction_type: correction_type ?? null,  // Story P9-3.3
+      };
       return apiClient.events.submitFeedback(eventId, feedback);
     },
     onSuccess: (_data, variables) => {
@@ -49,8 +55,12 @@ export function useUpdateFeedback() {
   const queryClient = useQueryClient();
 
   return useMutation<IEvent, ApiError, SubmitFeedbackParams>({
-    mutationFn: async ({ eventId, rating, correction }) => {
-      const feedback = { rating, correction: correction ?? null };
+    mutationFn: async ({ eventId, rating, correction, correction_type }) => {
+      const feedback = {
+        rating,
+        correction: correction ?? null,
+        correction_type: correction_type ?? null,  // Story P9-3.3
+      };
       return apiClient.events.submitFeedback(eventId, feedback);
     },
     onSuccess: (_data, variables) => {

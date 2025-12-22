@@ -33,6 +33,7 @@ export interface ICorrelatedEvent {
 
 /**
  * Story P4-5.1: Event Feedback interface for user ratings and corrections
+ * Story P9-3.3: Added correction_type for specific feedback types
  */
 export interface IEventFeedback {
   id: string;                     // Feedback UUID
@@ -40,6 +41,7 @@ export interface IEventFeedback {
   camera_id?: string | null;      // Story P4-5.2: Denormalized camera ID for aggregate stats
   rating: 'helpful' | 'not_helpful';  // User rating
   correction: string | null;      // Optional correction text
+  correction_type?: 'not_package' | null;  // Story P9-3.3: Correction type
   created_at: string;             // ISO 8601 datetime
   updated_at?: string | null;     // ISO 8601 datetime
 }

@@ -1,14 +1,16 @@
 /**
  * Story P4-5.1: Feedback Collection UI
+ * Story P9-3.3: Package False Positive Feedback
  *
  * FeedbackButtons component - allows users to provide quick feedback on AI event descriptions
  * using thumbs up/down buttons with optional correction text input.
+ * For package detections, includes a "Not a package" button.
  */
 
 'use client';
 
 import { useState, memo, useCallback } from 'react';
-import { ThumbsUp, ThumbsDown, Loader2, X } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Loader2, X, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -25,6 +27,8 @@ interface FeedbackButtonsProps {
   onFeedbackChange?: (feedback: IEventFeedback) => void;
   /** Additional class names */
   className?: string;
+  /** Story P9-3.3: Smart detection type for showing correction buttons */
+  smartDetectionType?: string | null;
 }
 
 const CORRECTION_MAX_LENGTH = 500;
@@ -34,6 +38,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({
   existingFeedback,
   onFeedbackChange,
   className,
+  smartDetectionType,
 }: FeedbackButtonsProps) {
   const [showCorrection, setShowCorrection] = useState(false);
   const [correction, setCorrection] = useState('');
@@ -46,8 +51,16 @@ export const FeedbackButtons = memo(function FeedbackButtons({
 
   // Get current rating (from local state or prop)
   const currentRating = localFeedback?.rating ?? existingFeedback?.rating;
+  // Story P9-3.3: Get current correction type
+  const currentCorrectionType = localFeedback?.correction_type ?? existingFeedback?.correction_type;
+  const isPackageEvent = smartDetectionType === 'package';
+  const isMarkedNotPackage = currentCorrectionType === 'not_package';
 
-  const handleFeedback = useCallback((rating: 'helpful' | 'not_helpful', correctionText?: string) => {
+  const handleFeedback = useCallback((
+    rating: 'helpful' | 'not_helpful',
+    correctionText?: string,
+    correctionType?: 'not_package'
+  ) => {
     const mutationFn = currentRating ? updateFeedback : submitFeedback;
 
     mutationFn(
@@ -55,6 +68,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({
         eventId,
         rating,
         correction: correctionText || undefined,
+        correction_type: correctionType,
       },
       {
         onSuccess: (data) => {
@@ -65,9 +79,16 @@ export const FeedbackButtons = memo(function FeedbackButtons({
           }
           setShowCorrection(false);
           setCorrection('');
-          toast.success('Feedback submitted', {
-            description: rating === 'helpful' ? 'Thanks for the feedback!' : 'Thanks! Your correction helps improve accuracy.',
-          });
+          // Story P9-3.3: Different toast for package false positive
+          if (correctionType === 'not_package') {
+            toast.success('Feedback recorded', {
+              description: 'Thanks! This helps improve package detection accuracy.',
+            });
+          } else {
+            toast.success('Feedback submitted', {
+              description: rating === 'helpful' ? 'Thanks for the feedback!' : 'Thanks! Your correction helps improve accuracy.',
+            });
+          }
         },
         onError: (error) => {
           toast.error('Failed to submit feedback', {
@@ -89,6 +110,13 @@ export const FeedbackButtons = memo(function FeedbackButtons({
     if (isPending) return;
     setShowCorrection(true);
   }, [isPending]);
+
+  // Story P9-3.3: Handle "Not a package" click
+  const handleNotPackage = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent EventCard click
+    if (isPending || isMarkedNotPackage) return;
+    handleFeedback('not_helpful', undefined, 'not_package');
+  }, [handleFeedback, isPending, isMarkedNotPackage]);
 
   const handleSubmitCorrection = useCallback((e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent EventCard click
@@ -164,6 +192,26 @@ export const FeedbackButtons = memo(function FeedbackButtons({
             currentRating === 'not_helpful' && "fill-current"
           )} />
         </Button>
+
+        {/* Story P9-3.3: "Not a package" Button for package events */}
+        {isPackageEvent && (
+          <Button
+            variant={isMarkedNotPackage ? 'default' : 'outline'}
+            size="sm"
+            onClick={handleNotPackage}
+            disabled={isPending || isMarkedNotPackage}
+            aria-label={isMarkedNotPackage ? 'Marked as not a package' : 'Not a package'}
+            aria-pressed={isMarkedNotPackage}
+            className={cn(
+              "h-8 px-2 text-xs gap-1",
+              isMarkedNotPackage && "bg-orange-600 hover:bg-orange-600 text-white cursor-default"
+            )}
+          >
+            <Package className="h-3 w-3" />
+            <X className="h-3 w-3 -ml-1" />
+            {isMarkedNotPackage ? 'Not a package' : 'Not a package'}
+          </Button>
+        )}
       </div>
 
       {/* Correction Input (shows on thumbs down) */}

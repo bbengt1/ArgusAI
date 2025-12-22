@@ -1868,11 +1868,13 @@ async def create_feedback(
             )
 
         # Create feedback with camera_id auto-populated from event (Story P4-5.2, AC7)
+        # Story P9-3.3: Added correction_type for specific feedback types
         feedback = EventFeedback(
             event_id=event_id,
             camera_id=event.camera_id,  # Denormalized for efficient aggregate queries
             rating=feedback_data.rating,
-            correction=feedback_data.correction
+            correction=feedback_data.correction,
+            correction_type=feedback_data.correction_type  # Story P9-3.3
         )
         db.add(feedback)
         db.commit()
@@ -1991,6 +1993,9 @@ async def update_feedback(
             feedback.rating = feedback_data.rating
         if feedback_data.correction is not None:
             feedback.correction = feedback_data.correction
+        # Story P9-3.3: Update correction_type if provided
+        if feedback_data.correction_type is not None:
+            feedback.correction_type = feedback_data.correction_type
 
         db.commit()
         db.refresh(feedback)

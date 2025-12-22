@@ -2,6 +2,7 @@
 
 Story P4-5.1: Feedback Collection UI
 Story P4-5.2: Feedback Storage & API - Added statistics schemas
+Story P9-3.3: Package False Positive Feedback - Added correction_type
 """
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, Dict, List
@@ -20,6 +21,11 @@ class FeedbackCreate(BaseModel):
         max_length=500,
         description="Optional correction text (max 500 characters)"
     )
+    # Story P9-3.3: Correction type for specific feedback
+    correction_type: Optional[Literal['not_package']] = Field(
+        None,
+        description="Type of correction (e.g., 'not_package' for package false positives)"
+    )
 
 
 class FeedbackUpdate(BaseModel):
@@ -33,6 +39,11 @@ class FeedbackUpdate(BaseModel):
         max_length=500,
         description="Updated correction text (max 500 characters)"
     )
+    # Story P9-3.3: Correction type for specific feedback
+    correction_type: Optional[Literal['not_package']] = Field(
+        None,
+        description="Type of correction (e.g., 'not_package' for package false positives)"
+    )
 
 
 class FeedbackResponse(BaseModel):
@@ -42,6 +53,7 @@ class FeedbackResponse(BaseModel):
     camera_id: Optional[str] = None  # Story P4-5.2: Added camera_id
     rating: str
     correction: Optional[str] = None
+    correction_type: Optional[str] = None  # Story P9-3.3: Correction type
     created_at: datetime
     updated_at: Optional[datetime] = None
 

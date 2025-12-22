@@ -2,6 +2,7 @@
 
 Story P4-5.1: Feedback Collection UI
 Story P4-5.2: Feedback Storage & API - Added camera_id for aggregate statistics
+Story P9-3.3: Package False Positive Feedback - Added correction_type for specific corrections
 """
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -23,6 +24,9 @@ class EventFeedback(Base):
         camera_id: Denormalized camera ID for efficient aggregate statistics (P4-5.2)
         rating: User rating - 'helpful' or 'not_helpful'
         correction: Optional correction text (max 500 chars enforced at API level)
+        correction_type: Optional correction type for specific feedback (P9-3.3)
+            - 'not_package': User marked package detection as incorrect
+            - (Future: 'not_person', 'not_vehicle', 'not_animal')
         created_at: When feedback was submitted
         updated_at: When feedback was last modified
     """
@@ -46,6 +50,8 @@ class EventFeedback(Base):
     )
     rating = Column(String(20), nullable=False)  # 'helpful' or 'not_helpful'
     correction = Column(Text, nullable=True)  # Optional correction text
+    # Story P9-3.3: Correction type for specific feedback (e.g., 'not_package')
+    correction_type = Column(String(50), nullable=True, index=True)
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -67,4 +73,4 @@ class EventFeedback(Base):
     )
 
     def __repr__(self):
-        return f"<EventFeedback(id={self.id}, event_id={self.event_id}, camera_id={self.camera_id}, rating={self.rating})>"
+        return f"<EventFeedback(id={self.id}, event_id={self.event_id}, camera_id={self.camera_id}, rating={self.rating}, correction_type={self.correction_type})>"

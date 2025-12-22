@@ -340,3 +340,95 @@ class TestEventFeedbackEndpoints:
         assert response.status_code == 201
         data = response.json()
         assert len(data["correction"]) == 500
+
+    # Story P9-3.3: Tests for correction_type (Package False Positive Feedback)
+
+    def test_create_feedback_with_correction_type_not_package(self, client, test_event: Event):
+        """Test creating feedback with correction_type='not_package' (Story P9-3.3)"""
+        response = client.post(
+            f"/api/v1/events/{test_event.id}/feedback",
+            json={
+                "rating": "not_helpful",
+                "correction_type": "not_package"
+            }
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["rating"] == "not_helpful"
+        assert data["correction_type"] == "not_package"
+        assert data["correction"] is None
+
+    def test_create_feedback_with_correction_type_and_text(self, client, test_event: Event):
+        """Test creating feedback with both correction_type and correction text (Story P9-3.3)"""
+        response = client.post(
+            f"/api/v1/events/{test_event.id}/feedback",
+            json={
+                "rating": "not_helpful",
+                "correction": "This is a shadow",
+                "correction_type": "not_package"
+            }
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["correction"] == "This is a shadow"
+        assert data["correction_type"] == "not_package"
+
+    def test_create_feedback_without_correction_type(self, client, test_event: Event):
+        """Test that correction_type is null by default (Story P9-3.3)"""
+        response = client.post(
+            f"/api/v1/events/{test_event.id}/feedback",
+            json={"rating": "helpful"}
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data.get("correction_type") is None
+
+    def test_create_feedback_invalid_correction_type(self, client, test_event: Event):
+        """Test creating feedback with invalid correction_type (Story P9-3.3)"""
+        response = client.post(
+            f"/api/v1/events/{test_event.id}/feedback",
+            json={
+                "rating": "not_helpful",
+                "correction_type": "invalid_type"
+            }
+        )
+        assert response.status_code == 422  # Validation error
+
+    def test_update_feedback_with_correction_type(self, client, db_session, test_event: Event):
+        """Test updating feedback to add correction_type (Story P9-3.3)"""
+        # Create initial feedback without correction_type
+        feedback = EventFeedback(
+            event_id=test_event.id,
+            rating="helpful"
+        )
+        db_session.add(feedback)
+        db_session.commit()
+
+        # Update with correction_type
+        response = client.put(
+            f"/api/v1/events/{test_event.id}/feedback",
+            json={
+                "rating": "not_helpful",
+                "correction_type": "not_package"
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["rating"] == "not_helpful"
+        assert data["correction_type"] == "not_package"
+
+    def test_get_feedback_with_correction_type(self, client, db_session, test_event: Event):
+        """Test getting feedback returns correction_type (Story P9-3.3)"""
+        # Create feedback with correction_type
+        feedback = EventFeedback(
+            event_id=test_event.id,
+            rating="not_helpful",
+            correction_type="not_package"
+        )
+        db_session.add(feedback)
+        db_session.commit()
+
+        response = client.get(f"/api/v1/events/{test_event.id}/feedback")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["correction_type"] == "not_package"
