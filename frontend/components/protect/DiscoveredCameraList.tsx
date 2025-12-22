@@ -394,7 +394,7 @@ export function DiscoveredCameraList({
             key={camera.protect_camera_id}
             camera={camera}
             controllerId={controllerId}
-            currentFilters={camera.smart_detect_types ?? undefined}
+            currentFilters={camera.smart_detection_types ?? undefined}
             onToggleEnabled={handleToggleEnabled}
             isToggling={
               enableMutation.isPending || disableMutation.isPending

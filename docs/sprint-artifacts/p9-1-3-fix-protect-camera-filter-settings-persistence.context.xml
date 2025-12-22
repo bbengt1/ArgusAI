@@ -1,0 +1,215 @@
+<story-context id="p9-1-3-fix-protect-camera-filter-settings-persistence" v="1.0">
+  <metadata>
+    <epicId>P9-1</epicId>
+    <storyId>P9-1.3</storyId>
+    <title>Fix Protect Camera Filter Settings Persistence</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-1-3-fix-protect-camera-filter-settings-persistence.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>my camera filter settings (person, vehicle, package, animal, ring) to persist</iWant>
+    <soThat>I don't have to reconfigure them every time I refresh the page</soThat>
+    <tasks>
+      <task id="1">Investigate current filter persistence behavior (review PUT endpoint, models, session commit, frontend loading)</task>
+      <task id="2">Fix backend filter persistence (verify model columns, add migration if needed, ensure commit)</task>
+      <task id="3">Fix frontend filter loading (verify fetch on page load, reflect API response values, add success toast)</task>
+      <task id="4">Verify event filtering works correctly (trace event flow, ensure disabled filters applied)</task>
+      <task id="5">Write regression tests (unit tests for filter CRUD, integration tests for API endpoint)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="1.3.1">Given I configure filter settings for a Protect camera, when I click Save, then the settings are saved to the backend database and a success toast notification appears</ac>
+    <ac id="1.3.2">Given I have saved filter settings, when I refresh the page, then the filter checkboxes reflect my saved settings and match what's stored in the database</ac>
+    <ac id="1.3.3">Given I have saved filter settings, when the server restarts, then my filter settings are preserved and loaded correctly</ac>
+    <ac id="1.3.4">Given person filter is disabled, when a person event occurs, then the event is filtered and not processed</ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P9-1.md</path>
+        <title>Epic P9-1 Technical Specification</title>
+        <section>P9-1.3: Fix Protect Camera Filter Settings</section>
+        <snippet>Debug PUT /api/v1/protect/controllers/{id}/cameras/{cam}/filters endpoint. Verify database model has columns for filter settings. Check SQLAlchemy session commit is called.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase9.md</path>
+        <title>Phase 9 Epics</title>
+        <section>Story P9-1.3</section>
+        <snippet>BUG-008: Protect camera filter settings not persisting after page refresh</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture-phase8.md</path>
+        <title>ArgusAI Phase 8 Architecture</title>
+        <section>Core Stack and Patterns</section>
+        <snippet>Backend: FastAPI 0.115 + SQLAlchemy 2.0. Service layer pattern in backend/app/services/. API routes prefixed with /api/v1/.</snippet>
+      </doc>
+      <doc>
+        <path>docs/sprint-artifacts/p9-1-2-fix-push-notifications-persistence.md</path>
+        <title>Story P9-1.2 (completed)</title>
+        <section>Completion Notes</section>
+        <snippet>Root cause: API mismatches between frontend and backend (field names, response types). Fixed by aligning frontend API client with backend expectations.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>backend/app/api/v1/protect.py</path>
+        <kind>api</kind>
+        <symbol>update_camera_filters</symbol>
+        <lines>1056-1145</lines>
+        <reason>PUT endpoint for camera filters - appears to do db.commit() correctly but need to verify full flow</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/models/camera.py</path>
+        <kind>model</kind>
+        <symbol>Camera.smart_detection_types</symbol>
+        <lines>75</lines>
+        <reason>Database column for storing filter settings as JSON array</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/schemas/protect.py</path>
+        <kind>schema</kind>
+        <symbol>ProtectCameraFiltersRequest, ProtectCameraFiltersResponse, ProtectDiscoveredCamera</symbol>
+        <lines>376-430, 200-262</lines>
+        <reason>Request/response schemas for filter API. Note: Backend uses smart_detection_types</reason>
+      </artifact>
+      <artifact>
+        <path>backend/app/services/protect_event_handler.py</path>
+        <kind>service</kind>
+        <symbol>_load_smart_detection_types, _should_process_event</symbol>
+        <lines>531-632</lines>
+        <reason>Event filtering logic - reads smart_detection_types from camera and filters events</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/lib/api-client.ts</path>
+        <kind>client</kind>
+        <symbol>protect.updateEventFilters, ProtectDiscoveredCamera</symbol>
+        <lines>96-114, 1476-1502</lines>
+        <reason>Frontend API client for filter updates. NOTE: Interface uses smart_detect_types and event_filters but backend uses smart_detection_types - POTENTIAL MISMATCH</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/protect/EventTypeFilter.tsx</path>
+        <kind>component</kind>
+        <symbol>EventTypeFilter</symbol>
+        <lines>1-261</lines>
+        <reason>Filter popover component with checkboxes. Uses apiClient.protect.updateEventFilters and shows success toast on save</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/protect/DiscoveredCameraList.tsx</path>
+        <kind>component</kind>
+        <symbol>DiscoveredCameraList</symbol>
+        <lines>392-403</lines>
+        <reason>Passes currentFilters to DiscoveredCameraCard. Line 397: uses camera.smart_detect_types</reason>
+      </artifact>
+      <artifact>
+        <path>frontend/components/protect/DiscoveredCameraCard.tsx</path>
+        <kind>component</kind>
+        <symbol>DiscoveredCameraCard</symbol>
+        <lines>161-166</lines>
+        <reason>Renders EventTypeFilter with currentFilters prop</reason>
+      </artifact>
+      <artifact>
+        <path>backend/tests/test_api/test_protect.py</path>
+        <kind>test</kind>
+        <symbol>test_update_filters_*</symbol>
+        <lines>1827-1863</lines>
+        <reason>Existing tests for filter update endpoint</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <backend>
+        <package>fastapi>=0.115.0</package>
+        <package>sqlalchemy>=2.0.0</package>
+        <package>pydantic>=2.0.0</package>
+        <package>pytest>=7.0.0</package>
+      </backend>
+      <frontend>
+        <package>@tanstack/react-query: ^5.0.0</package>
+        <package>sonner: toast notifications</package>
+      </frontend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Follow existing service layer pattern in backend/app/services/</constraint>
+    <constraint>API routes prefixed with /api/v1/</constraint>
+    <constraint>Frontend uses TanStack Query for server state management</constraint>
+    <constraint>Use shadcn/ui components for UI elements</constraint>
+    <constraint>Filters stored as JSON array in camera.smart_detection_types column</constraint>
+    <constraint>Valid filter types: person, vehicle, package, animal, motion</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>PUT /api/v1/protect/controllers/{controller_id}/cameras/{camera_id}/filters</name>
+      <kind>REST endpoint</kind>
+      <signature>Request: { smart_detection_types: string[] }, Response: { data: { protect_camera_id, name, smart_detection_types, is_enabled_for_ai }, meta }</signature>
+      <path>backend/app/api/v1/protect.py:1056</path>
+    </interface>
+    <interface>
+      <name>GET /api/v1/protect/controllers/{controller_id}/cameras</name>
+      <kind>REST endpoint</kind>
+      <signature>Response: { data: ProtectDiscoveredCamera[], meta } - includes smart_detection_types for enabled cameras</signature>
+      <path>backend/app/api/v1/protect.py:664</path>
+    </interface>
+    <interface>
+      <name>apiClient.protect.updateEventFilters</name>
+      <kind>Frontend API call</kind>
+      <signature>(controllerId: string, protectCameraId: string, filters: string[]) => Promise&lt;{ protect_camera_id, name, smart_detection_types, is_enabled_for_ai }&gt;</signature>
+      <path>frontend/lib/api-client.ts:1482</path>
+    </interface>
+    <interface>
+      <name>apiClient.protect.discoverCameras</name>
+      <kind>Frontend API call</kind>
+      <signature>(controllerId: string) => Promise&lt;ProtectDiscoveredCamera[]&gt;</signature>
+      <path>frontend/lib/api-client.ts</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend tests use pytest with fixtures in conftest.py. Frontend tests use vitest with React Testing Library.
+      Follow existing patterns in backend/tests/test_api/ for API tests.
+      Mock database sessions and external services.
+      Test both success and error paths.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_protect.py</location>
+      <location>frontend/__tests__/</location>
+    </locations>
+    <ideas>
+      <idea acRef="1.3.1">Test filter update endpoint returns 200 with correct response structure</idea>
+      <idea acRef="1.3.1">Test database commit is called and changes persist</idea>
+      <idea acRef="1.3.2">Test camera discovery endpoint returns saved smart_detection_types</idea>
+      <idea acRef="1.3.3">Test filter persistence across database session close/reopen</idea>
+      <idea acRef="1.3.4">Test protect_event_handler filters events based on smart_detection_types</idea>
+    </ideas>
+  </tests>
+
+  <investigationNotes>
+    <note priority="high">
+      FIELD NAME MISMATCH DETECTED: Frontend api-client.ts defines ProtectDiscoveredCamera with:
+      - smart_detect_types: string[] (line 108)
+      - event_filters: string[] (line 110)
+      But backend ProtectDiscoveredCamera schema uses:
+      - smart_detection_types (line 214-217 in protect.py)
+      This mismatch may cause filters to not display correctly on page refresh!
+    </note>
+    <note>
+      DiscoveredCameraList.tsx line 397 passes camera.smart_detect_types as currentFilters, but this field may not match backend response.
+    </note>
+    <note>
+      The backend PUT endpoint (protect.py:1056-1145) appears correct - it does db.commit() and db.refresh() and clears discovery cache.
+    </note>
+    <note>
+      Previous story (P9-1.2) found similar API mismatches between frontend field names and backend expectations. Same pattern may apply here.
+    </note>
+  </investigationNotes>
+</story-context>

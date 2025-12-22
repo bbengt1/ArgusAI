@@ -105,9 +105,9 @@ export interface ProtectDiscoveredCamera {
   is_online?: boolean;
   is_doorbell: boolean;
   has_package_camera: boolean;
-  smart_detect_types: string[];
+  smart_detection_capabilities: string[];
   is_enabled_for_ai: boolean;
-  event_filters: string[];
+  smart_detection_types?: string[]; // Configured filter types for enabled cameras (matches backend schema)
   camera_id?: string; // Database camera UUID if enabled
   analysis_mode?: string;
   is_new?: boolean;
