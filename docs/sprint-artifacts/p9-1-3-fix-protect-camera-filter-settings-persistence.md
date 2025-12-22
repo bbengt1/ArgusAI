@@ -1,6 +1,6 @@
 # Story 9.1.3: Fix Protect Camera Filter Settings Persistence
 
-Status: review
+Status: done
 
 ## Story
 
