@@ -981,7 +981,7 @@ export const apiClient = {
      * @returns Backup creation result
      */
     create: async (options?: IBackupOptions): Promise<IBackupResponse> => {
-      return apiFetch('/backup', {
+      return apiFetch('/system/backup', {
         method: 'POST',
         body: JSON.stringify(options || {}),
       });
@@ -992,22 +992,19 @@ export const apiClient = {
      * @returns List of backup files with metadata
      */
     list: async (): Promise<IBackupListResponse> => {
-      return apiFetch('/backup');
+      return apiFetch('/system/backup/list');
     },
 
     /**
      * Validate a backup file before restore
-     * @param fileOrFilename File object (uploaded) or filename (existing on server)
+     * @param file File object to validate
      * @returns Validation result with backup metadata
      */
-    validate: async (fileOrFilename: File | string): Promise<IValidationResponse> => {
-      if (typeof fileOrFilename === 'string') {
-        return apiFetch(`/backup/${encodeURIComponent(fileOrFilename)}/validate`);
-      }
+    validate: async (file: File): Promise<IValidationResponse> => {
       // Upload file for validation
       const formData = new FormData();
-      formData.append('file', fileOrFilename);
-      const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/backup/validate`, {
+      formData.append('file', file);
+      const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/system/backup/validate`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
@@ -1021,20 +1018,14 @@ export const apiClient = {
 
     /**
      * Restore from a backup file
-     * @param fileOrFilename File object (uploaded) or filename (existing on server)
+     * @param file File object to restore from
      * @param options Optional restore configuration
      * @returns Restore result
      */
-    restore: async (fileOrFilename: File | string, options?: IRestoreOptions): Promise<IRestoreResponse> => {
-      if (typeof fileOrFilename === 'string') {
-        return apiFetch(`/backup/${encodeURIComponent(fileOrFilename)}/restore`, {
-          method: 'POST',
-          body: JSON.stringify(options || {}),
-        });
-      }
+    restore: async (file: File, options?: IRestoreOptions): Promise<IRestoreResponse> => {
       // Upload file for restore
       const formData = new FormData();
-      formData.append('file', fileOrFilename);
+      formData.append('file', file);
       if (options?.restore_database !== undefined) {
         formData.append('restore_database', String(options.restore_database));
       }
@@ -1044,7 +1035,7 @@ export const apiClient = {
       if (options?.restore_settings !== undefined) {
         formData.append('restore_settings', String(options.restore_settings));
       }
-      const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/restore`, {
+      const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/system/restore`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
@@ -1062,7 +1053,7 @@ export const apiClient = {
      * @returns Deletion result
      */
     delete: async (filename: string): Promise<{ success: boolean; message: string }> => {
-      return apiFetch(`/backup/${encodeURIComponent(filename)}`, {
+      return apiFetch(`/system/backup/${encodeURIComponent(filename)}`, {
         method: 'DELETE',
       });
     },
@@ -1073,7 +1064,7 @@ export const apiClient = {
      * @returns Download URL
      */
     getDownloadUrl: (filename: string): string => {
-      return `${API_BASE_URL}${API_V1_PREFIX}/backup/${encodeURIComponent(filename)}/download`;
+      return `${API_BASE_URL}${API_V1_PREFIX}/system/backup/${encodeURIComponent(filename)}/download`;
     },
 
     /**
@@ -1082,7 +1073,7 @@ export const apiClient = {
      * @returns Backup file blob
      */
     download: async (filename: string): Promise<Blob> => {
-      const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/backup/${encodeURIComponent(filename)}/download`, {
+      const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/system/backup/${encodeURIComponent(filename)}/download`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
