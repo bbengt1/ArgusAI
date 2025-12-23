@@ -1,6 +1,6 @@
 # Story P9-4.5: Implement Entity Merge
 
-Status: ready-for-review
+Status: done
 
 ## Story
 
@@ -216,4 +216,79 @@ N/A
 **Documentation:**
 - docs/sprint-artifacts/p9-4-5-implement-entity-merge.md (story file)
 - docs/sprint-artifacts/p9-4-5-implement-entity-merge.context.xml (context file)
+
+## Code Review
+
+### Review Date
+2025-12-22
+
+### Reviewer
+Claude Opus 4.5 (claude-opus-4-5-20251101)
+
+### Review Outcome
+**APPROVED** - All acceptance criteria validated, code quality meets standards.
+
+### Acceptance Criteria Validation
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC-4.5.1 | IMPLEMENTED | EntityCard.tsx:129-148 - Checkbox rendered when `selectable` prop is true |
+| AC-4.5.2 | IMPLEMENTED | EntityList.tsx:277-295 - Merge button enabled only when `selectedEntityIds.size === 2` |
+| AC-4.5.3 | IMPLEMENTED | EntityMergeDialog.tsx:199-209 - Both entities displayed side-by-side with `occurrence_count` |
+| AC-4.5.4 | IMPLEMENTED | EntityMergeDialog.tsx:194-209 - RadioGroup allows selecting primary entity |
+| AC-4.5.5 | IMPLEMENTED | entity_service.py:1637-1638 - Link.entity_id updated to primary_entity_id |
+| AC-4.5.6 | IMPLEMENTED | entity_service.py:1660 - db.delete(secondary) called |
+| AC-4.5.7 | IMPLEMENTED | EntityMergeDialog.tsx:164 - toast.success(result.message) on completion |
+| AC-4.5.8 | IMPLEMENTED | entity_service.py:1620-1641 - Iteration handles any event count; test_entity_service.py confirms functionality |
+
+### Task Completion Validation
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Task 1: Create merge API endpoint | COMPLETE | All 7 subtasks implemented |
+| Task 2: Add multi-select to entities list | COMPLETE | All 4 subtasks implemented |
+| Task 3: Create EntityMergeDialog component | COMPLETE | All 6 subtasks implemented |
+| Task 4: Create useMergeEntities mutation hook | COMPLETE | All 4 subtasks implemented |
+| Task 5: Wire up merge flow in EntitiesPage | COMPLETE | All 3 subtasks implemented |
+| Task 6: Write tests | COMPLETE | 6 tests in TestEntityServiceMerge class |
+
+### Code Quality Assessment
+
+**Strengths:**
+1. Clean separation of concerns - service handles business logic, API handles HTTP
+2. Proper error handling with ValueError for validation, HTTPException for API responses
+3. EntityAdjustment records created for ML training with action="merge"
+4. Query invalidation properly clears and refreshes React Query cache
+5. Visual feedback with selection highlighting (ring-2, border-primary, bg-primary/5)
+6. Warning about irreversibility displayed in merge dialog
+7. Default selection logic favors entity with higher occurrence_count
+8. Comprehensive unit tests covering success, error cases, and edge cases
+
+**Patterns Followed:**
+- Follows existing EntityService patterns (unlink_event, assign_event)
+- Uses established Radix AlertDialog pattern from P9-4.3
+- Consistent with React Query mutation patterns in codebase
+- Proper TypeScript typing throughout
+
+**No Issues Found:**
+- No security vulnerabilities detected
+- No performance concerns (iteration-based approach is fine for expected use case)
+- Transaction handling follows codebase convention with db.commit()
+- Proper error propagation from service to API layer
+
+### Test Results
+
+All 6 merge-specific tests pass:
+- test_merge_entities_success
+- test_merge_entities_same_entity_error
+- test_merge_entities_primary_not_found
+- test_merge_entities_secondary_not_found
+- test_merge_entities_creates_adjustment_records
+- test_merge_entities_updates_timestamps
+
+Note: Pre-existing CI failure in unrelated test (test_get_package_deliveries_today_with_data) is not caused by this story.
+
+### Action Items
+
+None required. Story is ready to be marked as done.
 
