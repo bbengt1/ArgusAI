@@ -556,7 +556,7 @@ development_status:
   epic-p9-6: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P9-6.md
   p9-6-1-refactor-readme: done
   p9-6-2-set-up-github-pages-infrastructure: done
-  p9-6-3-build-github-pages-landing-page: backlog
+  p9-6-3-build-github-pages-landing-page: done
   p9-6-4-create-github-pages-documentation-section: backlog
   p9-6-5-fix-events-page-button-positioning: backlog
   p9-6-6-hide-mqtt-form-when-disabled: backlog

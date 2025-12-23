@@ -9,8 +9,7 @@ const FeatureList = [
     description: (
       <>
         Advanced multi-frame video analysis with GPT-4, Claude, Grok, and Gemini.
-        Get intelligent descriptions of security events with confidence scoring
-        and entity recognition.
+        Get intelligent descriptions of security events with confidence scoring.
       </>
     ),
   },
@@ -19,9 +18,28 @@ const FeatureList = [
     Svg: require('@site/static/img/undraw_security.svg').default,
     description: (
       <>
-        Native integration with UniFi Protect cameras. Real-time event detection,
-        smart motion filtering, and seamless camera management through a unified
-        dashboard.
+        Native integration with UniFi Protect cameras. Real-time WebSocket events,
+        smart motion filtering, and seamless camera management.
+      </>
+    ),
+  },
+  {
+    title: 'Entity Recognition',
+    Svg: require('@site/static/img/undraw_people.svg').default,
+    description: (
+      <>
+        Track people, vehicles, and packages over time. Build a database of
+        recurring visitors and get contextual alerts for known entities.
+      </>
+    ),
+  },
+  {
+    title: 'Push Notifications',
+    Svg: require('@site/static/img/undraw_notifications.svg').default,
+    description: (
+      <>
+        Real-time push notifications with event thumbnails. PWA support for
+        mobile devices with configurable alert preferences.
       </>
     ),
   },
@@ -31,8 +49,7 @@ const FeatureList = [
     description: (
       <>
         Connect to Home Assistant via MQTT with auto-discovery. Full Apple HomeKit
-        support for motion sensors, doorbells, and camera streaming. Push notifications
-        with thumbnails.
+        support for motion sensors, doorbells, and camera streaming.
       </>
     ),
   },

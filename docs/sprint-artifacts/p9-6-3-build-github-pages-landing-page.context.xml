@@ -1,0 +1,129 @@
+<story-context id="p9-6-3-build-github-pages-landing-page" v="1.0">
+  <metadata>
+    <epicId>P9-6</epicId>
+    <storyId>6.3</storyId>
+    <title>Build GitHub Pages Landing Page</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-23</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-6-3-build-github-pages-landing-page.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>visitor</asA>
+    <iWant>an attractive landing page explaining ArgusAI</iWant>
+    <soThat>I can quickly understand if it meets my needs</soThat>
+    <tasks>
+      <task id="1">Enhance hero section with actual screenshot (AC: 1, 2)</task>
+      <task id="2">Refine feature section with 5 key features (AC: 3)</task>
+      <task id="3">Enhance "Get Started" button and call-to-action (AC: 4)</task>
+      <task id="4">Add highlights/stats section (AC: 3)</task>
+      <task id="5">Verify and improve mobile responsiveness (AC: 5)</task>
+      <task id="6">Add footer with relevant links (AC: 4)</task>
+      <task id="7">Build and verify deployment (AC: 1-5)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-6.3.1">Given I visit the GitHub Pages URL, when the landing page loads, then I see the project name and tagline</criterion>
+    <criterion id="AC-6.3.2">Given I visit the GitHub Pages URL, when the landing page loads, then I see a hero image or screenshot</criterion>
+    <criterion id="AC-6.3.3">Given I visit the GitHub Pages URL, when I view features, then I see 3-5 key feature bullet points</criterion>
+    <criterion id="AC-6.3.4">Given I visit the GitHub Pages URL, when I want to start, then I see a "Get Started" button linking to installation docs</criterion>
+    <criterion id="AC-6.3.5">Given I'm on mobile, when I view the landing page, then it's responsive and readable</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P9-6.md" title="Epic Technical Specification" section="P9-6.3" snippet="Landing page requirements: hero section with project name/tagline, hero image/screenshot, feature grid with icons, Get Started button, footer with GitHub link, responsive design" />
+      <doc path="docs/epics-phase9.md" title="Phase 9 Epics" section="Story P9-6.3" snippet="FR43: GitHub Pages site has landing page with project overview. Story defines visitor-facing landing page with features and CTAs." />
+      <doc path="docs/sprint-artifacts/p9-6-2-set-up-github-pages-infrastructure.md" title="Previous Story" section="Completion Notes" snippet="Docusaurus 3.7 site created with hero section, 3 feature cards, and responsive layout. Custom ArgusAI blue theme colors configured." />
+    </docs>
+    <code>
+      <file path="docs-site/src/pages/index.js" kind="page" symbol="Home" lines="1-81" reason="Main landing page component - hero section, features, highlights sections already exist" />
+      <file path="docs-site/src/pages/index.module.css" kind="styles" symbol="heroBanner,highlights" lines="1-38" reason="Landing page CSS styles for hero banner and highlights section" />
+      <file path="docs-site/src/components/HomepageFeatures/index.js" kind="component" symbol="HomepageFeatures" lines="1-67" reason="Feature cards component with 3 features and SVG icons" />
+      <file path="docs-site/src/components/HomepageFeatures/styles.module.css" kind="styles" symbol="featureSvg" reason="Feature card styling" />
+      <file path="docs-site/docusaurus.config.js" kind="config" symbol="config" lines="1-131" reason="Docusaurus configuration with site metadata, navbar, footer, theme" />
+      <file path="docs-site/src/css/custom.css" kind="styles" reason="Global custom CSS with ArgusAI theme colors" />
+      <file path="docs-site/static/img/logo.svg" kind="asset" reason="Project logo SVG" />
+      <file path="docs-site/static/img/undraw_artificial_intelligence.svg" kind="asset" reason="AI feature card illustration" />
+      <file path="docs-site/static/img/undraw_security.svg" kind="asset" reason="Security feature card illustration" />
+      <file path="docs-site/static/img/undraw_smart_home.svg" kind="asset" reason="Smart home feature card illustration" />
+    </code>
+    <dependencies>
+      <node>
+        <package name="@docusaurus/core" version="^3.7.0" />
+        <package name="@docusaurus/preset-classic" version="^3.7.0" />
+        <package name="clsx" version="^2.0.0" />
+        <package name="prism-react-renderer" version="^2.3.1" />
+        <package name="react" version="^18.0.0" />
+        <package name="react-dom" version="^18.0.0" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">Docusaurus 3.7 static site generator - use React components</constraint>
+    <constraint type="architecture">GitHub Pages deployment via actions/deploy-pages workflow</constraint>
+    <constraint type="styling">Use custom.css with ArgusAI blue theme colors: --ifm-color-primary: #2563eb</constraint>
+    <constraint type="performance">Target Lighthouse score > 90 for performance</constraint>
+    <constraint type="accessibility">Mobile touch targets minimum 44x44px</constraint>
+    <constraint type="assets">Images should be optimized for web - use JPEG/WebP for screenshots</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="HomepageFeatures" kind="React component">
+      <signature>function HomepageFeatures(): JSX.Element</signature>
+      <path>docs-site/src/components/HomepageFeatures/index.js</path>
+    </interface>
+    <interface name="FeatureList" kind="data array">
+      <signature>const FeatureList = [{ title: string, Svg: React.Component, description: JSX.Element }]</signature>
+      <path>docs-site/src/components/HomepageFeatures/index.js</path>
+    </interface>
+    <interface name="Home" kind="React page component">
+      <signature>export default function Home(): JSX.Element</signature>
+      <path>docs-site/src/pages/index.js</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Docusaurus site testing is primarily visual/manual. Build verification with `npm run build`.
+      Use browser DevTools for responsive testing at 375px, 414px, 768px, 1024px, 1920px.
+      Check Lighthouse for performance, accessibility, and SEO scores.
+      Verify all links work with manual navigation.
+    </standards>
+    <locations>
+      <location>docs-site/ (npm run build for build verification)</location>
+      <location>Browser DevTools (responsive testing)</location>
+      <location>Lighthouse (performance/a11y audit)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-6.3.1">Verify title "ArgusAI" and tagline "AI-Powered Home Security" appear in hero</idea>
+      <idea ac="AC-6.3.2">Verify hero section contains screenshot or hero image with appropriate alt text</idea>
+      <idea ac="AC-6.3.3">Count feature cards - should be 3-5 distinct features with icons</idea>
+      <idea ac="AC-6.3.4">Click "Get Started" button - verify it navigates to /docs/intro</idea>
+      <idea ac="AC-6.3.5">Test at 375px width - verify no horizontal scroll, readable text, no overlapping elements</idea>
+    </ideas>
+  </tests>
+
+  <existingImplementation>
+    <summary>
+      P9-6.2 created a complete Docusaurus site with landing page that already has:
+      - Hero section with project name "ArgusAI" and tagline "AI-Powered Home Security"
+      - "Get Started" button linking to /docs/intro
+      - "View on GitHub" secondary button
+      - 3 feature cards: AI-Powered Analysis, UniFi Protect Integration, Smart Home Ready
+      - Highlights section with key features and supported cameras
+      - Footer with links to docs, community, and GitHub
+      - Responsive design with mobile breakpoints
+    </summary>
+    <enhancements>
+      <enhancement>Add actual ArgusAI dashboard screenshot to hero section</enhancement>
+      <enhancement>Expand to 5 feature cards with additional features (Entity Recognition, Push Notifications)</enhancement>
+      <enhancement>Add stats/numbers section (e.g., "4 AI Providers", "< 5s Latency")</enhancement>
+      <enhancement>Improve visual polish and consistency</enhancement>
+      <enhancement>Thorough mobile responsive testing and fixes</enhancement>
+    </enhancements>
+  </existingImplementation>
+</story-context>
