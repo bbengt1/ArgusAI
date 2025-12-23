@@ -213,6 +213,14 @@ Keep the summary concise (2-3 paragraphs).""",
         description="Attempt to extract timestamp/camera name from video frame overlays using OCR (CPU intensive, requires tesseract)"
     )
 
+    # Story P9-2.1: Frame Extraction Offset
+    frame_extraction_offset_ms: int = Field(
+        default=2000,
+        ge=0,
+        le=10000,
+        description="Milliseconds to skip from clip start before extracting frames (0-10000ms, default 2000ms)"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -366,6 +374,11 @@ class SystemSettingsUpdate(BaseModel):
     # Story P9-3.2: OCR Frame Overlay Extraction
     attempt_ocr_extraction: Optional[bool] = Field(
         None, description="Attempt to extract timestamp/camera name from video frame overlays using OCR (default: false)"
+    )
+
+    # Story P9-2.1: Frame Extraction Offset
+    frame_extraction_offset_ms: Optional[int] = Field(
+        None, ge=0, le=10000, description="Milliseconds to skip from clip start before extracting frames (0-10000ms, default 2000ms)"
     )
 
 

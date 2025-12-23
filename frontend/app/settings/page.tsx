@@ -490,6 +490,40 @@ export default function SettingsPage() {
                     />
                   </div>
 
+                  {/* Story P9-2.1: Frame Extraction Offset */}
+                  <div className="space-y-3 pt-4 border-t">
+                    <div className="space-y-1">
+                      <Label>Frame Extraction Offset</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Skip this many milliseconds from the start of video clips before extracting frames.
+                        Helps capture subjects when fully in frame instead of entering/exiting.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs text-muted-foreground w-8">0ms</span>
+                      <Slider
+                        value={[form.watch('frame_extraction_offset_ms') ?? 2000]}
+                        onValueChange={async ([value]) => {
+                          try {
+                            await apiClient.settings.update({ frame_extraction_offset_ms: value });
+                            form.setValue('frame_extraction_offset_ms', value, { shouldDirty: false });
+                          } catch (error) {
+                            console.error('Failed to save frame extraction offset:', error);
+                            toast.error('Failed to save setting');
+                          }
+                        }}
+                        min={0}
+                        max={10000}
+                        step={500}
+                        className="flex-1"
+                      />
+                      <span className="text-xs text-muted-foreground w-16 text-right">10000ms</span>
+                    </div>
+                    <div className="text-center text-sm font-medium">
+                      {((form.watch('frame_extraction_offset_ms') ?? 2000) / 1000).toFixed(1)} seconds
+                    </div>
+                  </div>
+
                   {/* Story P8-3.2: Video Storage Settings */}
                   <div className="space-y-4 pt-4 border-t">
                     <div className="flex items-center justify-between">
