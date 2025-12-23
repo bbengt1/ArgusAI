@@ -639,6 +639,70 @@ update_env_ssl_config() {
     fi
 }
 
+update_frontend_ssl_config() {
+    print_step "Updating frontend SSL configuration..."
+
+    local env_file="$FRONTEND_DIR/.env.local"
+
+    if [ ! -f "$env_file" ]; then
+        print_warning "Frontend .env.local not found, will be created during frontend setup"
+        return 0
+    fi
+
+    local api_host="${SERVER_HOSTNAME:-localhost}"
+
+    if [ "$SSL_METHOD" = "letsencrypt" ] || [ "$SSL_METHOD" = "self-signed" ]; then
+        # Update API URL to use HTTPS
+        local api_url="https://$api_host:443"
+
+        if grep -q "^NEXT_PUBLIC_API_URL=" "$env_file"; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=$api_url|" "$env_file"
+            else
+                sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=$api_url|" "$env_file"
+            fi
+        else
+            echo "NEXT_PUBLIC_API_URL=$api_url" >> "$env_file"
+        fi
+
+        # Add SSL certificate paths for frontend server
+        if grep -q "^SSL_CERT_FILE=" "$env_file"; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s|^SSL_CERT_FILE=.*|SSL_CERT_FILE=$CERT_DIR/cert.pem|" "$env_file"
+            else
+                sed -i "s|^SSL_CERT_FILE=.*|SSL_CERT_FILE=$CERT_DIR/cert.pem|" "$env_file"
+            fi
+        else
+            echo "SSL_CERT_FILE=$CERT_DIR/cert.pem" >> "$env_file"
+        fi
+
+        if grep -q "^SSL_KEY_FILE=" "$env_file"; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s|^SSL_KEY_FILE=.*|SSL_KEY_FILE=$CERT_DIR/key.pem|" "$env_file"
+            else
+                sed -i "s|^SSL_KEY_FILE=.*|SSL_KEY_FILE=$CERT_DIR/key.pem|" "$env_file"
+            fi
+        else
+            echo "SSL_KEY_FILE=$CERT_DIR/key.pem" >> "$env_file"
+        fi
+
+        print_success "Frontend configured for HTTPS (API: $api_url)"
+    else
+        # Use HTTP API URL
+        local api_url="http://$api_host:8000"
+
+        if grep -q "^NEXT_PUBLIC_API_URL=" "$env_file"; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=$api_url|" "$env_file"
+            else
+                sed -i "s|^NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=$api_url|" "$env_file"
+            fi
+        fi
+
+        print_info "Frontend configured for HTTP (API: $api_url)"
+    fi
+}
+
 #-------------------------------------------------------------------------------
 # Dependency Checks
 #-------------------------------------------------------------------------------
@@ -1142,8 +1206,19 @@ WantedBy=multi-user.target
 EOF
     print_success "Created: $SERVICE_DIR/argusai-backend.service"
 
-    # Frontend service
+    # Frontend service - check if SSL is configured
     print_step "Creating frontend service file..."
+    local frontend_start_cmd="start"
+    local ssl_env_section=""
+
+    # Check if SSL certificates exist
+    if [ -f "$CERT_DIR/cert.pem" ] && [ -f "$CERT_DIR/key.pem" ]; then
+        frontend_start_cmd="start:ssl"
+        ssl_env_section="Environment=\"SSL_CERT_FILE=$CERT_DIR/cert.pem\"
+Environment=\"SSL_KEY_FILE=$CERT_DIR/key.pem\""
+        print_info "SSL certificates detected - configuring HTTPS frontend service"
+    fi
+
     cat > "$SERVICE_DIR/argusai-frontend.service" << EOF
 [Unit]
 Description=ArgusAI - Frontend
@@ -1154,7 +1229,8 @@ Type=simple
 User=$USER
 Group=$USER
 WorkingDirectory=$FRONTEND_DIR
-ExecStart=/usr/bin/npm run start
+$ssl_env_section
+ExecStart=/usr/bin/npm run $frontend_start_cmd
 Restart=always
 RestartSec=10
 
@@ -1233,8 +1309,25 @@ generate_launchd_plist() {
 EOF
     print_success "Created: $PLIST_DIR/$LABEL_PREFIX.backend.plist"
 
-    # Frontend plist
+    # Frontend plist - check if SSL is configured
     print_step "Creating frontend plist file..."
+    local frontend_start_cmd="start"
+    local ssl_env_vars=""
+
+    # Check if SSL certificates exist
+    if [ -f "$CERT_DIR/cert.pem" ] && [ -f "$CERT_DIR/key.pem" ]; then
+        frontend_start_cmd="start:ssl"
+        ssl_env_vars="
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SSL_CERT_FILE</key>
+        <string>$CERT_DIR/cert.pem</string>
+        <key>SSL_KEY_FILE</key>
+        <string>$CERT_DIR/key.pem</string>
+    </dict>"
+        print_info "SSL certificates detected - configuring HTTPS frontend service"
+    fi
+
     cat > "$PLIST_DIR/$LABEL_PREFIX.frontend.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1247,12 +1340,12 @@ EOF
     <array>
         <string>$BREW_PREFIX/bin/npm</string>
         <string>run</string>
-        <string>start</string>
+        <string>$frontend_start_cmd</string>
     </array>
 
     <key>WorkingDirectory</key>
     <string>$FRONTEND_DIR</string>
-
+$ssl_env_vars
     <key>RunAtLoad</key>
     <true/>
 
@@ -1473,20 +1566,30 @@ print_summary() {
     echo ""
     echo "2. Start the Application:"
     echo ""
-    echo "   Backend (Terminal 1):"
-    echo "     cd $BACKEND_DIR"
-    echo "     source venv/bin/activate"
-    echo "     uvicorn main:app --reload"
-    echo ""
-    echo "   Frontend (Terminal 2):"
-    echo "     cd $FRONTEND_DIR"
-    echo "     npm run dev"
-    echo ""
-    echo "3. Access the Application:"
     if [ "$SSL_METHOD" = "letsencrypt" ] || [ "$SSL_METHOD" = "self-signed" ]; then
+        echo "   Backend (Terminal 1):"
+        echo "     cd $BACKEND_DIR"
+        echo "     source venv/bin/activate"
+        echo "     python main.py"
+        echo ""
+        echo "   Frontend (Terminal 2):"
+        echo "     cd $FRONTEND_DIR"
+        echo "     npm run start:ssl"
+        echo ""
+        echo "3. Access the Application:"
         echo "   - Dashboard: https://${SERVER_HOSTNAME:-localhost}:3000"
         echo "   - API Docs:  https://${SERVER_HOSTNAME:-localhost}:443/docs"
     else
+        echo "   Backend (Terminal 1):"
+        echo "     cd $BACKEND_DIR"
+        echo "     source venv/bin/activate"
+        echo "     uvicorn main:app --reload"
+        echo ""
+        echo "   Frontend (Terminal 2):"
+        echo "     cd $FRONTEND_DIR"
+        echo "     npm run dev"
+        echo ""
+        echo "3. Access the Application:"
         echo "   - Dashboard: http://${SERVER_HOSTNAME:-localhost}:3000"
         echo "   - API Docs:  http://${SERVER_HOSTNAME:-localhost}:8000/docs"
     fi
@@ -1573,13 +1676,16 @@ main() {
     if [ "$SSL_ONLY" = true ]; then
         prompt_ssl_setup
         update_env_ssl_config
+        update_frontend_ssl_config
         print_header "SSL Configuration Complete"
         if [ "$SSL_METHOD" = "letsencrypt" ] || [ "$SSL_METHOD" = "self-signed" ]; then
             echo -e "${GREEN}SSL has been configured successfully.${NC}"
             echo ""
             echo "Next steps:"
-            echo "  1. Restart the ArgusAI backend to apply SSL settings"
-            echo "  2. Access ArgusAI at https://$SERVER_HOSTNAME (or your configured hostname)"
+            echo "  1. Rebuild the frontend: cd frontend && npm run build"
+            echo "  2. Restart the ArgusAI backend and frontend services"
+            echo "  3. Start frontend with SSL: cd frontend && npm run start:ssl"
+            echo "  4. Access ArgusAI at https://${SERVER_HOSTNAME:-localhost}:3000"
         else
             echo "SSL configuration was skipped."
         fi
@@ -1638,6 +1744,9 @@ main() {
 
     # Update .env with SSL configuration after backend setup
     update_env_ssl_config
+
+    # Update frontend SSL configuration
+    update_frontend_ssl_config
 
     # Print summary
     print_summary
