@@ -1,5 +1,5 @@
 """
-Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3, P4-3.5, P4-7.2, P4-8.2)
+Context API endpoints for Temporal Context Engine (Stories P4-3.1, P4-3.2, P4-3.3, P4-3.5, P4-7.2, P4-8.2, P9-4.6)
 
 Provides endpoints for:
 - Batch processing of embeddings for existing events
@@ -9,6 +9,7 @@ Provides endpoints for:
 - Activity pattern retrieval for cameras (P4-3.5)
 - Anomaly scoring for events (P4-7.2)
 - Person matching for face recognition (P4-8.2)
+- Entity adjustment history for ML training (P9-4.6)
 """
 import base64
 import logging
@@ -478,6 +479,16 @@ class EntityListResponse(BaseModel):
     total: int = Field(description="Total entity count")
 
 
+class EntityEventsResponse(BaseModel):
+    """Response model for paginated entity events (Story P9-4.2)."""
+    entity_id: str = Field(description="Entity UUID")
+    events: list[EventSummaryForEntity] = Field(description="List of events for this entity")
+    total: int = Field(description="Total event count for this entity")
+    page: int = Field(description="Current page number (1-indexed)")
+    limit: int = Field(description="Events per page")
+    has_more: bool = Field(description="Whether more events exist beyond current page")
+
+
 class EntityCreateRequest(BaseModel):
     """Request model for creating an entity (Story P7-4.1)."""
     entity_type: str = Field(
@@ -830,6 +841,202 @@ async def get_entity(
     )
 
 
+@router.get("/entities/{entity_id}/events", response_model=EntityEventsResponse)
+async def get_entity_events(
+    entity_id: str,
+    page: int = Query(
+        default=1,
+        ge=1,
+        description="Page number (1-indexed)"
+    ),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=50,
+        description="Number of events per page"
+    ),
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Get paginated events for an entity.
+
+    Story P9-4.2: Build Entity Event List View
+
+    Returns paginated list of events associated with an entity,
+    sorted by timestamp descending (newest first).
+
+    Args:
+        entity_id: UUID of the entity
+        page: Page number (1-indexed, default 1)
+        limit: Events per page (1-50, default 20)
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        EntityEventsResponse with paginated events and metadata
+
+    Raises:
+        404: If entity not found
+    """
+    # Verify entity exists
+    entity = await entity_service.get_entity(
+        db=db,
+        entity_id=entity_id,
+        include_events=False,
+    )
+
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    # Get paginated events
+    offset = (page - 1) * limit
+    events_data = await entity_service.get_entity_events_paginated(
+        db=db,
+        entity_id=entity_id,
+        limit=limit,
+        offset=offset,
+    )
+
+    events = events_data.get("events", [])
+    total = events_data.get("total", 0)
+
+    return EntityEventsResponse(
+        entity_id=entity_id,
+        events=[
+            EventSummaryForEntity(
+                id=e["id"],
+                timestamp=e["timestamp"],
+                description=e["description"],
+                thumbnail_url=e["thumbnail_url"],
+                camera_id=e["camera_id"],
+                similarity_score=e.get("similarity_score", 0.0),
+            )
+            for e in events
+        ],
+        total=total,
+        page=page,
+        limit=limit,
+        has_more=(offset + len(events)) < total,
+    )
+
+
+class UnlinkEventResponse(BaseModel):
+    """Response for event unlink operation (Story P9-4.3)."""
+    success: bool
+    message: str
+
+
+class AssignEventRequest(BaseModel):
+    """Request for event assignment operation (Story P9-4.4)."""
+    entity_id: str = Field(description="UUID of the entity to assign the event to")
+
+
+class AssignEventResponse(BaseModel):
+    """Response for event assignment operation (Story P9-4.4)."""
+    success: bool = Field(description="Whether the operation succeeded")
+    message: str = Field(description="Human-readable result message")
+    action: str = Field(description="Action taken: 'assign', 'move', or 'none'")
+    entity_id: str = Field(description="UUID of the target entity")
+    entity_name: Optional[str] = Field(default=None, description="Name of the target entity")
+
+
+@router.post("/events/{event_id}/entity", response_model=AssignEventResponse)
+async def assign_event_to_entity(
+    event_id: str,
+    request: AssignEventRequest,
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Assign or move an event to an entity.
+
+    Story P9-4.4: Implement Event-Entity Assignment
+
+    If the event has no entity, assigns it to the specified entity.
+    If the event already has an entity, moves it to the new entity.
+    Creates EntityAdjustment record(s) for ML training.
+
+    Args:
+        event_id: UUID of the event to assign
+        request: Request body with target entity_id
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        AssignEventResponse with success status, message, and entity info
+
+    Raises:
+        404: If event or entity not found
+    """
+    try:
+        result = await entity_service.assign_event(
+            db=db,
+            event_id=event_id,
+            entity_id=request.entity_id,
+        )
+        return AssignEventResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/entities/{entity_id}/events/{event_id}", response_model=UnlinkEventResponse)
+async def unlink_event_from_entity(
+    entity_id: str,
+    event_id: str,
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Unlink an event from an entity.
+
+    Story P9-4.3: Implement Event-Entity Unlinking
+
+    Removes the association between an event and an entity. This does NOT
+    delete the event itself, only the EntityEvent junction record. Also
+    creates an EntityAdjustment record for ML training.
+
+    Args:
+        entity_id: UUID of the entity
+        event_id: UUID of the event to unlink
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        UnlinkEventResponse with success status and message
+
+    Raises:
+        404: If entity or event link not found
+    """
+    # Verify entity exists
+    entity = await entity_service.get_entity(
+        db=db,
+        entity_id=entity_id,
+        include_events=False,
+    )
+
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    # Attempt to unlink the event
+    success = await entity_service.unlink_event(
+        db=db,
+        entity_id=entity_id,
+        event_id=event_id,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=404,
+            detail="Event not linked to this entity"
+        )
+
+    return UnlinkEventResponse(
+        success=True,
+        message="Event removed from entity"
+    )
+
+
 @router.get("/entities/{entity_id}/thumbnail")
 async def get_entity_thumbnail(
     entity_id: str,
@@ -957,6 +1164,100 @@ async def delete_entity(
         raise HTTPException(status_code=404, detail="Entity not found")
 
     # Return 204 No Content on success (implicit)
+
+
+# Story P9-4.5: Merge Entities Request/Response Models
+class MergeEntitiesRequest(BaseModel):
+    """Request model for merging two entities (Story P9-4.5)."""
+    primary_entity_id: str = Field(
+        description="UUID of the entity to keep (receives all events)"
+    )
+    secondary_entity_id: str = Field(
+        description="UUID of the entity to merge into primary and delete"
+    )
+
+
+class MergeEntitiesResponse(BaseModel):
+    """Response model for entity merge operation (Story P9-4.5)."""
+    success: bool = Field(description="Whether the merge succeeded")
+    merged_entity_id: str = Field(description="UUID of the primary entity that was kept")
+    merged_entity_name: Optional[str] = Field(
+        default=None, description="Name of the primary entity"
+    )
+    events_moved: int = Field(description="Number of events moved to primary entity")
+    deleted_entity_id: str = Field(description="UUID of the deleted secondary entity")
+    deleted_entity_name: Optional[str] = Field(
+        default=None, description="Name of the deleted entity"
+    )
+    message: str = Field(description="Human-readable result message")
+
+
+# Story P9-4.6: Entity Adjustment Response Models
+class AdjustmentResponse(BaseModel):
+    """Response model for a single entity adjustment record."""
+    id: str = Field(description="UUID of the adjustment record")
+    event_id: str = Field(description="UUID of the event that was adjusted")
+    old_entity_id: Optional[str] = Field(
+        default=None, description="UUID of the entity before adjustment (null for new assignments)"
+    )
+    new_entity_id: Optional[str] = Field(
+        default=None, description="UUID of the entity after adjustment (null for unlinks)"
+    )
+    action: str = Field(description="Type of adjustment: unlink, assign, move_from, move_to, merge")
+    event_description: Optional[str] = Field(
+        default=None, description="Snapshot of event description at time of adjustment"
+    )
+    created_at: datetime = Field(description="When the adjustment was made")
+
+
+class AdjustmentListResponse(BaseModel):
+    """Response model for paginated list of entity adjustments (Story P9-4.6)."""
+    adjustments: list[AdjustmentResponse] = Field(
+        description="List of adjustment records"
+    )
+    total: int = Field(description="Total number of adjustments matching filters")
+    page: int = Field(description="Current page number (1-indexed)")
+    limit: int = Field(description="Number of items per page")
+
+
+@router.post("/entities/merge", response_model=MergeEntitiesResponse)
+async def merge_entities(
+    request: MergeEntitiesRequest,
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Merge two entities into one (Story P9-4.5).
+
+    Moves all events from the secondary entity to the primary entity,
+    creates adjustment records for ML training, updates occurrence counts,
+    and deletes the secondary entity.
+
+    Args:
+        request: Merge request with primary and secondary entity IDs
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        MergeEntitiesResponse with merge results
+
+    Raises:
+        400: If attempting to merge an entity with itself
+        404: If either entity not found
+    """
+    try:
+        result = await entity_service.merge_entities(
+            db=db,
+            primary_entity_id=request.primary_entity_id,
+            secondary_entity_id=request.secondary_entity_id,
+        )
+        return MergeEntitiesResponse(**result)
+    except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg:
+            raise HTTPException(status_code=404, detail=error_msg)
+        else:
+            raise HTTPException(status_code=400, detail=error_msg)
 
 
 # Story P4-3.5: Pattern Detection Response Models
@@ -2256,4 +2557,127 @@ async def delete_all_vehicles(
     return DeleteVehiclesResponse(
         deleted_count=count,
         message=f"Deleted all {count} vehicle embedding(s) from database"
+    )
+
+
+# Story P9-4.6: Entity Adjustment Endpoints
+@router.get("/adjustments", response_model=AdjustmentListResponse)
+async def get_adjustments(
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(default=50, ge=1, le=100, description="Items per page"),
+    action: Optional[str] = Query(
+        default=None,
+        description="Filter by action type: unlink, assign, move, merge"
+    ),
+    entity_id: Optional[str] = Query(
+        default=None,
+        description="Filter by entity ID (matches old or new entity)"
+    ),
+    start_date: Optional[datetime] = Query(
+        default=None,
+        description="Filter adjustments from this date (ISO format)"
+    ),
+    end_date: Optional[datetime] = Query(
+        default=None,
+        description="Filter adjustments until this date (ISO format)"
+    ),
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Get paginated list of entity adjustments (Story P9-4.6).
+
+    Returns manual entity corrections (unlink, assign, move, merge) for
+    auditing and future ML training. Supports filtering by action type,
+    entity, and date range.
+
+    Args:
+        page: Page number (1-indexed, default 1)
+        limit: Items per page (1-100, default 50)
+        action: Filter by action type (unlink, assign, move, merge)
+        entity_id: Filter by entity ID (matches old or new)
+        start_date: Filter from this date
+        end_date: Filter until this date
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        AdjustmentListResponse with paginated adjustments
+    """
+    # Validate action if provided
+    valid_actions = ["unlink", "assign", "move", "move_from", "move_to", "merge"]
+    if action and action not in valid_actions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
+        )
+
+    offset = (page - 1) * limit
+
+    adjustments, total = await entity_service.get_adjustments(
+        db=db,
+        limit=limit,
+        offset=offset,
+        action=action,
+        entity_id=entity_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    return AdjustmentListResponse(
+        adjustments=[AdjustmentResponse(**a) for a in adjustments],
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.get("/adjustments/export")
+async def export_adjustments(
+    start_date: Optional[datetime] = Query(
+        default=None,
+        description="Filter adjustments from this date (ISO format)"
+    ),
+    end_date: Optional[datetime] = Query(
+        default=None,
+        description="Filter adjustments until this date (ISO format)"
+    ),
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Export adjustments for ML training (Story P9-4.6).
+
+    Returns all adjustment records in JSON Lines format suitable for
+    ML training pipelines. Each line is a complete JSON object with
+    event descriptions, entity types, and correction details.
+
+    Args:
+        start_date: Filter from this date
+        end_date: Filter until this date
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        StreamingResponse with JSON Lines (application/x-ndjson)
+    """
+    from fastapi.responses import StreamingResponse
+    import json
+
+    adjustments = await entity_service.export_adjustments(
+        db=db,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    def generate_jsonl():
+        for adjustment in adjustments:
+            yield json.dumps(adjustment) + "\n"
+
+    return StreamingResponse(
+        generate_jsonl(),
+        media_type="application/x-ndjson",
+        headers={
+            "Content-Disposition": "attachment; filename=adjustments.jsonl"
+        }
     )

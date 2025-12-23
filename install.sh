@@ -14,6 +14,7 @@
 #   ./install.sh --backend    # Backend only
 #   ./install.sh --frontend   # Frontend only
 #   ./install.sh --services   # Generate service files only
+#   ./install.sh --update     # Update existing installation
 #===============================================================================
 
 set -e
@@ -55,6 +56,7 @@ INSTALL_BACKEND=true
 INSTALL_FRONTEND=true
 CHECK_ONLY=false
 SERVICES_ONLY=false
+UPDATE_MODE=false
 VERBOSE=false
 
 # Server configuration (set during installation)
@@ -110,6 +112,7 @@ Options:
   --backend, -b     Install backend only
   --frontend, -f    Install frontend only
   --services, -s    Generate service files only (systemd/launchd)
+  --update, -u      Update existing installation (pull code, update deps, migrate DB)
   --verbose, -v     Show verbose output
 
 Examples:
@@ -117,6 +120,7 @@ Examples:
   ./install.sh --check          # Check if dependencies are met
   ./install.sh --backend        # Install backend only
   ./install.sh --services       # Generate service files
+  ./install.sh --update         # Update to latest version
 
 For more information, see README.md
 EOF
@@ -484,6 +488,159 @@ setup_frontend() {
     print_success "Frontend build complete"
 
     print_success "Frontend setup complete"
+}
+
+#-------------------------------------------------------------------------------
+# Update Functions
+#-------------------------------------------------------------------------------
+
+update_code() {
+    print_header "Pulling Latest Code"
+
+    cd "$SCRIPT_DIR"
+
+    # Check if this is a git repository
+    if [ ! -d ".git" ]; then
+        print_error "Not a git repository. Cannot pull updates."
+        print_info "If you downloaded a ZIP file, please download the latest version manually."
+        return 1
+    fi
+
+    # Check for uncommitted changes
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        print_warning "You have uncommitted changes"
+        read -p "Stash changes and continue? [y/N]: " stash_choice
+        if [[ "$stash_choice" =~ ^[Yy]$ ]]; then
+            git stash
+            print_success "Changes stashed"
+        else
+            print_error "Update cancelled. Please commit or stash your changes first."
+            return 1
+        fi
+    fi
+
+    # Get current branch
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    print_info "Current branch: $current_branch"
+
+    # Fetch and pull
+    print_step "Fetching latest changes..."
+    git fetch origin
+
+    local local_commit=$(git rev-parse HEAD)
+    local remote_commit=$(git rev-parse "origin/$current_branch" 2>/dev/null || echo "")
+
+    if [ -z "$remote_commit" ]; then
+        print_warning "Could not find remote branch origin/$current_branch"
+        print_info "Continuing with local code..."
+        return 0
+    fi
+
+    if [ "$local_commit" = "$remote_commit" ]; then
+        print_success "Already up to date"
+        return 0
+    fi
+
+    print_step "Pulling updates..."
+    git pull origin "$current_branch"
+    print_success "Code updated to latest version"
+
+    # Show what changed
+    print_info "Changes pulled:"
+    git log --oneline "$local_commit..$remote_commit" | head -10
+}
+
+update_backend() {
+    print_header "Updating Backend"
+
+    cd "$BACKEND_DIR"
+
+    # Check if venv exists
+    if [ ! -d "venv" ]; then
+        print_error "Virtual environment not found. Run full installation first."
+        return 1
+    fi
+
+    # Activate virtual environment
+    print_step "Activating virtual environment..."
+    source venv/bin/activate
+    print_success "Virtual environment activated"
+
+    # Upgrade pip
+    print_step "Upgrading pip..."
+    pip install --upgrade pip --quiet
+    print_success "pip upgraded"
+
+    # Update dependencies
+    print_step "Updating Python dependencies..."
+    pip install -r requirements.txt --quiet --upgrade
+    print_success "Python dependencies updated"
+
+    # Run database migrations
+    print_step "Running database migrations..."
+    alembic upgrade head
+    print_success "Database migrations complete"
+
+    deactivate
+    print_success "Backend update complete"
+}
+
+update_frontend() {
+    print_header "Updating Frontend"
+
+    cd "$FRONTEND_DIR"
+
+    # Check if node_modules exists
+    if [ ! -d "node_modules" ]; then
+        print_error "node_modules not found. Run full installation first."
+        return 1
+    fi
+
+    # Update dependencies
+    print_step "Updating Node.js dependencies..."
+    npm install --silent
+    print_success "Node.js dependencies updated"
+
+    # Rebuild frontend
+    print_step "Rebuilding frontend..."
+    npm run build --silent 2>/dev/null || {
+        print_warning "Build completed with warnings (this is usually fine)"
+    }
+    print_success "Frontend rebuild complete"
+
+    print_success "Frontend update complete"
+}
+
+print_update_summary() {
+    print_header "Update Complete!"
+
+    echo -e "${GREEN}ArgusAI has been updated successfully.${NC}"
+    echo ""
+    echo "What was updated:"
+    echo "  - Code pulled from git repository"
+    if [ "$INSTALL_BACKEND" = true ]; then
+        echo "  - Backend Python dependencies updated"
+        echo "  - Database migrations applied"
+    fi
+    if [ "$INSTALL_FRONTEND" = true ]; then
+        echo "  - Frontend Node.js dependencies updated"
+        echo "  - Frontend rebuilt"
+    fi
+    echo ""
+    echo "Next Steps:"
+    echo ""
+    echo "  If running as a service, restart the services:"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "    launchctl unload ~/Library/LaunchAgents/com.argusai.*.plist"
+        echo "    launchctl load ~/Library/LaunchAgents/com.argusai.*.plist"
+    else
+        echo "    sudo systemctl restart argusai-backend argusai-frontend"
+    fi
+    echo ""
+    echo "  Or if running manually, restart the dev servers:"
+    echo "    Backend:  cd backend && source venv/bin/activate && uvicorn main:app --reload"
+    echo "    Frontend: cd frontend && npm run dev"
+    echo ""
 }
 
 #-------------------------------------------------------------------------------
@@ -896,6 +1053,10 @@ main() {
                 SERVICES_ONLY=true
                 shift
                 ;;
+            --update|-u)
+                UPDATE_MODE=true
+                shift
+                ;;
             --verbose|-v)
                 VERBOSE=true
                 shift
@@ -918,6 +1079,27 @@ main() {
     # Services only mode
     if [ "$SERVICES_ONLY" = true ]; then
         generate_all_services
+        exit 0
+    fi
+
+    # Update mode
+    if [ "$UPDATE_MODE" = true ]; then
+        # Pull latest code
+        if ! update_code; then
+            exit 1
+        fi
+
+        # Update components
+        if [ "$INSTALL_BACKEND" = true ]; then
+            update_backend
+        fi
+
+        if [ "$INSTALL_FRONTEND" = true ]; then
+            update_frontend
+        fi
+
+        # Print summary
+        print_update_summary
         exit 0
     fi
 

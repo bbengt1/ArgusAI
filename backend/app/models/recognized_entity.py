@@ -117,6 +117,27 @@ class RecognizedEntity(Base):
         nullable=True,
         doc="User notes about this entity"
     )
+    # Story P9-4.1: Vehicle-specific fields for signature-based matching
+    vehicle_color = Column(
+        String(50),
+        nullable=True,
+        doc="Extracted vehicle color (e.g., 'white', 'black', 'silver')"
+    )
+    vehicle_make = Column(
+        String(50),
+        nullable=True,
+        doc="Extracted vehicle make (e.g., 'toyota', 'ford', 'honda')"
+    )
+    vehicle_model = Column(
+        String(50),
+        nullable=True,
+        doc="Extracted vehicle model (e.g., 'camry', 'f150', 'civic')"
+    )
+    vehicle_signature = Column(
+        String(150),
+        nullable=True,
+        doc="Normalized signature for matching (e.g., 'white-toyota-camry')"
+    )
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -142,7 +163,24 @@ class RecognizedEntity(Base):
     __table_args__ = (
         Index("idx_recognized_entities_last_seen", "last_seen_at"),
         Index("idx_recognized_entities_entity_type", "entity_type"),
+        Index("idx_recognized_entities_vehicle_signature", "vehicle_signature"),
     )
+
+    @property
+    def display_name(self) -> str:
+        """
+        Generate a human-readable display name for the entity.
+
+        Priority:
+        1. User-assigned name
+        2. Vehicle signature formatted as title case
+        3. Default to entity type with ID prefix
+        """
+        if self.name:
+            return self.name
+        if self.entity_type == "vehicle" and self.vehicle_signature:
+            return self.vehicle_signature.replace("-", " ").title()
+        return f"{self.entity_type.title()} #{str(self.id)[:8]}"
 
     def __repr__(self):
         return (

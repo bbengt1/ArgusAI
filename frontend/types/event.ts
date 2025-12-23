@@ -140,6 +140,9 @@ export interface IEvent {
   frame_timestamps?: number[] | null;   // Timestamps in seconds for each key frame
   // Story P4-5.1: User feedback
   feedback?: IEventFeedback | null;     // User feedback on this event's description
+  // Story P9-4.4: Entity association for assignment UI
+  entity_id?: string | null;            // UUID of linked entity (null if no entity linked)
+  entity_name?: string | null;          // Name of linked entity (null if no entity linked)
   // Story P4-7.2: Anomaly scoring
   anomaly_score?: number | null;        // Anomaly score 0.0-1.0 (null = not scored)
   // Story P8-3.2: Full motion video storage

@@ -90,6 +90,226 @@ export function useDeleteEntity() {
 }
 
 /**
+ * Response type for paginated entity events (Story P9-4.2)
+ */
+export interface EntityEventsResponse {
+  entity_id: string;
+  events: Array<{
+    id: string;
+    timestamp: string;
+    description: string;
+    thumbnail_url: string | null;
+    camera_id: string;
+    similarity_score: number;
+  }>;
+  total: number;
+  page: number;
+  limit: number;
+  has_more: boolean;
+}
+
+/**
+ * Hook to fetch paginated events for an entity (Story P9-4.2)
+ * @param entityId UUID of the entity
+ * @param page Page number (1-indexed)
+ * @param limit Events per page
+ * @returns Query result with paginated events
+ */
+export function useEntityEvents(
+  entityId: string | null,
+  page: number = 1,
+  limit: number = 20
+) {
+  return useQuery({
+    queryKey: ['entities', entityId, 'events', page, limit],
+    queryFn: async (): Promise<EntityEventsResponse> => {
+      if (!entityId) {
+        return {
+          entity_id: '',
+          events: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          has_more: false,
+        };
+      }
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/${entityId}/events?page=${page}&limit=${limit}`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch entity events');
+      }
+      return response.json();
+    },
+    enabled: !!entityId,
+    staleTime: 30000,
+  });
+}
+
+/**
+ * Response type for unlink event operation (Story P9-4.3)
+ */
+export interface UnlinkEventResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Hook to unlink an event from an entity (Story P9-4.3)
+ * @returns Mutation for unlinking event
+ */
+export function useUnlinkEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      entityId,
+      eventId,
+    }: {
+      entityId: string;
+      eventId: string;
+    }): Promise<UnlinkEventResponse> => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/${entityId}/events/${eventId}`,
+        {
+          method: 'DELETE',
+        }
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to unlink event');
+      }
+      return response.json();
+    },
+    onSuccess: (_data, { entityId }) => {
+      // Invalidate entity events queries to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['entities', entityId, 'events'] });
+      // Invalidate entity detail to update occurrence count
+      queryClient.invalidateQueries({ queryKey: ['entities', entityId] });
+      // Invalidate entity list for occurrence count updates
+      queryClient.invalidateQueries({ queryKey: ['entities'] });
+    },
+  });
+}
+
+/**
+ * Response type for assign event operation (Story P9-4.4)
+ */
+export interface AssignEventResponse {
+  success: boolean;
+  message: string;
+  action: 'assign' | 'move' | 'none';
+  entity_id: string;
+  entity_name: string | null;
+}
+
+/**
+ * Hook to assign an event to an entity (Story P9-4.4)
+ * Handles both new assignments and moving events between entities.
+ * @returns Mutation for assigning event
+ */
+export function useAssignEventToEntity() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      eventId,
+      entityId,
+    }: {
+      eventId: string;
+      entityId: string;
+    }): Promise<AssignEventResponse> => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/events/${eventId}/entity`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ entity_id: entityId }),
+        }
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to assign event');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate entity events queries for the target entity
+      queryClient.invalidateQueries({ queryKey: ['entities', data.entity_id, 'events'] });
+      // Invalidate entity detail to update occurrence count
+      queryClient.invalidateQueries({ queryKey: ['entities', data.entity_id] });
+      // Invalidate entity list for occurrence count updates
+      queryClient.invalidateQueries({ queryKey: ['entities'] });
+      // Invalidate events queries to refresh any entity associations displayed on event cards
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+}
+
+/**
+ * Response type for merge entities operation (Story P9-4.5)
+ */
+export interface MergeEntitiesResponse {
+  success: boolean;
+  merged_entity_id: string;
+  merged_entity_name: string | null;
+  events_moved: number;
+  deleted_entity_id: string;
+  deleted_entity_name: string | null;
+  message: string;
+}
+
+/**
+ * Hook to merge two entities (Story P9-4.5)
+ * Moves all events from secondary entity to primary and deletes secondary.
+ * @returns Mutation for merging entities
+ */
+export function useMergeEntities() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      primaryEntityId,
+      secondaryEntityId,
+    }: {
+      primaryEntityId: string;
+      secondaryEntityId: string;
+    }): Promise<MergeEntitiesResponse> => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/merge`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            primary_entity_id: primaryEntityId,
+            secondary_entity_id: secondaryEntityId,
+          }),
+        }
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to merge entities');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate entity list to refresh after merge
+      queryClient.invalidateQueries({ queryKey: ['entities'] });
+      // Invalidate the merged entity to get updated occurrence count
+      queryClient.invalidateQueries({ queryKey: ['entities', data.merged_entity_id] });
+      // Remove the deleted entity from cache
+      queryClient.removeQueries({ queryKey: ['entities', data.deleted_entity_id] });
+      // Invalidate events queries to refresh any entity associations
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+}
+
+/**
  * Error type guard for API errors
  */
 export function isApiError(error: unknown): error is ApiError {

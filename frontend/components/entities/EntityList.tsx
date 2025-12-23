@@ -5,6 +5,7 @@
  * AC4: Filter by named_only
  * AC5: Pagination with configurable page size
  * Story P7-4.2: Search by name with debounce and URL persistence
+ * Story P9-4.5: Multi-select for entity merge functionality
  */
 
 'use client';
@@ -26,7 +27,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, X, Merge } from 'lucide-react';
 import type { EntityType, IEntity } from '@/types/entity';
 
 interface EntityListProps {
@@ -34,6 +35,14 @@ interface EntityListProps {
   onEntityClick: (entity: IEntity) => void;
   /** Default page size (default 50) */
   pageSize?: number;
+  /** Story P9-4.5: Set of selected entity IDs for merge */
+  selectedEntityIds?: Set<string>;
+  /** Story P9-4.5: Callback when entity selection is toggled */
+  onToggleSelection?: (entity: IEntity) => void;
+  /** Story P9-4.5: Callback to clear all selections */
+  onClearSelection?: () => void;
+  /** Story P9-4.5: Callback when merge button is clicked */
+  onMerge?: (entities: [IEntity, IEntity]) => void;
 }
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
@@ -63,6 +72,10 @@ function useDebounce<T>(value: T, delay: number): T {
 export function EntityList({
   onEntityClick,
   pageSize: defaultPageSize = 50,
+  selectedEntityIds = new Set(),
+  onToggleSelection,
+  onClearSelection,
+  onMerge,
 }: EntityListProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -244,6 +257,45 @@ export function EntityList({
         )}
       </div>
 
+      {/* Story P9-4.5: Selection/Merge Bar */}
+      {selectedEntityIds.size > 0 && (
+        <div className="flex items-center justify-between bg-muted/50 border rounded-lg px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium">
+              {selectedEntityIds.size} entity{selectedEntityIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearSelection}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Clear
+            </Button>
+          </div>
+          <Button
+            variant="default"
+            size="sm"
+            disabled={selectedEntityIds.size !== 2}
+            onClick={() => {
+              if (onMerge && data?.entities && selectedEntityIds.size === 2) {
+                const selectedIds = Array.from(selectedEntityIds);
+                const entity1 = data.entities.find((e) => e.id === selectedIds[0]);
+                const entity2 = data.entities.find((e) => e.id === selectedIds[1]);
+                if (entity1 && entity2) {
+                  onMerge([entity1, entity2]);
+                }
+              }
+            }}
+            className="gap-2"
+          >
+            <Merge className="h-4 w-4" />
+            Merge Entities
+          </Button>
+        </div>
+      )}
+
       {/* Loading State */}
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -271,6 +323,10 @@ export function EntityList({
               entity={entity}
               thumbnailUrl={entity.thumbnail_path}
               onClick={() => onEntityClick(entity)}
+              selectable={!!onToggleSelection}
+              isSelected={selectedEntityIds.has(entity.id)}
+              onSelect={onToggleSelection ? () => onToggleSelection(entity) : undefined}
+              selectionDisabled={!selectedEntityIds.has(entity.id) && selectedEntityIds.size >= 2}
             />
           ))}
         </div>

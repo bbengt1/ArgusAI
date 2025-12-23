@@ -496,6 +496,27 @@ def list_events(
             cameras = db.query(Camera.id, Camera.name).filter(Camera.id.in_(camera_ids)).all()
             camera_map = {c.id: c.name for c in cameras}
 
+        # Story P9-4.4: Fetch entity associations for all events
+        from app.models.recognized_entity import RecognizedEntity, EntityEvent
+        event_ids = [e.id for e in events]
+        entity_map = {}
+        if event_ids:
+            entity_links = db.query(
+                EntityEvent.event_id,
+                RecognizedEntity.id,
+                RecognizedEntity.name,
+                RecognizedEntity.entity_type,
+            ).join(
+                RecognizedEntity, EntityEvent.entity_id == RecognizedEntity.id
+            ).filter(
+                EntityEvent.event_id.in_(event_ids)
+            ).all()
+            for link in entity_links:
+                entity_map[link.event_id] = {
+                    "entity_id": link.id,
+                    "entity_name": link.name or f"{link.entity_type.title()} entity",
+                }
+
         # Enrich events with camera_name and feedback
         enriched_events = []
         for event in events:
@@ -529,6 +550,9 @@ def list_events(
                 "reanalysis_count": event.reanalysis_count or 0,
                 # Story P7-2.1: Delivery carrier detection
                 "delivery_carrier": getattr(event, 'delivery_carrier', None),
+                # Story P9-4.4: Entity association for assignment UI
+                "entity_id": entity_map.get(event.id, {}).get("entity_id"),
+                "entity_name": entity_map.get(event.id, {}).get("entity_name"),
             }
             # BUG-004: Include feedback if exists so UI can show persisted state
             if event.feedback:

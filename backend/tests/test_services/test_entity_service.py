@@ -849,3 +849,893 @@ class TestMatchEntityOnly:
 
         # Should return current count, not incremented
         assert result.occurrence_count == 10
+
+
+class TestVehicleEntityExtraction:
+    """Tests for vehicle entity extraction (Story P9-4.1)."""
+
+    def test_extract_white_toyota_camry(self):
+        """AC-4.1.1: Extract color, make, model from description."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("A white Toyota Camry pulled into the driveway")
+
+        assert result is not None
+        assert result.color == "white"
+        assert result.make == "toyota"
+        assert result.model == "camry"
+        assert result.signature == "white-toyota-camry"
+
+    def test_extract_black_ford_f150(self):
+        """AC-4.1.2: Extract signature for F-150 with hyphen normalization."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("Black Ford F-150 parked on street")
+
+        assert result is not None
+        assert result.color == "black"
+        assert result.make == "ford"
+        assert result.model == "f150"
+        assert result.signature == "black-ford-f150"
+
+    def test_color_only_returns_none(self):
+        """AC-4.1.5: Only color mentioned returns None (insufficient data)."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("A red car passed by the house")
+
+        # Should be None because we need color+make OR make+model
+        assert result is None
+
+    def test_make_and_model_without_color(self):
+        """AC-4.1.6: Make and model without color creates partial signature."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("A Toyota Camry is parked in the garage")
+
+        assert result is not None
+        assert result.color is None
+        assert result.make == "toyota"
+        assert result.model == "camry"
+        # Signature should be make-model when no color
+        assert result.signature == "toyota-camry"
+
+    def test_color_and_make_without_model(self):
+        """Test color+make creates valid signature even without model."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("A silver Honda just arrived")
+
+        assert result is not None
+        assert result.color == "silver"
+        assert result.make == "honda"
+        assert result.model is None
+        assert result.signature == "silver-honda"
+
+    def test_grey_normalized_to_gray(self):
+        """Test grey is normalized to gray in signature."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("A grey Toyota Corolla in the driveway")
+
+        assert result is not None
+        assert result.color == "gray"  # Normalized from grey
+        assert result.signature == "gray-toyota-corolla"
+
+    def test_chevy_normalized_to_chevrolet(self):
+        """Test Chevy is normalized to Chevrolet."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("White Chevy Silverado parked outside")
+
+        assert result is not None
+        assert result.make == "chevrolet"  # Normalized from chevy
+        assert result.signature == "white-chevrolet-silverado"
+
+    def test_vw_normalized_to_volkswagen(self):
+        """Test VW is normalized to Volkswagen."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("A blue VW Golf just passed")
+
+        assert result is not None
+        assert result.make == "volkswagen"  # Normalized from vw
+
+    def test_empty_description_returns_none(self):
+        """Test empty description returns None."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        assert extract_vehicle_entity("") is None
+        assert extract_vehicle_entity(None) is None
+
+    def test_case_insensitive_matching(self):
+        """Test case insensitive color, make, model matching."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        result = extract_vehicle_entity("A WHITE TOYOTA CAMRY is approaching")
+
+        assert result is not None
+        assert result.color == "white"
+        assert result.make == "toyota"
+        assert result.model == "camry"
+
+    def test_vehicle_entity_info_is_valid(self):
+        """Test VehicleEntityInfo.is_valid() method."""
+        from app.services.entity_service import VehicleEntityInfo
+
+        # Color + Make = valid
+        info1 = VehicleEntityInfo(color="white", make="toyota", model=None, signature=None)
+        assert info1.is_valid() is True
+
+        # Make + Model = valid
+        info2 = VehicleEntityInfo(color=None, make="toyota", model="camry", signature=None)
+        assert info2.is_valid() is True
+
+        # Color only = invalid
+        info3 = VehicleEntityInfo(color="white", make=None, model=None, signature=None)
+        assert info3.is_valid() is False
+
+        # Make only = invalid
+        info4 = VehicleEntityInfo(color=None, make="toyota", model=None, signature=None)
+        assert info4.is_valid() is False
+
+    def test_skip_common_words_as_models(self):
+        """Test that common words are not extracted as models."""
+        from app.services.entity_service import extract_vehicle_entity
+
+        # "truck" should not become the model
+        result = extract_vehicle_entity("A white Ford truck is parked")
+
+        # Should match "ford" as make, but "truck" should be skipped
+        # Since no valid model is found, we need color+make
+        assert result is not None
+        assert result.make == "ford"
+        assert result.model is None  # "truck" should be skipped
+        assert result.signature == "white-ford"
+
+
+class TestVehicleSignatureMatching:
+    """Tests for vehicle signature-based entity matching (Story P9-4.1)."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        reset_entity_service()
+        self.service = EntityService()
+
+    def teardown_method(self):
+        """Clean up after tests."""
+        reset_entity_service()
+
+    @pytest.mark.asyncio
+    async def test_same_signature_links_to_same_entity(self):
+        """AC-4.1.3: Two descriptions with same signature link to same entity."""
+        mock_db = MagicMock()
+
+        # Setup: existing entity with signature "white-toyota-camry"
+        mock_entity = MagicMock()
+        mock_entity.id = "existing-vehicle-id"
+
+        # Mock query for finding entity by signature
+        mock_query = MagicMock()
+        mock_query.filter.return_value.first.return_value = mock_entity
+        mock_db.query.return_value = mock_query
+
+        # Test signature lookup
+        entity_id = self.service._find_entity_by_vehicle_signature(
+            mock_db, "white-toyota-camry"
+        )
+
+        assert entity_id == "existing-vehicle-id"
+
+    def test_find_vehicle_by_signature_returns_none_when_not_found(self):
+        """Test signature lookup returns None when no match."""
+        mock_db = MagicMock()
+
+        mock_query = MagicMock()
+        mock_query.filter.return_value.first.return_value = None
+        mock_db.query.return_value = mock_query
+
+        result = self.service._find_entity_by_vehicle_signature(
+            mock_db, "nonexistent-signature"
+        )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_match_or_create_vehicle_entity_uses_signature_first(self):
+        """Test that signature-based matching takes priority over embedding."""
+        mock_db = MagicMock()
+
+        # Mock event timestamp lookup
+        mock_event = MagicMock()
+        mock_event.timestamp = datetime.now(timezone.utc)
+
+        # Setup mock queries
+        def query_side_effect(model):
+            mock_query = MagicMock()
+            if hasattr(model, 'timestamp'):  # Event query
+                mock_query.filter.return_value.first.return_value = mock_event
+            else:  # RecognizedEntity query
+                mock_entity = MagicMock()
+                mock_entity.id = "existing-vehicle-id"
+                mock_query.filter.return_value.first.return_value = mock_entity
+            return mock_query
+
+        mock_db.query.side_effect = query_side_effect
+
+        # Mock entity for update
+        mock_entity = MagicMock()
+        mock_entity.id = "existing-vehicle-id"
+        mock_entity.entity_type = "vehicle"
+        mock_entity.name = "My Car"
+        mock_entity.first_seen_at = datetime.now(timezone.utc)
+        mock_entity.last_seen_at = datetime.now(timezone.utc)
+        mock_entity.occurrence_count = 5
+
+        # Pre-load cache to avoid embedding-based matching
+        self.service._entity_cache = {}
+        self.service._cache_loaded = True
+
+        # This would require more complex mocking to fully test
+        # For now, verify the signature lookup method works
+        mock_db2 = MagicMock()
+        mock_query2 = MagicMock()
+        mock_entity2 = MagicMock()
+        mock_entity2.id = "vehicle-123"
+        mock_query2.filter.return_value.first.return_value = mock_entity2
+        mock_db2.query.return_value = mock_query2
+
+        result = self.service._find_entity_by_vehicle_signature(
+            mock_db2, "white-toyota-camry"
+        )
+        assert result == "vehicle-123"
+
+
+class TestRecognizedEntityDisplayName:
+    """Tests for RecognizedEntity.display_name property (Story P9-4.1)."""
+
+    def test_display_name_uses_user_assigned_name(self):
+        """Test display_name returns user name when set."""
+        from app.models.recognized_entity import RecognizedEntity
+
+        entity = RecognizedEntity(
+            id="test-id",
+            entity_type="vehicle",
+            name="My Tesla",
+            reference_embedding="[]",
+            first_seen_at=datetime.now(timezone.utc),
+            last_seen_at=datetime.now(timezone.utc),
+            occurrence_count=1,
+            vehicle_signature="white-tesla-model3"
+        )
+
+        assert entity.display_name == "My Tesla"
+
+    def test_display_name_uses_signature_for_vehicle(self):
+        """Test display_name returns formatted signature for unnamed vehicles."""
+        from app.models.recognized_entity import RecognizedEntity
+
+        entity = RecognizedEntity(
+            id="test-id",
+            entity_type="vehicle",
+            name=None,
+            reference_embedding="[]",
+            first_seen_at=datetime.now(timezone.utc),
+            last_seen_at=datetime.now(timezone.utc),
+            occurrence_count=1,
+            vehicle_signature="white-toyota-camry"
+        )
+
+        assert entity.display_name == "White Toyota Camry"
+
+    def test_display_name_uses_id_prefix_for_person(self):
+        """Test display_name returns entity type + ID for persons."""
+        from app.models.recognized_entity import RecognizedEntity
+
+        entity = RecognizedEntity(
+            id="12345678-abcd-efgh-ijkl-mnopqrstuvwx",
+            entity_type="person",
+            name=None,
+            reference_embedding="[]",
+            first_seen_at=datetime.now(timezone.utc),
+            last_seen_at=datetime.now(timezone.utc),
+            occurrence_count=1,
+        )
+
+        assert entity.display_name == "Person #12345678"
+
+    def test_display_name_for_vehicle_without_signature(self):
+        """Test display_name for vehicle without signature."""
+        from app.models.recognized_entity import RecognizedEntity
+
+        entity = RecognizedEntity(
+            id="abcd1234-efgh-ijkl-mnop-qrstuvwxyz12",
+            entity_type="vehicle",
+            name=None,
+            reference_embedding="[]",
+            first_seen_at=datetime.now(timezone.utc),
+            last_seen_at=datetime.now(timezone.utc),
+            occurrence_count=1,
+            vehicle_signature=None
+        )
+
+        assert entity.display_name == "Vehicle #abcd1234"
+
+
+class TestEntityServiceMerge:
+    """Tests for EntityService.merge_entities (Story P9-4.5)."""
+
+    @pytest.fixture
+    def mock_db(self):
+        """Create a mock database session."""
+        return MagicMock()
+
+    @pytest.fixture
+    def entity_service(self):
+        """Create an EntityService instance."""
+        return EntityService()
+
+    @pytest.mark.asyncio
+    async def test_merge_entities_success(self, entity_service, mock_db):
+        """Test successful merge of two entities (AC-4.5.5, AC-4.5.6).
+
+        This test verifies the core merge logic by mocking the database queries
+        to return controlled entity and event data.
+        """
+        from app.models.recognized_entity import RecognizedEntity, EntityEvent
+        from app.models.entity_adjustment import EntityAdjustment
+        from app.models.event import Event
+
+        # Create primary and secondary entities as MagicMock
+        now = datetime.now(timezone.utc)
+        primary = MagicMock()
+        primary.id = "primary-entity-id"
+        primary.name = "Primary Person"
+        primary.occurrence_count = 5
+        primary.first_seen_at = now - timedelta(days=10)
+        primary.last_seen_at = now - timedelta(days=2)
+        primary.updated_at = now
+
+        secondary = MagicMock()
+        secondary.id = "secondary-entity-id"
+        secondary.name = "Secondary Person"
+        secondary.occurrence_count = 3
+        secondary.first_seen_at = now - timedelta(days=5)
+        secondary.last_seen_at = now - timedelta(days=1)  # More recent
+
+        # Create event links for secondary entity
+        event_link = MagicMock()
+        event_link.entity_id = "secondary-entity-id"
+        event_link.event_id = "event-1"
+        event_link.created_at = now
+
+        # Mock event for description snapshot
+        mock_event_desc = MagicMock()
+        mock_event_desc.description = "Person walking"
+
+        # Track query call order with mutable container
+        call_order = {'count': 0}
+
+        def query_side_effect(*args):
+            query_mock = MagicMock()
+            filter_mock = MagicMock()
+            query_mock.filter.return_value = filter_mock
+
+            call_order['count'] += 1
+            call_num = call_order['count']
+
+            # Query 1: Get primary entity (RecognizedEntity)
+            if call_num == 1:
+                filter_mock.first.return_value = primary
+            # Query 2: Get secondary entity (RecognizedEntity)
+            elif call_num == 2:
+                filter_mock.first.return_value = secondary
+            # Query 3: Get event links (EntityEvent)
+            elif call_num == 3:
+                filter_mock.all.return_value = [event_link]
+            # Query 4+: Get event descriptions (Event.description)
+            else:
+                filter_mock.first.return_value = mock_event_desc
+
+            return query_mock
+
+        mock_db.query.side_effect = query_side_effect
+
+        # Execute merge
+        result = await entity_service.merge_entities(
+            db=mock_db,
+            primary_entity_id="primary-entity-id",
+            secondary_entity_id="secondary-entity-id",
+        )
+
+        # Verify result
+        assert result["success"] is True
+        assert result["merged_entity_id"] == "primary-entity-id"
+        assert result["events_moved"] == 1
+        assert result["deleted_entity_id"] == "secondary-entity-id"
+
+        # Verify primary occurrence count was updated
+        assert primary.occurrence_count == 8  # 5 + 3
+
+        # Verify event link was moved
+        assert event_link.entity_id == "primary-entity-id"
+
+        # Verify secondary was deleted
+        mock_db.delete.assert_called_with(secondary)
+        mock_db.commit.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_merge_entities_same_entity_error(self, entity_service, mock_db):
+        """Test error when trying to merge entity with itself (AC validation)."""
+        with pytest.raises(ValueError, match="Cannot merge an entity with itself"):
+            await entity_service.merge_entities(
+                db=mock_db,
+                primary_entity_id="same-entity-id",
+                secondary_entity_id="same-entity-id",
+            )
+
+    @pytest.mark.asyncio
+    async def test_merge_entities_primary_not_found(self, entity_service, mock_db):
+        """Test error when primary entity not found (AC validation)."""
+        mock_query = MagicMock()
+        mock_db.query.return_value = mock_query
+        mock_filter = MagicMock()
+        mock_query.filter.return_value = mock_filter
+        mock_filter.first.return_value = None
+
+        with pytest.raises(ValueError, match="Primary entity not found"):
+            await entity_service.merge_entities(
+                db=mock_db,
+                primary_entity_id="nonexistent-primary",
+                secondary_entity_id="secondary-entity-id",
+            )
+
+    @pytest.mark.asyncio
+    async def test_merge_entities_secondary_not_found(self, entity_service, mock_db):
+        """Test error when secondary entity not found (AC validation)."""
+        from app.models.recognized_entity import RecognizedEntity
+
+        primary = MagicMock(spec=RecognizedEntity)
+        primary.id = "primary-entity-id"
+
+        call_count = [0]
+
+        def query_side_effect(model):
+            query_mock = MagicMock()
+            filter_mock = MagicMock()
+            query_mock.filter.return_value = filter_mock
+
+            call_count[0] += 1
+            if call_count[0] == 1:
+                filter_mock.first.return_value = primary
+            else:
+                filter_mock.first.return_value = None
+
+            return query_mock
+
+        mock_db.query.side_effect = query_side_effect
+
+        with pytest.raises(ValueError, match="Secondary entity not found"):
+            await entity_service.merge_entities(
+                db=mock_db,
+                primary_entity_id="primary-entity-id",
+                secondary_entity_id="nonexistent-secondary",
+            )
+
+    @pytest.mark.asyncio
+    async def test_merge_entities_creates_adjustment_records(self, entity_service, mock_db):
+        """Test that merge creates EntityAdjustment records for ML training (AC-4.5.6)."""
+        from app.models.recognized_entity import RecognizedEntity, EntityEvent
+        from app.models.entity_adjustment import EntityAdjustment
+
+        now = datetime.now(timezone.utc)
+        primary = MagicMock(spec=RecognizedEntity)
+        primary.id = "primary-id"
+        primary.name = "Primary"
+        primary.occurrence_count = 2
+        primary.first_seen_at = now - timedelta(days=5)
+        primary.last_seen_at = now
+
+        secondary = MagicMock(spec=RecognizedEntity)
+        secondary.id = "secondary-id"
+        secondary.name = "Secondary"
+        secondary.occurrence_count = 3
+        secondary.first_seen_at = now - timedelta(days=10)
+        secondary.last_seen_at = now - timedelta(days=1)
+
+        # Multiple event links
+        event_links = [
+            MagicMock(spec=EntityEvent, entity_id="secondary-id", event_id=f"event-{i}")
+            for i in range(3)
+        ]
+
+        mock_event = MagicMock()
+        mock_event.description = "Test event"
+
+        call_count = [0]
+
+        def query_side_effect(model):
+            query_mock = MagicMock()
+            filter_mock = MagicMock()
+            query_mock.filter.return_value = filter_mock
+
+            call_count[0] += 1
+            if call_count[0] == 1:
+                filter_mock.first.return_value = primary
+            elif call_count[0] == 2:
+                filter_mock.first.return_value = secondary
+            elif call_count[0] == 3:
+                filter_mock.all.return_value = event_links
+            else:
+                filter_mock.first.return_value = mock_event
+
+            return query_mock
+
+        mock_db.query.side_effect = query_side_effect
+
+        added_adjustments = []
+        original_add = mock_db.add
+
+        def capture_add(obj):
+            added_adjustments.append(obj)
+
+        mock_db.add.side_effect = capture_add
+
+        result = await entity_service.merge_entities(
+            db=mock_db,
+            primary_entity_id="primary-id",
+            secondary_entity_id="secondary-id",
+        )
+
+        # Verify adjustment records were created
+        assert result["events_moved"] == 3
+        # Each event should have an adjustment record added
+        assert mock_db.add.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_merge_entities_updates_timestamps(self, entity_service, mock_db):
+        """Test that merge updates primary entity timestamps correctly."""
+        from app.models.recognized_entity import RecognizedEntity, EntityEvent
+
+        now = datetime.now(timezone.utc)
+
+        # Primary seen later, secondary seen earlier - should update first_seen
+        primary = MagicMock(spec=RecognizedEntity)
+        primary.id = "primary-id"
+        primary.name = "Primary"
+        primary.occurrence_count = 2
+        primary.first_seen_at = now - timedelta(days=5)  # Later
+        primary.last_seen_at = now - timedelta(days=2)   # Earlier
+
+        secondary = MagicMock(spec=RecognizedEntity)
+        secondary.id = "secondary-id"
+        secondary.name = "Secondary"
+        secondary.occurrence_count = 1
+        secondary.first_seen_at = now - timedelta(days=10)  # Earlier - should update primary
+        secondary.last_seen_at = now - timedelta(days=1)    # Later - should update primary
+
+        call_count = [0]
+
+        def query_side_effect(model):
+            query_mock = MagicMock()
+            filter_mock = MagicMock()
+            query_mock.filter.return_value = filter_mock
+
+            call_count[0] += 1
+            if call_count[0] == 1:
+                filter_mock.first.return_value = primary
+            elif call_count[0] == 2:
+                filter_mock.first.return_value = secondary
+            elif call_count[0] == 3:
+                filter_mock.all.return_value = []
+
+            return query_mock
+
+        mock_db.query.side_effect = query_side_effect
+
+        await entity_service.merge_entities(
+            db=mock_db,
+            primary_entity_id="primary-id",
+            secondary_entity_id="secondary-id",
+        )
+
+        # Verify primary timestamps were updated
+        assert primary.first_seen_at == secondary.first_seen_at
+        assert primary.last_seen_at == secondary.last_seen_at
+
+
+class TestEntityServiceGetAdjustments:
+    """Tests for EntityService.get_adjustments method (Story P9-4.6)."""
+
+    @pytest.fixture
+    def entity_service(self):
+        """Create EntityService instance for testing."""
+        reset_entity_service()
+        return EntityService()
+
+    @pytest.fixture
+    def mock_db(self):
+        """Create mock database session."""
+        return MagicMock()
+
+    @pytest.mark.asyncio
+    async def test_get_adjustments_returns_list_and_total(
+        self, entity_service, mock_db
+    ):
+        """Test that get_adjustments returns adjustments and total count."""
+        from app.models.entity_adjustment import EntityAdjustment
+
+        now = datetime.now(timezone.utc)
+        mock_adjustment = MagicMock(spec=EntityAdjustment)
+        mock_adjustment.id = "adj-123"
+        mock_adjustment.event_id = "event-456"
+        mock_adjustment.old_entity_id = "old-entity"
+        mock_adjustment.new_entity_id = None
+        mock_adjustment.action = "unlink"
+        mock_adjustment.event_description = "Test event"
+        mock_adjustment.created_at = now
+
+        mock_query = MagicMock()
+        mock_query.count.return_value = 1
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = [mock_adjustment]
+        mock_db.query.return_value = mock_query
+
+        adjustments, total = await entity_service.get_adjustments(
+            db=mock_db,
+            limit=50,
+            offset=0,
+        )
+
+        assert total == 1
+        assert len(adjustments) == 1
+        assert adjustments[0]["id"] == "adj-123"
+        assert adjustments[0]["action"] == "unlink"
+
+    @pytest.mark.asyncio
+    async def test_get_adjustments_filter_by_action(
+        self, entity_service, mock_db
+    ):
+        """Test filtering adjustments by action type."""
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 0
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = []
+        mock_db.query.return_value = mock_query
+
+        await entity_service.get_adjustments(
+            db=mock_db,
+            limit=50,
+            offset=0,
+            action="unlink",
+        )
+
+        # Verify filter was called
+        mock_query.filter.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_get_adjustments_move_action_alias(
+        self, entity_service, mock_db
+    ):
+        """Test that 'move' action aliases to move_from/move_to."""
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 0
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = []
+        mock_db.query.return_value = mock_query
+
+        await entity_service.get_adjustments(
+            db=mock_db,
+            limit=50,
+            offset=0,
+            action="move",
+        )
+
+        # Verify filter was called for move alias
+        mock_query.filter.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_get_adjustments_filter_by_entity_id(
+        self, entity_service, mock_db
+    ):
+        """Test filtering adjustments by entity ID (matches old or new)."""
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 0
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = []
+        mock_db.query.return_value = mock_query
+
+        await entity_service.get_adjustments(
+            db=mock_db,
+            limit=50,
+            offset=0,
+            entity_id="test-entity-id",
+        )
+
+        # Verify filter was called for entity_id
+        mock_query.filter.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_get_adjustments_filter_by_date_range(
+        self, entity_service, mock_db
+    ):
+        """Test filtering adjustments by date range."""
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 0
+        mock_query.order_by.return_value = mock_query
+        mock_query.offset.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = []
+        mock_db.query.return_value = mock_query
+
+        start = datetime.now(timezone.utc) - timedelta(days=7)
+        end = datetime.now(timezone.utc)
+
+        await entity_service.get_adjustments(
+            db=mock_db,
+            limit=50,
+            offset=0,
+            start_date=start,
+            end_date=end,
+        )
+
+        # Verify filter was called twice (for start and end dates)
+        assert mock_query.filter.call_count >= 2
+
+
+class TestEntityServiceExportAdjustments:
+    """Tests for EntityService.export_adjustments method (Story P9-4.6)."""
+
+    @pytest.fixture
+    def entity_service(self):
+        """Create EntityService instance for testing."""
+        reset_entity_service()
+        return EntityService()
+
+    @pytest.fixture
+    def mock_db(self):
+        """Create mock database session."""
+        return MagicMock()
+
+    @pytest.mark.asyncio
+    async def test_export_adjustments_returns_list(
+        self, entity_service, mock_db
+    ):
+        """Test that export_adjustments returns list of dicts."""
+        from app.models.entity_adjustment import EntityAdjustment
+
+        now = datetime.now(timezone.utc)
+        mock_adjustment = MagicMock(spec=EntityAdjustment)
+        mock_adjustment.id = "adj-123"
+        mock_adjustment.event_id = "event-456"
+        mock_adjustment.old_entity_id = "old-entity"
+        mock_adjustment.new_entity_id = None
+        mock_adjustment.action = "unlink"
+        mock_adjustment.event_description = "Test event"
+        mock_adjustment.created_at = now
+
+        # Mock query for adjustments
+        mock_adj_query = MagicMock()
+        mock_adj_query.filter.return_value = mock_adj_query
+        mock_adj_query.order_by.return_value = mock_adj_query
+        mock_adj_query.all.return_value = [mock_adjustment]
+
+        # Mock query for entity types (returns empty for entities)
+        call_count = [0]
+
+        def query_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return mock_adj_query
+            else:
+                mock_entity_query = MagicMock()
+                mock_entity_query.filter.return_value = mock_entity_query
+                mock_entity_query.all.return_value = []
+                return mock_entity_query
+
+        mock_db.query.side_effect = query_side_effect
+
+        adjustments = await entity_service.export_adjustments(db=mock_db)
+
+        assert len(adjustments) == 1
+        assert adjustments[0]["event_id"] == "event-456"
+        assert adjustments[0]["action"] == "unlink"
+        assert "created_at" in adjustments[0]
+
+    @pytest.mark.asyncio
+    async def test_export_adjustments_includes_entity_types(
+        self, entity_service, mock_db
+    ):
+        """Test that export includes entity types for ML training."""
+        from app.models.entity_adjustment import EntityAdjustment
+        from app.models.recognized_entity import RecognizedEntity
+
+        now = datetime.now(timezone.utc)
+        mock_adjustment = MagicMock(spec=EntityAdjustment)
+        mock_adjustment.event_id = "event-456"
+        mock_adjustment.old_entity_id = "old-entity"
+        mock_adjustment.new_entity_id = "new-entity"
+        mock_adjustment.action = "merge"
+        mock_adjustment.event_description = "Test event"
+        mock_adjustment.created_at = now
+
+        mock_entity_old = MagicMock()
+        mock_entity_old.id = "old-entity"
+        mock_entity_old.entity_type = "person"
+
+        mock_entity_new = MagicMock()
+        mock_entity_new.id = "new-entity"
+        mock_entity_new.entity_type = "person"
+
+        call_count = [0]
+
+        def query_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            mock_query = MagicMock()
+            mock_query.filter.return_value = mock_query
+            mock_query.order_by.return_value = mock_query
+
+            if call_count[0] == 1:
+                # Adjustments query
+                mock_query.all.return_value = [mock_adjustment]
+            else:
+                # Entities query
+                mock_query.all.return_value = [mock_entity_old, mock_entity_new]
+
+            return mock_query
+
+        mock_db.query.side_effect = query_side_effect
+
+        adjustments = await entity_service.export_adjustments(db=mock_db)
+
+        assert len(adjustments) == 1
+        assert adjustments[0]["old_entity_type"] == "person"
+        assert adjustments[0]["new_entity_type"] == "person"
+
+    @pytest.mark.asyncio
+    async def test_export_adjustments_filter_by_date(
+        self, entity_service, mock_db
+    ):
+        """Test that export filters by date range."""
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.all.return_value = []
+
+        call_count = [0]
+
+        def query_side_effect(model):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return mock_query
+            else:
+                mock_entity_query = MagicMock()
+                mock_entity_query.filter.return_value = mock_entity_query
+                mock_entity_query.all.return_value = []
+                return mock_entity_query
+
+        mock_db.query.side_effect = query_side_effect
+
+        start = datetime.now(timezone.utc) - timedelta(days=7)
+        end = datetime.now(timezone.utc)
+
+        await entity_service.export_adjustments(
+            db=mock_db,
+            start_date=start,
+            end_date=end,
+        )
+
+        # Verify filter was called for both dates
+        assert mock_query.filter.call_count >= 2

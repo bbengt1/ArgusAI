@@ -155,6 +155,9 @@ class EventResponse(BaseModel):
     frame_timestamps: Optional[List[float]] = Field(None, description="Timestamps in seconds for each key frame")
     # Story P4-3.3: Recurring Visitor Detection
     matched_entity: Optional["MatchedEntitySummary"] = Field(None, description="Matched recurring entity, if any")
+    # Story P9-4.4: Simplified entity fields for event card display
+    entity_id: Optional[str] = Field(None, description="UUID of linked entity (for assignment UI)")
+    entity_name: Optional[str] = Field(None, description="Name of linked entity (for display)")
     # Story P4-5.1: User Feedback
     feedback: Optional[FeedbackResponse] = Field(None, description="User feedback on this event's description")
     # Story P6-3.2: Audio event detection

@@ -1,0 +1,156 @@
+<story-context id="p9-4-1" v="1.0">
+  <metadata>
+    <epicId>P9-4</epicId>
+    <storyId>4.1</storyId>
+    <title>Improve Vehicle Entity Extraction Logic</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-4-1-improve-vehicle-entity-extraction-logic.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system processing event descriptions</asA>
+    <iWant>extract detailed vehicle attributes (color, make, model) from AI descriptions</iWant>
+    <soThat>vehicles are properly separated into distinct entities based on their identifying characteristics</soThat>
+    <tasks>
+      <task id="1">Add vehicle-specific fields to RecognizedEntity model
+        <subtask>Add vehicle_color, vehicle_make, vehicle_model columns</subtask>
+        <subtask>Add vehicle_signature indexed column for matching</subtask>
+        <subtask>Create Alembic migration</subtask>
+        <subtask>Add display_name property</subtask>
+      </task>
+      <task id="2">Implement vehicle extraction logic in entity_service.py
+        <subtask>Define VEHICLE_COLORS, VEHICLE_MAKES, VEHICLE_MODEL_PATTERNS constants</subtask>
+        <subtask>Create extract_vehicle_entity() function</subtask>
+        <subtask>Build signature from color-make-model parts</subtask>
+        <subtask>Validate minimum data requirements</subtask>
+      </task>
+      <task id="3">Integrate vehicle extraction into entity matching flow
+        <subtask>Update match_or_create_entity() to check vehicle signature first</subtask>
+        <subtask>Add signature-based matching for vehicles</subtask>
+        <subtask>Store vehicle fields when creating new vehicle entities</subtask>
+      </task>
+      <task id="4">Write tests
+        <subtask>Unit tests for extract_vehicle_entity()</subtask>
+        <subtask>Unit tests for signature generation</subtask>
+        <subtask>Integration tests for vehicle entity matching by signature</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.1.1">Given description "A white Toyota Camry pulled into the driveway", when extracted, then color="white", make="toyota", model="camry"</criterion>
+    <criterion id="AC-4.1.2">Given description "Black Ford F-150 parked on street", when extracted, then signature="black-ford-f150"</criterion>
+    <criterion id="AC-4.1.3">Given two descriptions of same vehicle signature, when matched, then linked to same entity</criterion>
+    <criterion id="AC-4.1.4">Given two different vehicle signatures, when matched, then create separate entities</criterion>
+    <criterion id="AC-4.1.5">Given vehicle with only color mentioned, when extracted, then entity not created (insufficient data)</criterion>
+    <criterion id="AC-4.1.6">Given vehicle with make and model but no color, when extracted, then entity created with partial signature</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P9-4.md" title="Epic P9-4 Technical Specification" section="P9-4.1: Improve Vehicle Entity Extraction Logic">
+        Contains detailed acceptance criteria, vehicle extraction patterns (VEHICLE_COLORS, VEHICLE_MAKES, VEHICLE_MODEL_PATTERNS), data models, and API contracts for entity management.
+      </doc>
+      <doc path="docs/epics-phase9.md" title="Phase 9 Epics" section="Story P9-4.1">
+        Provides user story, acceptance criteria, and technical notes including regex patterns for vehicle extraction.
+      </doc>
+    </docs>
+
+    <code>
+      <file path="backend/app/models/recognized_entity.py" kind="model" symbol="RecognizedEntity" reason="Target model to add vehicle_color, vehicle_make, vehicle_model, vehicle_signature fields"/>
+      <file path="backend/app/models/recognized_entity.py" kind="model" symbol="EntityEvent" reason="Junction table linking entities to events - may need updates for vehicle metadata"/>
+      <file path="backend/app/services/entity_service.py" kind="service" symbol="EntityService" reason="Core entity matching service - add extract_vehicle_entity() and integrate signature-based matching"/>
+      <file path="backend/app/services/entity_service.py" kind="service" symbol="match_or_create_entity" lines="144-250" reason="Main matching function to update with vehicle signature matching priority"/>
+      <file path="backend/app/services/vehicle_matching_service.py" kind="service" symbol="VehicleMatchingService" reason="EXISTING vehicle extraction logic in _extract_vehicle_characteristics() - REUSE patterns from here"/>
+      <file path="backend/app/services/vehicle_matching_service.py" kind="service" symbol="VEHICLE_COLORS" lines="38-42" reason="Existing color list - can be moved to entity_service.py or shared constants"/>
+      <file path="backend/app/services/vehicle_matching_service.py" kind="service" symbol="VEHICLE_MAKES" lines="45-60" reason="Existing make list - can be moved to entity_service.py or shared constants"/>
+      <file path="backend/app/services/vehicle_matching_service.py" kind="service" symbol="COMMON_MODELS" lines="75-94" reason="Existing model patterns - enhance for P9-4.1"/>
+      <file path="backend/app/services/vehicle_matching_service.py" kind="service" symbol="_extract_vehicle_characteristics" lines="190-347" reason="EXISTING extraction function with color/make/model/signature logic - use as reference or refactor"/>
+      <file path="backend/tests/test_services/test_entity_service.py" kind="test" symbol="TestEntityService" reason="Add vehicle extraction tests here"/>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="sqlalchemy" version="^2.0">ORM for database models</package>
+        <package name="alembic" version="*">Database migrations</package>
+        <package name="pytest" version="*">Testing framework</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">RecognizedEntity model must remain backward compatible - new columns should be nullable</constraint>
+    <constraint type="architecture">Vehicle signature matching should take priority over embedding matching for vehicles with clear descriptions</constraint>
+    <constraint type="architecture">Reuse existing VEHICLE_COLORS, VEHICLE_MAKES, COMMON_MODELS from vehicle_matching_service.py - consider moving to shared constants</constraint>
+    <constraint type="performance">Entity extraction should complete in under 50ms per description</constraint>
+    <constraint type="data">Minimum data requirement: color+make OR make+model for entity creation</constraint>
+    <constraint type="naming">vehicle_signature format: lowercase, hyphen-separated (e.g., "white-toyota-camry")</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="RecognizedEntity" kind="sqlalchemy-model" path="backend/app/models/recognized_entity.py">
+      <signature>
+        class RecognizedEntity(Base):
+            # Existing fields
+            id = Column(String, primary_key=True)
+            entity_type = Column(String(50))  # "person", "vehicle", "unknown"
+            name = Column(String(255), nullable=True)
+            reference_embedding = Column(Text)
+            entity_metadata = Column(Text, nullable=True)  # JSON for additional data
+
+            # NEW vehicle-specific fields (Story P9-4.1)
+            vehicle_color = Column(String(50), nullable=True)
+            vehicle_make = Column(String(50), nullable=True)
+            vehicle_model = Column(String(50), nullable=True)
+            vehicle_signature = Column(String(150), nullable=True, index=True)
+
+            @property
+            def display_name(self) -> str:
+                if self.name:
+                    return self.name
+                if self.entity_type == "vehicle" and self.vehicle_signature:
+                    return self.vehicle_signature.replace("-", " ").title()
+                return f"{self.entity_type.title()} #{str(self.id)[:8]}"
+      </signature>
+    </interface>
+
+    <interface name="extract_vehicle_entity" kind="function" path="backend/app/services/entity_service.py">
+      <signature>
+        def extract_vehicle_entity(description: str) -> Optional[dict]:
+            """Extract vehicle details from AI description.
+
+            Args:
+                description: AI-generated event description
+
+            Returns:
+                Dictionary with keys: color, make, model, signature
+                Or None if insufficient data (need color+make OR make+model)
+            """
+      </signature>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend uses pytest with fixtures. Tests in backend/tests/test_services/.
+      Use mock database sessions for unit tests, real DB for integration.
+      Follow existing patterns in test_entity_service.py.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_entity_service.py</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-4.1.1">Test extract_vehicle_entity with "white Toyota Camry" returns correct color, make, model</idea>
+      <idea ac="AC-4.1.2">Test signature generation for "Black Ford F-150" produces "black-ford-f150"</idea>
+      <idea ac="AC-4.1.3">Test two events with same signature link to same entity</idea>
+      <idea ac="AC-4.1.4">Test different signatures create separate entities</idea>
+      <idea ac="AC-4.1.5">Test color-only descriptions return None (insufficient data)</idea>
+      <idea ac="AC-4.1.6">Test make+model without color creates entity with partial signature</idea>
+      <idea>Test case-insensitive matching (TOYOTA == toyota)</idea>
+      <idea>Test F-150 vs F150 normalization</idea>
+      <idea>Test partial descriptions like "a truck" without make/model</idea>
+    </ideas>
+  </tests>
+</story-context>

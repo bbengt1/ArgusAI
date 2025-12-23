@@ -1,0 +1,162 @@
+<story-context id="p9-4-2" v="1.0">
+  <metadata>
+    <epicId>P9-4</epicId>
+    <storyId>4.2</storyId>
+    <title>Build Entity Event List View</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-22</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-4-2-build-entity-event-list-view.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user viewing an entity's detail page</asA>
+    <iWant>see all events linked to that entity with pagination</iWant>
+    <soThat>I can review the full history of occurrences and verify correct entity assignments</soThat>
+    <tasks>
+      <task id="1">Create entity events API endpoint
+        <subtask>Add GET /api/v1/context/entities/{id}/events endpoint</subtask>
+        <subtask>Add pagination parameters (page, limit with default 20)</subtask>
+        <subtask>Add sorting (newest first by default)</subtask>
+        <subtask>Return total count for pagination UI</subtask>
+      </task>
+      <task id="2">Create EntityEventList component
+        <subtask>Create new EntityEventList.tsx component</subtask>
+        <subtask>Display event thumbnail, description snippet, date</subtask>
+        <subtask>Add "No events linked" empty state</subtask>
+        <subtask>Make events clickable to navigate to event detail</subtask>
+      </task>
+      <task id="3">Add pagination to EntityEventList
+        <subtask>Create useEntityEvents hook with pagination</subtask>
+        <subtask>Add pagination controls</subtask>
+        <subtask>Show current page info</subtask>
+      </task>
+      <task id="4">Integrate into EntityDetail component
+        <subtask>Replace existing recent_events rendering with EntityEventList</subtask>
+        <subtask>Update section header to show total count</subtask>
+      </task>
+      <task id="5">Write tests</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.2.1">Given entity detail page, when viewing, then "Events" section shows all linked events</criterion>
+    <criterion id="AC-4.2.2">Given entity with 50 events, when viewing list, then paginated (20 per page)</criterion>
+    <criterion id="AC-4.2.3">Given event in list, when viewing, then shows thumbnail, description snippet, date</criterion>
+    <criterion id="AC-4.2.4">Given event list, when sorted, then newest first by default</criterion>
+    <criterion id="AC-4.2.5">Given entity with 0 events, when viewing, then "No events linked" message shown</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P9-4.md" title="Epic P9-4 Technical Specification" section="P9-4.2: Build Entity Event List View">
+        Contains API response structure, acceptance criteria, and workflow details for entity event management.
+      </doc>
+    </docs>
+
+    <code>
+      <file path="backend/app/api/v1/context.py" kind="api" symbol="router" lines="764-830" reason="Existing entity detail endpoint - add new /entities/{id}/events endpoint nearby"/>
+      <file path="backend/app/api/v1/context.py" kind="api" symbol="EventSummaryForEntity" reason="Existing response model for events in entity detail"/>
+      <file path="backend/app/api/v1/context.py" kind="api" symbol="EntityDetailResponse" reason="Current entity detail response with recent_events"/>
+      <file path="backend/app/services/entity_service.py" kind="service" symbol="EntityService" reason="Add get_entity_events method for paginated event fetching"/>
+      <file path="frontend/components/entities/EntityDetail.tsx" kind="component" symbol="EntityDetail" reason="Replace recent_events section with new EntityEventList component"/>
+      <file path="frontend/hooks/useEntities.ts" kind="hook" symbol="useEntity" reason="Reference for creating useEntityEvents hook"/>
+      <file path="frontend/types/entity.ts" kind="types" symbol="IEventSummaryForEntity" reason="Type for event items in list"/>
+      <file path="frontend/components/ui/scroll-area.tsx" kind="component" reason="Used for scrollable event list"/>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="fastapi" version="^0.115">Web framework for API</package>
+        <package name="sqlalchemy" version="^2.0">ORM for database queries</package>
+      </python>
+      <frontend>
+        <package name="@tanstack/react-query" version="^5">Data fetching with pagination</package>
+        <package name="lucide-react" version="*">Icons for UI</package>
+      </frontend>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="api">Entity events endpoint should be under /api/v1/context/entities/{id}/events to match existing pattern</constraint>
+    <constraint type="performance">Entity events list should load in under 300ms (paginated, 20 per page)</constraint>
+    <constraint type="ux">Events should be sorted newest first by default</constraint>
+    <constraint type="ux">Empty state should show "No events linked to this entity" message</constraint>
+    <constraint type="data">Pagination should default to 20 events per page, max 50</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="EntityEventsResponse" kind="pydantic-model" path="backend/app/api/v1/context.py">
+      <signature>
+        class EntityEventsResponse(BaseModel):
+            entity_id: str
+            events: List[EventSummaryForEntity]
+            total: int
+            page: int
+            limit: int
+            has_more: bool
+      </signature>
+    </interface>
+
+    <interface name="get_entity_events" kind="api-endpoint" path="backend/app/api/v1/context.py">
+      <signature>
+        @router.get("/entities/{entity_id}/events", response_model=EntityEventsResponse)
+        async def get_entity_events(
+            entity_id: str,
+            page: int = Query(default=1, ge=1),
+            limit: int = Query(default=20, ge=1, le=50),
+            db: Session = Depends(get_db),
+            entity_service: EntityService = Depends(get_entity_service),
+        ):
+            """Get paginated events for an entity, sorted newest first."""
+      </signature>
+    </interface>
+
+    <interface name="useEntityEvents" kind="hook" path="frontend/hooks/useEntities.ts">
+      <signature>
+        export function useEntityEvents(
+            entityId: string | null,
+            page: number = 1,
+            limit: number = 20
+        ): UseQueryResult<EntityEventsResponse> {
+            // Fetch paginated events for entity
+        }
+      </signature>
+    </interface>
+
+    <interface name="EntityEventList" kind="component" path="frontend/components/entities/EntityEventList.tsx">
+      <signature>
+        interface EntityEventListProps {
+            entityId: string;
+            onEventClick?: (eventId: string) => void;
+        }
+
+        export function EntityEventList({ entityId, onEventClick }: EntityEventListProps) {
+            // Render paginated event list with thumbnails, descriptions, dates
+            // Show empty state for 0 events
+            // Include pagination controls
+        }
+      </signature>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Backend uses pytest. Frontend uses vitest with React Testing Library.
+      Follow existing patterns in test files.
+    </standards>
+    <locations>
+      <location>backend/tests/test_api/test_context.py</location>
+      <location>frontend/components/entities/__tests__/EntityEventList.test.tsx</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-4.2.1">Test endpoint returns all events linked to entity</idea>
+      <idea ac="AC-4.2.2">Test pagination with limit=20 returns correct page</idea>
+      <idea ac="AC-4.2.3">Test event items include thumbnail_url, description, timestamp</idea>
+      <idea ac="AC-4.2.4">Test events sorted by timestamp descending</idea>
+      <idea ac="AC-4.2.5">Test empty entity returns empty events array with total=0</idea>
+      <idea>Test has_more flag correctly indicates more pages</idea>
+      <idea>Test page out of range returns empty events</idea>
+    </ideas>
+  </tests>
+</story-context>

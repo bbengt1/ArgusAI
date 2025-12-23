@@ -1,15 +1,15 @@
 /**
- * EntityDetail component - modal/dialog showing entity info and recent events (Story P4-3.6)
+ * EntityDetail component - modal/dialog showing entity info and events (Story P4-3.6, P9-4.2)
  * AC6: Click entity opens detail view
  * AC7: Shows occurrence history with thumbnails and timestamps
  * AC14: Shows thumbnail from most recent event
+ * P9-4.2: Shows paginated event list
  */
 
 'use client';
 
 import { formatDistanceToNow } from 'date-fns';
-import Link from 'next/link';
-import { User, Car, HelpCircle, ExternalLink, Trash2 } from 'lucide-react';
+import { User, Car, HelpCircle, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -19,11 +19,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useEntity } from '@/hooks/useEntities';
+import { useEntity, useEntityEvents } from '@/hooks/useEntities';
 import { EntityNameEdit } from './EntityNameEdit';
+import { EntityEventList } from './EntityEventList';
 import { cn } from '@/lib/utils';
-import type { IEntity, IEventSummaryForEntity } from '@/types/entity';
+import type { IEntity } from '@/types/entity';
 
 interface EntityDetailProps {
   /** The entity to display (basic info from list) */
@@ -187,69 +187,14 @@ export function EntityDetail({
               </div>
             </div>
 
-            {/* Recent Events */}
-            <div className="flex-1 overflow-hidden pt-4">
-              <h4 className="font-medium text-sm mb-3">
-                Recent Events ({entityDetail.recent_events.length})
+            {/* Events List (Story P9-4.2) */}
+            <div className="flex-1 overflow-hidden pt-4 flex flex-col min-h-0">
+              <h4 className="font-medium text-sm mb-3 flex-shrink-0">
+                Events ({entityDetail.occurrence_count})
               </h4>
-
-              {entityDetail.recent_events.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No events linked to this entity.</p>
-              ) : (
-                <ScrollArea className="h-[300px]">
-                  <div className="space-y-3 pr-4">
-                    {entityDetail.recent_events.map((event: IEventSummaryForEntity) => {
-                      const eventThumbnail = event.thumbnail_url
-                        ? event.thumbnail_url.startsWith('http')
-                          ? event.thumbnail_url
-                          : `${apiUrl}${event.thumbnail_url}`
-                        : null;
-                      const eventDate = parseUTCTimestamp(event.timestamp);
-
-                      return (
-                        <Link
-                          key={event.id}
-                          href={`/events?id=${event.id}`}
-                          className="flex gap-3 p-2 rounded-lg hover:bg-muted transition-colors group"
-                        >
-                          {/* Event thumbnail */}
-                          <div className="w-20 h-14 flex-shrink-0 bg-gray-100 rounded overflow-hidden">
-                            {eventThumbnail ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={eventThumbnail}
-                                alt="Event thumbnail"
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                                <HelpCircle className="w-6 h-6 text-gray-400" />
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Event info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm line-clamp-2">{event.description}</p>
-                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                              <time dateTime={event.timestamp}>
-                                {formatDistanceToNow(eventDate, { addSuffix: true })}
-                              </time>
-                              <span>•</span>
-                              <span>
-                                {Math.round(event.similarity_score * 100)}% match
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Link indicator */}
-                          <ExternalLink className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              )}
+              <div className="flex-1 min-h-0">
+                <EntityEventList entityId={entityDetail.id} />
+              </div>
             </div>
           </div>
         )}

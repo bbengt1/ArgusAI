@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context story_key="p9-4-5-implement-entity-merge" generated="2025-12-22">
+  <story-summary>
+    <title>P9-4.5: Implement Entity Merge</title>
+    <objective>Allow users to merge duplicate entities together so the same person/vehicle isn't split across multiple entities.</objective>
+    <acceptance-criteria>
+      <ac id="4.5.1">Given entities list, when viewing, then checkboxes for multi-select are available</ac>
+      <ac id="4.5.2">Given two entities selected, when viewing, then "Merge" button is enabled</ac>
+      <ac id="4.5.3">Given I click Merge, when dialog opens, then shows both entities with event counts</ac>
+      <ac id="4.5.4">Given merge dialog, when viewing, then can choose which entity to keep</ac>
+      <ac id="4.5.5">Given I confirm merge, when complete, then all events moved to primary entity</ac>
+      <ac id="4.5.6">Given I confirm merge, when complete, then secondary entity deleted</ac>
+      <ac id="4.5.7">Given I confirm merge, when complete, then toast "Entities merged successfully"</ac>
+      <ac id="4.5.8">Given merge with 50 events, when complete, then operation succeeds (performance)</ac>
+    </acceptance-criteria>
+  </story-summary>
+
+  <architecture-context>
+    <api-design>
+      <endpoint method="POST" path="/api/v1/context/entities/merge">
+        <description>Merge two entities into one - moves all events to primary entity and deletes secondary</description>
+        <request>
+          <field name="primary_entity_id" type="string" required="true">Entity UUID to keep</field>
+          <field name="secondary_entity_id" type="string" required="true">Entity UUID to merge and delete</field>
+        </request>
+        <response>
+          <field name="success" type="boolean">Operation status</field>
+          <field name="merged_entity_id" type="string">UUID of the primary entity</field>
+          <field name="events_moved" type="integer">Number of events transferred</field>
+          <field name="deleted_entity_id" type="string">UUID of deleted secondary entity</field>
+          <field name="message" type="string">Human-readable message</field>
+        </response>
+      </endpoint>
+    </api-design>
+
+    <data-models>
+      <model name="EntityAdjustment">
+        <description>Tracks manual entity corrections for ML training</description>
+        <field name="action">Supports "merge" action type already</field>
+        <field name="old_entity_id">Secondary entity ID (will be deleted)</field>
+        <field name="new_entity_id">Primary entity ID (keeps events)</field>
+        <field name="event_description">Event description snapshot for training</field>
+      </model>
+    </data-models>
+  </architecture-context>
+
+  <existing-code>
+    <file path="backend/app/services/entity_service.py">
+      <description>Entity management service with existing methods for entity operations</description>
+      <relevant-methods>
+        <method name="unlink_event">Unlinks event from entity, creates EntityAdjustment record</method>
+        <method name="assign_event">Assigns event to entity, handles moves, creates EntityAdjustment</method>
+        <method name="get_entity">Retrieves entity with optional events</method>
+        <method name="get_entity_events_paginated">Gets paginated events for entity</method>
+        <method name="delete_entity">Deletes entity and associations</method>
+      </relevant-methods>
+      <patterns>
+        <pattern>Occurrence count updates when events are linked/unlinked</pattern>
+        <pattern>EntityAdjustment records created for ML training</pattern>
+        <pattern>Database transactions for atomic operations</pattern>
+      </patterns>
+    </file>
+
+    <file path="backend/app/api/v1/context.py" lines="2466">
+      <description>Context API router with entity endpoints</description>
+      <relevant-endpoints>
+        <endpoint>POST /context/events/{event_id}/entity - assigns event to entity</endpoint>
+        <endpoint>DELETE /context/entities/{entity_id}/events/{event_id} - unlinks event</endpoint>
+        <endpoint>GET /context/entities - lists entities</endpoint>
+        <endpoint>GET /context/entities/{entity_id} - entity detail</endpoint>
+      </relevant-endpoints>
+    </file>
+
+    <file path="backend/app/models/entity_adjustment.py">
+      <description>EntityAdjustment model already supports "merge" action type</description>
+      <code-snippet>
+action = Column(String(20), nullable=False, doc="Type of adjustment: unlink, assign, move, merge")
+      </code-snippet>
+    </file>
+
+    <file path="frontend/hooks/useEntities.ts">
+      <description>React Query hooks for entity management</description>
+      <relevant-hooks>
+        <hook name="useEntities">Fetches paginated entity list</hook>
+        <hook name="useEntity">Fetches single entity detail</hook>
+        <hook name="useUpdateEntity">Mutation for entity updates</hook>
+        <hook name="useDeleteEntity">Mutation for entity deletion</hook>
+        <hook name="useUnlinkEvent">Mutation for unlinking events</hook>
+        <hook name="useAssignEventToEntity">Mutation for assigning events</hook>
+      </relevant-hooks>
+      <patterns>
+        <pattern>Query invalidation on mutations: ['entities'], ['entities', entityId], ['entities', entityId, 'events']</pattern>
+      </patterns>
+    </file>
+
+    <file path="frontend/app/entities/page.tsx">
+      <description>Entities page component</description>
+      <structure>
+        <state>selectedEntity - for detail view</state>
+        <state>entityToDelete - for delete dialog</state>
+        <component>EntityList - main list with filtering</component>
+        <component>EntityDetail - detail modal</component>
+        <component>DeleteEntityDialog - delete confirmation</component>
+      </structure>
+      <extension-points>
+        <point>Add selectedEntityIds state for multi-select</point>
+        <point>Add EntityMergeDialog component</point>
+      </extension-points>
+    </file>
+
+    <file path="frontend/components/entities/EntityList.tsx" lines="333">
+      <description>Filterable, paginated entity list component</description>
+      <structure>
+        <component>EntityCard - individual entity display with onClick handler</component>
+        <feature>Search, filter by type, named-only toggle</feature>
+        <feature>Pagination controls</feature>
+      </structure>
+      <extension-points>
+        <point>Pass selectable prop and selection state to EntityCard</point>
+        <point>Add "Merge" button in filter row when 2 entities selected</point>
+      </extension-points>
+    </file>
+
+    <file path="frontend/components/entities/EntityCard.tsx">
+      <description>Individual entity card with thumbnail, badges, and actions</description>
+      <structure>
+        <visual>Thumbnail section with entity type badge</visual>
+        <visual>Name, occurrence count, timestamps</visual>
+        <action>Add Alert button</action>
+      </structure>
+      <extension-points>
+        <point>Add checkbox for selection mode</point>
+        <point>Add visual highlight when selected</point>
+      </extension-points>
+    </file>
+
+    <file path="frontend/components/entities/DeleteEntityDialog.tsx">
+      <description>Confirmation dialog pattern to follow for EntityMergeDialog</description>
+      <pattern>AlertDialog from Radix with destructive action styling</pattern>
+    </file>
+  </existing-code>
+
+  <implementation-guidance>
+    <task-1 title="Create merge entities API endpoint">
+      <file>backend/app/api/v1/context.py</file>
+      <steps>
+        <step>Add MergeEntitiesRequest and MergeEntitiesResponse Pydantic models</step>
+        <step>Add POST /context/entities/merge endpoint</step>
+        <step>Validate both entities exist and are not the same</step>
+        <step>Call entity_service.merge_entities()</step>
+      </steps>
+    </task-1>
+
+    <task-2 title="Add merge_entities method to EntityService">
+      <file>backend/app/services/entity_service.py</file>
+      <steps>
+        <step>Implement merge_entities(db, primary_entity_id, secondary_entity_id)</step>
+        <step>Use database transaction for atomicity</step>
+        <step>Get all events linked to secondary entity</step>
+        <step>Update each event's entity_id to primary entity</step>
+        <step>Create EntityAdjustment record for each moved event with action="merge"</step>
+        <step>Update primary.occurrence_count += secondary.occurrence_count</step>
+        <step>Delete secondary entity</step>
+        <step>Return count of events moved</step>
+      </steps>
+      <code-pattern>
+async def merge_entities(
+    self,
+    db: Session,
+    primary_entity_id: str,
+    secondary_entity_id: str,
+) -> dict:
+    """Merge secondary entity into primary, moving all events."""
+    # Transaction ensures atomicity
+    with db.begin_nested():
+        # Get events from secondary
+        events = db.query(Event).filter(Event.entity_id == secondary_entity_id).all()
+
+        # Move each event and create adjustment record
+        for event in events:
+            event.entity_id = primary_entity_id
+            adjustment = EntityAdjustment(
+                event_id=event.id,
+                old_entity_id=secondary_entity_id,
+                new_entity_id=primary_entity_id,
+                action="merge",
+                event_description=event.description,
+            )
+            db.add(adjustment)
+
+        # Update occurrence counts
+        primary = db.query(RecognizedEntity).get(primary_entity_id)
+        secondary = db.query(RecognizedEntity).get(secondary_entity_id)
+        primary.occurrence_count += secondary.occurrence_count
+
+        # Delete secondary entity
+        db.delete(secondary)
+        db.commit()
+
+    return {"events_moved": len(events)}
+      </code-pattern>
+    </task-2>
+
+    <task-3 title="Add useMergeEntities hook">
+      <file>frontend/hooks/useEntities.ts</file>
+      <steps>
+        <step>Add MergeEntitiesRequest and MergeEntitiesResponse types</step>
+        <step>Implement useMergeEntities mutation hook</step>
+        <step>On success, invalidate: ['entities'], ['entities', primaryId], ['entities', secondaryId]</step>
+      </steps>
+      <code-pattern>
+export interface MergeEntitiesResponse {
+  success: boolean;
+  merged_entity_id: string;
+  events_moved: number;
+  deleted_entity_id: string;
+  message: string;
+}
+
+export function useMergeEntities() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ primaryEntityId, secondaryEntityId }: {
+      primaryEntityId: string;
+      secondaryEntityId: string;
+    }): Promise&lt;MergeEntitiesResponse&gt; => {
+      const response = await fetch(
+        `${API_URL}/api/v1/context/entities/merge`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            primary_entity_id: primaryEntityId,
+            secondary_entity_id: secondaryEntityId,
+          }),
+        }
+      );
+      if (!response.ok) throw new Error('Failed to merge entities');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['entities'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+}
+      </code-pattern>
+    </task-3>
+
+    <task-4 title="Add selection state to EntitiesPage">
+      <file>frontend/app/entities/page.tsx</file>
+      <steps>
+        <step>Add selectedEntityIds state as Set&lt;string&gt;</step>
+        <step>Add toggleEntitySelection handler</step>
+        <step>Pass selection props to EntityList</step>
+        <step>Add EntityMergeDialog component integration</step>
+      </steps>
+    </task-4>
+
+    <task-5 title="Update EntityList for multi-select">
+      <file>frontend/components/entities/EntityList.tsx</file>
+      <steps>
+        <step>Accept selectable, selectedIds, onSelectionChange props</step>
+        <step>Show "Merge" button when exactly 2 entities selected</step>
+        <step>Pass selection state to EntityCard components</step>
+      </steps>
+    </task-5>
+
+    <task-6 title="Update EntityCard for selection">
+      <file>frontend/components/entities/EntityCard.tsx</file>
+      <steps>
+        <step>Accept selectable, isSelected, onSelect props</step>
+        <step>Add Checkbox component when selectable mode is on</step>
+        <step>Add visual highlight (border/bg) when selected</step>
+        <step>Handle checkbox click to toggle selection</step>
+      </steps>
+    </task-6>
+
+    <task-7 title="Create EntityMergeDialog component">
+      <file>frontend/components/entities/EntityMergeDialog.tsx (NEW)</file>
+      <steps>
+        <step>Use AlertDialog from Radix UI</step>
+        <step>Display both entities side-by-side with thumbnails</step>
+        <step>Show event counts for each entity</step>
+        <step>Add radio buttons to select which entity to keep</step>
+        <step>Default to entity with higher occurrence_count</step>
+        <step>Show warning about irreversibility</step>
+        <step>Handle confirm with useMergeEntities mutation</step>
+        <step>Show success toast on completion</step>
+      </steps>
+      <ui-pattern>
+AlertDialog
+  AlertDialogContent
+    AlertDialogHeader
+      AlertDialogTitle "Merge Entities"
+      AlertDialogDescription "Select which entity to keep..."
+
+    div.grid.grid-cols-2.gap-4
+      EntityPreview entity1 isSelected={primary === entity1.id}
+      EntityPreview entity2 isSelected={primary === entity2.id}
+
+    AlertDialogFooter
+      AlertDialogCancel
+      AlertDialogAction onClick={handleMerge} className="bg-destructive"
+      </ui-pattern>
+    </task-7>
+
+    <task-8 title="Write backend tests">
+      <file>backend/tests/test_services/test_entity_service_merge.py (NEW)</file>
+      <tests>
+        <test>test_merge_entities_moves_all_events</test>
+        <test>test_merge_entities_creates_adjustment_records</test>
+        <test>test_merge_entities_updates_occurrence_count</test>
+        <test>test_merge_entities_deletes_secondary</test>
+        <test>test_merge_entities_performance_50_events</test>
+        <test>test_merge_entities_not_found_errors</test>
+        <test>test_merge_entities_same_entity_error</test>
+      </tests>
+    </task-8>
+  </implementation-guidance>
+
+  <references>
+    <doc path="docs/sprint-artifacts/tech-spec-epic-P9-4.md" section="P9-4.5"/>
+    <doc path="docs/epics-phase9.md" section="Story P9-4.5"/>
+    <doc path="docs/sprint-artifacts/p9-4-4-implement-event-entity-assignment.md"/>
+    <doc path="docs/sprint-artifacts/p9-4-3-implement-event-entity-unlinking.md"/>
+  </references>
+</story-context>

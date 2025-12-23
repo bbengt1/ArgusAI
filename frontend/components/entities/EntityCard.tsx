@@ -3,16 +3,18 @@
  * Shows thumbnail, name, type badge, occurrence count, and timestamps
  * Story P7-4.2: Add "Add Alert" button (AC3, AC4)
  * Story P7-4.3: Open EntityAlertModal when "Add Alert" clicked (AC1)
+ * Story P9-4.5: Add checkbox for multi-select merge functionality
  */
 
 'use client';
 
 import { memo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { User, Car, HelpCircle, Bell } from 'lucide-react';
+import { User, Car, HelpCircle, Bell, Check } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { EntityAlertModal } from './EntityAlertModal';
 import type { IEntity } from '@/types/entity';
@@ -22,6 +24,14 @@ interface EntityCardProps {
   /** Thumbnail URL from the most recent event */
   thumbnailUrl?: string | null;
   onClick: () => void;
+  /** Story P9-4.5: Whether selection mode is enabled */
+  selectable?: boolean;
+  /** Story P9-4.5: Whether this card is currently selected */
+  isSelected?: boolean;
+  /** Story P9-4.5: Callback when selection checkbox is toggled */
+  onSelect?: () => void;
+  /** Story P9-4.5: Whether selection is disabled (max 2 selected) */
+  selectionDisabled?: boolean;
 }
 
 /**
@@ -64,6 +74,10 @@ export const EntityCard = memo(function EntityCard({
   entity,
   thumbnailUrl,
   onClick,
+  selectable = false,
+  isSelected = false,
+  onSelect,
+  selectionDisabled = false,
 }: EntityCardProps) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -74,6 +88,14 @@ export const EntityCard = memo(function EntityCard({
   const handleAddAlert = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click from triggering
     setIsAlertModalOpen(true);
+  };
+
+  // Story P9-4.5: Handle checkbox click
+  const handleSelectClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click from triggering
+    if (onSelect && !selectionDisabled) {
+      onSelect();
+    }
   };
 
   // Build full thumbnail URL if path is relative
@@ -94,13 +116,36 @@ export const EntityCard = memo(function EntityCard({
   return (
     <Card
       className={cn(
-        'overflow-hidden cursor-pointer transition-all hover:shadow-md hover:border-blue-300',
-        'flex flex-col'
+        'overflow-hidden cursor-pointer transition-all hover:shadow-md',
+        'flex flex-col',
+        isSelected
+          ? 'ring-2 ring-primary border-primary bg-primary/5'
+          : 'hover:border-blue-300'
       )}
       onClick={onClick}
     >
       {/* Thumbnail Section */}
       <div className="relative w-full h-40 bg-gray-100">
+        {/* Story P9-4.5: Selection Checkbox */}
+        {selectable && (
+          <div
+            className="absolute top-2 left-2 z-10"
+            onClick={handleSelectClick}
+          >
+            <div
+              className={cn(
+                'w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors',
+                isSelected
+                  ? 'bg-primary border-primary text-primary-foreground'
+                  : selectionDisabled
+                    ? 'bg-muted border-muted-foreground/30 cursor-not-allowed'
+                    : 'bg-white/80 border-gray-400 hover:border-primary hover:bg-primary/10'
+              )}
+            >
+              {isSelected && <Check className="h-4 w-4" />}
+            </div>
+          </div>
+        )}
         {fullThumbnailUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

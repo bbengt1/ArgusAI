@@ -3,15 +3,17 @@
  * AC1: Entity list page displays all recognized entities
  * AC13: Empty state with helpful guidance
  * AC15: Responsive design (grid on desktop, stack on mobile)
+ * Story P9-4.5: Multi-select for entity merge functionality
  */
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Users } from 'lucide-react';
 import { EntityList } from '@/components/entities/EntityList';
 import { EntityDetail } from '@/components/entities/EntityDetail';
 import { DeleteEntityDialog } from '@/components/entities/DeleteEntityDialog';
+import { EntityMergeDialog } from '@/components/entities/EntityMergeDialog';
 import type { IEntity } from '@/types/entity';
 
 /**
@@ -25,6 +27,11 @@ export default function EntitiesPage() {
   // Entity to delete
   const [entityToDelete, setEntityToDelete] = useState<IEntity | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  // Story P9-4.5: Multi-select state for merge functionality
+  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set());
+  const [entitiesToMerge, setEntitiesToMerge] = useState<[IEntity, IEntity] | null>(null);
+  const [isMergeOpen, setIsMergeOpen] = useState(false);
 
   /**
    * Handle entity card click - open detail modal
@@ -69,6 +76,55 @@ export default function EntitiesPage() {
     setEntityToDelete(null);
   };
 
+  /**
+   * Story P9-4.5: Toggle entity selection for merge
+   */
+  const handleToggleSelection = useCallback((entity: IEntity) => {
+    setSelectedEntityIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(entity.id)) {
+        next.delete(entity.id);
+      } else {
+        // Only allow selecting up to 2 entities
+        if (next.size < 2) {
+          next.add(entity.id);
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  /**
+   * Story P9-4.5: Clear all selections
+   */
+  const handleClearSelection = useCallback(() => {
+    setSelectedEntityIds(new Set());
+  }, []);
+
+  /**
+   * Story P9-4.5: Open merge dialog with selected entities
+   */
+  const handleOpenMerge = useCallback((entities: [IEntity, IEntity]) => {
+    setEntitiesToMerge(entities);
+    setIsMergeOpen(true);
+  }, []);
+
+  /**
+   * Story P9-4.5: Close merge dialog
+   */
+  const handleCloseMerge = () => {
+    setIsMergeOpen(false);
+    setEntitiesToMerge(null);
+  };
+
+  /**
+   * Story P9-4.5: Handle successful merge
+   */
+  const handleMerged = () => {
+    setSelectedEntityIds(new Set());
+    setEntitiesToMerge(null);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       {/* Page header */}
@@ -85,7 +141,13 @@ export default function EntitiesPage() {
       </div>
 
       {/* Entity list with filtering and pagination */}
-      <EntityList onEntityClick={handleEntityClick} />
+      <EntityList
+        onEntityClick={handleEntityClick}
+        selectedEntityIds={selectedEntityIds}
+        onToggleSelection={handleToggleSelection}
+        onClearSelection={handleClearSelection}
+        onMerge={handleOpenMerge}
+      />
 
       {/* Entity detail modal */}
       <EntityDetail
@@ -101,6 +163,14 @@ export default function EntitiesPage() {
         open={isDeleteOpen}
         onClose={handleCloseDelete}
         onDeleted={handleDeleted}
+      />
+
+      {/* Story P9-4.5: Merge confirmation dialog */}
+      <EntityMergeDialog
+        entities={entitiesToMerge}
+        open={isMergeOpen}
+        onClose={handleCloseMerge}
+        onMerged={handleMerged}
       />
     </div>
   );
