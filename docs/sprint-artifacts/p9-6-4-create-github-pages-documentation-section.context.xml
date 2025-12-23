@@ -1,0 +1,173 @@
+<story-context id="p9-6-4-create-github-pages-documentation-section" v="1.0">
+  <metadata>
+    <epicId>P9-6</epicId>
+    <storyId>6.4</storyId>
+    <title>Create GitHub Pages Documentation Section</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-23</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-6-4-create-github-pages-documentation-section.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>comprehensive documentation on the project site</iWant>
+    <soThat>I can learn how to configure and use ArgusAI</soThat>
+    <tasks>
+      <task id="1" status="pending">Add local search plugin to Docusaurus (AC: 3)
+        <subtask>Install @easyops-cn/docusaurus-search-local</subtask>
+        <subtask>Configure search in docusaurus.config.js</subtask>
+        <subtask>Test search functionality across documentation</subtask>
+      </task>
+      <task id="2" status="pending">Verify sidebar structure matches requirements (AC: 1, 2)
+        <subtask>Review sidebars.js for proper category organization</subtask>
+        <subtask>Ensure all required categories exist</subtask>
+        <subtask>Add missing Configuration page if needed</subtask>
+      </task>
+      <task id="3" status="pending">Verify all documentation pages have content (AC: 4)
+        <subtask>Check all markdown files in docs-site/docs/</subtask>
+      </task>
+      <task id="4" status="pending">Verify code syntax highlighting (AC: 4)
+        <subtask>Ensure prism configuration includes required languages</subtask>
+        <subtask>Test code blocks render with syntax highlighting</subtask>
+      </task>
+      <task id="5" status="pending">Build and test documentation site (AC: 1-4)
+        <subtask>Run npm run build</subtask>
+        <subtask>Verify no broken links</subtask>
+        <subtask>Test search functionality</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-6.4.1">Given I navigate to documentation, when I view the sidebar, then I see organized categories</criterion>
+    <criterion id="AC-6.4.2">Given I view documentation categories, when I check structure, then I see: Getting Started, Installation, Configuration, Features, API Reference, Troubleshooting</criterion>
+    <criterion id="AC-6.4.3">Given I want to find something, when I use search, then relevant docs are shown</criterion>
+    <criterion id="AC-6.4.4">Given I view documentation, when I see code examples, then syntax highlighting is applied</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P9-6.md</path>
+        <title>Epic Technical Specification: Documentation and UX Polish</title>
+        <section>P9-6.4: Create GitHub Pages Documentation Section</section>
+        <snippet>Documentation section requirements include organized sidebar, search functionality with Algolia or local search, code syntax highlighting, and version selector.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase9.md</path>
+        <title>ArgusAI Phase 9 - Epic Breakdown</title>
+        <section>Story P9-6.4</section>
+        <snippet>Create GitHub Pages documentation section with organized categories, search functionality, and syntax highlighted code examples.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>docs-site/docusaurus.config.js</path>
+        <kind>config</kind>
+        <symbol>config</symbol>
+        <lines>1-132</lines>
+        <reason>Main Docusaurus configuration - needs search plugin added, already has prism syntax highlighting configured</reason>
+      </file>
+      <file>
+        <path>docs-site/sidebars.js</path>
+        <kind>config</kind>
+        <symbol>sidebars</symbol>
+        <lines>1-50</lines>
+        <reason>Sidebar navigation structure - defines documentation categories</reason>
+      </file>
+      <file>
+        <path>docs-site/package.json</path>
+        <kind>manifest</kind>
+        <symbol>dependencies</symbol>
+        <lines>1-44</lines>
+        <reason>Package dependencies - search plugin needs to be added here</reason>
+      </file>
+      <file>
+        <path>docs-site/src/pages/index.js</path>
+        <kind>component</kind>
+        <symbol>Home</symbol>
+        <reason>Landing page component - already complete from P9-6.3</reason>
+      </file>
+      <file>
+        <path>docs-site/docs/intro.md</path>
+        <kind>documentation</kind>
+        <reason>Main intro page - already has content</reason>
+      </file>
+      <file>
+        <path>docs-site/docs/getting-started/installation.md</path>
+        <kind>documentation</kind>
+        <reason>Installation guide - comprehensive content exists</reason>
+      </file>
+      <file>
+        <path>docs-site/docs/getting-started/configuration.md</path>
+        <kind>documentation</kind>
+        <reason>Configuration guide - verify content exists</reason>
+      </file>
+      <file>
+        <path>docs-site/docs/api/overview.md</path>
+        <kind>documentation</kind>
+        <reason>API reference - comprehensive endpoint documentation exists</reason>
+      </file>
+      <file>
+        <path>docs-site/docs/troubleshooting.md</path>
+        <kind>documentation</kind>
+        <reason>Troubleshooting guide - comprehensive content exists</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package name="@docusaurus/core" version="^3.7.0" />
+        <package name="@docusaurus/preset-classic" version="^3.7.0" />
+        <package name="@mdx-js/react" version="^3.0.0" />
+        <package name="clsx" version="^2.0.0" />
+        <package name="prism-react-renderer" version="^2.3.0" />
+        <package name="react" version="^18.0.0" />
+        <package name="react-dom" version="^18.0.0" />
+        <!-- TO ADD: -->
+        <package name="@easyops-cn/docusaurus-search-local" version="^0.44.5" note="REQUIRED for local search" />
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="technology">Use @easyops-cn/docusaurus-search-local for search (no external API needed)</constraint>
+    <constraint type="technology">Docusaurus 3.7 is the installed version - ensure plugin compatibility</constraint>
+    <constraint type="structure">Sidebar must include categories: Getting Started, Features, Integrations, API Reference, Troubleshooting</constraint>
+    <constraint type="style">Code blocks must use prism-react-renderer for syntax highlighting</constraint>
+    <constraint type="deployment">Changes deploy automatically via GitHub Actions to gh-pages branch</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>Docusaurus Search Plugin Configuration</name>
+      <kind>plugin-config</kind>
+      <signature>themes: [['@easyops-cn/docusaurus-search-local', { hashed: true, language: ['en'] }]]</signature>
+      <path>docs-site/docusaurus.config.js</path>
+    </interface>
+    <interface>
+      <name>Sidebar Configuration</name>
+      <kind>sidebar-config</kind>
+      <signature>sidebars.tutorialSidebar: Array of category objects with type, label, items</signature>
+      <path>docs-site/sidebars.js</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Docusaurus sites are tested through build verification (npm run build) which catches broken links and invalid configurations.
+      Manual verification of search functionality and visual appearance is required.
+      No automated unit tests for documentation site - rely on build process validation.
+    </standards>
+    <locations>
+      <location>docs-site/ - npm run build validates entire site</location>
+      <location>Manual: Visit deployed site and test search, navigation, code highlighting</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-6.4.1">Verify sidebar renders with expected category structure visually</idea>
+      <idea ac="AC-6.4.2">Check that Getting Started, Features, Integrations, API Reference, Troubleshooting appear in sidebar</idea>
+      <idea ac="AC-6.4.3">Test search by entering "installation", "camera", "API" and verify relevant results</idea>
+      <idea ac="AC-6.4.4">Inspect code blocks in multiple pages to verify syntax highlighting applies</idea>
+    </ideas>
+  </tests>
+</story-context>

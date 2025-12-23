@@ -11,11 +11,11 @@ const config = {
   url: 'https://bbengt1.github.io',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/argusai/',
+  baseUrl: '/ArgusAI/',
 
   // GitHub pages deployment config.
   organizationName: 'bbengt1',
-  projectName: 'argusai',
+  projectName: 'ArgusAI',
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
@@ -33,6 +33,21 @@ const config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  themes: [
+    [
+      require.resolve('@easyops-cn/docusaurus-search-local'),
+      /** @type {import('@easyops-cn/docusaurus-search-local').PluginOptions} */
+      ({
+        hashed: true,
+        language: ['en'],
+        highlightSearchTermsOnTargetPage: true,
+        explicitSearchResultPath: true,
+        docsRouteBasePath: '/docs',
+        indexBlog: false,
+      }),
+    ],
+  ],
 
   presets: [
     [
