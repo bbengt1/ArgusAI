@@ -1004,7 +1004,7 @@ setup_frontend() {
 
     # Build frontend
     print_step "Building frontend (this may take a minute)..."
-    npm run build --silent 2>/dev/null || {
+    NODE_ENV=production npm run build --silent 2>/dev/null || {
         print_warning "Build completed with warnings (this is usually fine)"
     }
     print_success "Frontend build complete"
@@ -1125,7 +1125,7 @@ update_frontend() {
 
     # Rebuild frontend
     print_step "Rebuilding frontend..."
-    npm run build --silent 2>/dev/null || {
+    NODE_ENV=production npm run build --silent 2>/dev/null || {
         print_warning "Build completed with warnings (this is usually fine)"
     }
     print_success "Frontend rebuild complete"
@@ -1229,6 +1229,7 @@ Type=simple
 User=$USER
 Group=$USER
 WorkingDirectory=$FRONTEND_DIR
+Environment="NODE_ENV=production"
 $ssl_env_section
 ExecStart=/usr/bin/npm run $frontend_start_cmd
 Restart=always
@@ -1320,12 +1321,21 @@ EOF
         ssl_env_vars="
     <key>EnvironmentVariables</key>
     <dict>
+        <key>NODE_ENV</key>
+        <string>production</string>
         <key>SSL_CERT_FILE</key>
         <string>$CERT_DIR/cert.pem</string>
         <key>SSL_KEY_FILE</key>
         <string>$CERT_DIR/key.pem</string>
     </dict>"
         print_info "SSL certificates detected - configuring HTTPS frontend service"
+    else
+        ssl_env_vars="
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>NODE_ENV</key>
+        <string>production</string>
+    </dict>"
     fi
 
     cat > "$PLIST_DIR/$LABEL_PREFIX.frontend.plist" << EOF
