@@ -2080,6 +2080,57 @@ export const apiClient = {
     list: async (limit = 20, offset = 0): Promise<SummaryListResponse> => {
       return apiFetch(`/summaries?limit=${limit}&offset=${offset}`);
     },
+
+    /**
+     * Get feedback for a summary (Story P9-3.4)
+     * @param summaryId Summary UUID
+     * @returns Summary feedback or throws 404 if not found
+     */
+    getFeedback: async (summaryId: string): Promise<SummaryFeedbackResponse> => {
+      return apiFetch(`/summaries/${summaryId}/feedback`);
+    },
+
+    /**
+     * Submit feedback for a summary (Story P9-3.4)
+     * @param summaryId Summary UUID
+     * @param feedback Rating and optional correction text
+     * @returns Created feedback
+     */
+    submitFeedback: async (
+      summaryId: string,
+      feedback: { rating: 'positive' | 'negative'; correction_text?: string | null }
+    ): Promise<SummaryFeedbackResponse> => {
+      return apiFetch(`/summaries/${summaryId}/feedback`, {
+        method: 'POST',
+        body: JSON.stringify(feedback),
+      });
+    },
+
+    /**
+     * Update feedback for a summary (Story P9-3.4)
+     * @param summaryId Summary UUID
+     * @param feedback Updated rating and/or correction text
+     * @returns Updated feedback
+     */
+    updateFeedback: async (
+      summaryId: string,
+      feedback: { rating?: 'positive' | 'negative'; correction_text?: string | null }
+    ): Promise<SummaryFeedbackResponse> => {
+      return apiFetch(`/summaries/${summaryId}/feedback`, {
+        method: 'PUT',
+        body: JSON.stringify(feedback),
+      });
+    },
+
+    /**
+     * Delete feedback for a summary (Story P9-3.4)
+     * @param summaryId Summary UUID
+     */
+    deleteFeedback: async (summaryId: string): Promise<void> => {
+      await apiFetch(`/summaries/${summaryId}/feedback`, {
+        method: 'DELETE',
+      });
+    },
   },
 
   // ============================================================================
@@ -2178,4 +2229,14 @@ export interface SummaryListResponse {
   summaries: RecentSummaryItem[];
   total: number;
   stats: SummaryStats;
+}
+
+// Story P9-3.4: Summary Feedback
+export interface SummaryFeedbackResponse {
+  id: string;
+  summary_id: string;
+  rating: 'positive' | 'negative';
+  correction_text: string | null;
+  created_at: string;
+  updated_at: string | null;
 }
