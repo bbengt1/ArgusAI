@@ -1,6 +1,6 @@
 # Story P9-4.6: Store Manual Adjustments for Future Matching
 
-Status: review
+Status: done
 
 ## Story
 
@@ -149,6 +149,7 @@ This story validates and completes the adjustment tracking infrastructure establ
 |------|--------|--------|
 | 2025-12-22 | Story drafted from epics-phase9.md and tech-spec-epic-P9-4.md | BMAD Workflow |
 | 2025-12-22 | Implemented: verified adjustment records, added endpoints, wrote tests | Claude Opus 4.5 |
+| 2025-12-23 | Senior Developer Review: APPROVED - all ACs verified, 23 tests pass | Brent (via Claude Opus 4.5) |
 
 ## Dev Agent Record
 
@@ -182,3 +183,110 @@ Claude Opus 4.5 (claude-opus-4-5-20251101)
 - docs/sprint-artifacts/p9-4-6-store-manual-adjustments-for-future-matching.md (modified - story file)
 - docs/sprint-artifacts/p9-4-6-store-manual-adjustments-for-future-matching.context.xml (created - context file)
 - docs/sprint-artifacts/sprint-status.yaml (modified - status updates)
+
+---
+
+## Senior Developer Review (AI)
+
+### Reviewer
+Brent
+
+### Date
+2025-12-23
+
+### Outcome
+**APPROVE** - All acceptance criteria fully implemented with comprehensive test coverage. Implementation follows established FastAPI patterns and is well-documented.
+
+### Summary
+
+Story P9-4.6 successfully implements the adjustment history API for ML training. The implementation adds two new endpoints (`GET /api/v1/context/adjustments` and `GET /api/v1/context/adjustments/export`) and corresponding service methods that query existing EntityAdjustment records created by previous stories (P9-4.3, P9-4.4, P9-4.5). All 5 acceptance criteria are verified with evidence, and 23 new tests pass.
+
+### Key Findings
+
+No HIGH or MEDIUM severity issues found.
+
+**LOW Severity:**
+- Note: The Pydantic deprecation warnings in test output (using `class Config` instead of `ConfigDict`) are pre-existing in other schema files, not introduced by this story.
+
+### Acceptance Criteria Coverage
+
+| AC | Description | Status | Evidence |
+|----|-------------|--------|----------|
+| AC-4.6.1 | EntityAdjustment record created for unlink/assign/move/merge | IMPLEMENTED | `backend/app/services/entity_service.py:1339-1346` (unlink), `1530-1537` (assign), `1482-1509` (move), `1628-1635` (merge) |
+| AC-4.6.2 | Adjustment includes event_id, old_entity_id, new_entity_id, action | IMPLEMENTED | `backend/app/models/entity_adjustment.py:48-70` - Model defines all fields; `entity_service.py` methods populate all fields |
+| AC-4.6.3 | Adjustment includes event description snapshot | IMPLEMENTED | `entity_service.py:1320-1321` (unlink), `1487,1507,1535` (assign/move), `1625` (merge) - All methods capture `event.description` |
+| AC-4.6.4 | API endpoint to retrieve adjustment history | IMPLEMENTED | `backend/app/api/v1/context.py:2564-2632` - GET /adjustments with pagination, filtering by action/entity_id/date_range |
+| AC-4.6.5 | Export endpoint suitable for ML training | IMPLEMENTED | `backend/app/api/v1/context.py:2635-2682` - GET /adjustments/export returns JSON Lines with entity types |
+
+**Summary: 5 of 5 acceptance criteria fully implemented**
+
+### Task Completion Validation
+
+| Task | Marked As | Verified As | Evidence |
+|------|-----------|-------------|----------|
+| Task 1: Verify existing adjustment record creation | [x] Complete | VERIFIED | `entity_service.py:1339-1346,1482-1509,1530-1537,1628-1635` - All methods create EntityAdjustment records |
+| Task 1.1: Review unlink_event creates adjustment | [x] Complete | VERIFIED | `entity_service.py:1339-1346` |
+| Task 1.2: Review assign_event creates adjustment | [x] Complete | VERIFIED | `entity_service.py:1530-1537` |
+| Task 1.3: Review merge_entities creates adjustment | [x] Complete | VERIFIED | `entity_service.py:1628-1635` |
+| Task 1.4: Add test coverage for adjustment fields | [x] Complete | VERIFIED | `test_entity_service.py:1326-1345` - test_merge_entities_creates_adjustment_records |
+| Task 2: Create GET /adjustments endpoint | [x] Complete | VERIFIED | `context.py:2564-2632` |
+| Task 2.1: Add Pydantic models | [x] Complete | VERIFIED | `context.py:1196-1220` - AdjustmentResponse, AdjustmentListResponse |
+| Task 2.2: Add get_adjustments service method | [x] Complete | VERIFIED | `entity_service.py:1689-1776` |
+| Task 2.3: Add GET endpoint with pagination | [x] Complete | VERIFIED | `context.py:2564-2632` with page/limit params |
+| Task 2.4: Add filtering by action/entity_id/date range | [x] Complete | VERIFIED | `entity_service.py:1719-1744` handles all filters |
+| Task 3: Create GET /adjustments/export endpoint | [x] Complete | VERIFIED | `context.py:2635-2682` |
+| Task 3.1: Add export endpoint returning JSON Lines | [x] Complete | VERIFIED | `context.py:2673-2681` StreamingResponse with application/x-ndjson |
+| Task 3.2: Include event description and entity types | [x] Complete | VERIFIED | `entity_service.py:1834-1846` includes old_entity_type, new_entity_type |
+| Task 3.3: Add date range filtering for export | [x] Complete | VERIFIED | `entity_service.py:1803-1807` |
+| Task 4: Add useAdjustments hook (optional) | [x] Complete (Skipped) | VERIFIED | Skipped as noted - frontend hook not required for backend implementation |
+| Task 5: Write tests | [x] Complete | VERIFIED | 23 tests in `test_context_adjustments.py` and `test_entity_service.py` - all pass |
+
+**Summary: 16 of 16 tasks verified, 0 questionable, 0 false completions**
+
+### Test Coverage and Gaps
+
+**Tests Present:**
+- `test_context_adjustments.py`: 15 API endpoint tests covering pagination, filtering, validation, export format
+- `test_entity_service.py`: 8 service method tests for get_adjustments and export_adjustments
+
+**Coverage:**
+- API endpoint pagination: Tested ✓
+- Action type filtering: Tested ✓
+- Entity ID filtering: Tested ✓
+- Date range filtering: Tested ✓
+- Invalid action validation: Tested ✓
+- Export JSON Lines format: Tested ✓
+- Entity types in export: Tested ✓
+
+**No test gaps identified for this story's scope.**
+
+### Architectural Alignment
+
+- Follows established FastAPI patterns in `context.py`
+- Uses standard Pydantic models for request/response validation
+- Service layer properly separates business logic from API layer
+- Uses SQLAlchemy ORM patterns consistent with existing codebase
+- Export uses StreamingResponse for memory efficiency with large datasets
+- Aligns with tech spec API design (docs/sprint-artifacts/tech-spec-epic-P9-4.md)
+
+### Security Notes
+
+- No security issues identified
+- Endpoint does not expose sensitive data beyond what's already in EntityAdjustment records
+- Input validation on action types prevents arbitrary query injection
+- Date parameters use standard datetime parsing
+
+### Best-Practices and References
+
+- FastAPI Query parameters with validation: https://fastapi.tiangolo.com/tutorial/query-params-str-validations/
+- JSON Lines format for ML data: https://jsonlines.org/
+- SQLAlchemy 2.0 query patterns: https://docs.sqlalchemy.org/en/20/orm/queryguide/select.html
+
+### Action Items
+
+**Code Changes Required:**
+- None required
+
+**Advisory Notes:**
+- Note: Consider adding OpenAPI documentation examples for the export format in a future enhancement
+- Note: The service's `export_adjustments` method loads all matching adjustments into memory; for very large datasets, consider pagination or cursor-based streaming in future
