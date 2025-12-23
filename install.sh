@@ -15,6 +15,7 @@
 #   ./install.sh --frontend   # Frontend only
 #   ./install.sh --services   # Generate service files only
 #   ./install.sh --update     # Update existing installation
+#   ./install.sh --ssl-only   # Configure SSL certificates only
 #===============================================================================
 
 set -e
@@ -58,9 +59,16 @@ CHECK_ONLY=false
 SERVICES_ONLY=false
 UPDATE_MODE=false
 VERBOSE=false
+SSL_ONLY=false
 
 # Server configuration (set during installation)
 SERVER_HOSTNAME=""
+
+# SSL configuration (set during SSL setup)
+SSL_METHOD=""  # letsencrypt, self-signed, skip
+SSL_DOMAIN=""
+SSL_EMAIL=""
+CERT_DIR="$BACKEND_DIR/data/certs"
 
 #-------------------------------------------------------------------------------
 # Helper Functions
@@ -113,6 +121,7 @@ Options:
   --frontend, -f    Install frontend only
   --services, -s    Generate service files only (systemd/launchd)
   --update, -u      Update existing installation (pull code, update deps, migrate DB)
+  --ssl-only        Configure SSL certificates only (for existing installations)
   --verbose, -v     Show verbose output
 
 Examples:
@@ -121,6 +130,7 @@ Examples:
   ./install.sh --backend        # Install backend only
   ./install.sh --services       # Generate service files
   ./install.sh --update         # Update to latest version
+  ./install.sh --ssl-only       # Configure SSL for existing installation
 
 For more information, see README.md
 EOF
@@ -179,6 +189,454 @@ prompt_server_hostname() {
     print_info "Frontend will be accessible at: http://$SERVER_HOSTNAME:3000"
     print_info "Backend API will be at: http://$SERVER_HOSTNAME:8000"
     echo ""
+}
+
+#-------------------------------------------------------------------------------
+# SSL Certificate Setup Functions
+#-------------------------------------------------------------------------------
+
+prompt_ssl_setup() {
+    print_header "SSL Certificate Configuration"
+
+    echo "ArgusAI can be configured with SSL/HTTPS for secure connections."
+    echo "This is required for push notifications to work properly."
+    echo ""
+    echo "Choose an SSL certificate option:"
+    echo ""
+    echo "  1) Let's Encrypt (Recommended for production)"
+    echo "     - Free, trusted certificates"
+    echo "     - Requires a domain name pointing to this server"
+    echo "     - Requires port 80 to be accessible from the internet"
+    echo "     - Auto-renewal will be configured"
+    echo ""
+    echo "  2) Self-signed Certificate"
+    echo "     - Good for local/private networks"
+    echo "     - Browsers will show a security warning"
+    echo "     - No domain name required"
+    echo ""
+    echo "  3) Skip SSL Configuration"
+    echo "     - ArgusAI will run on HTTP only"
+    echo "     - Push notifications may not work"
+    echo ""
+
+    while true; do
+        read -p "Select option [1-3]: " ssl_choice
+        case $ssl_choice in
+            1)
+                SSL_METHOD="letsencrypt"
+                setup_letsencrypt
+                break
+                ;;
+            2)
+                SSL_METHOD="self-signed"
+                generate_self_signed_cert
+                break
+                ;;
+            3)
+                SSL_METHOD="skip"
+                handle_ssl_skip
+                break
+                ;;
+            *)
+                print_warning "Invalid option. Please enter 1, 2, or 3."
+                ;;
+        esac
+    done
+}
+
+check_certbot_installed() {
+    if command -v certbot &> /dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+install_certbot() {
+    print_step "Installing certbot..."
+
+    if [ "$OS" = "Darwin" ]; then
+        # macOS
+        if command -v brew &> /dev/null; then
+            brew install certbot
+        else
+            print_error "Homebrew not found. Please install certbot manually:"
+            print_info "  brew install certbot"
+            return 1
+        fi
+    elif [ "$OS" = "Linux" ]; then
+        # Detect package manager
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y certbot
+        elif command -v dnf &> /dev/null; then
+            sudo dnf install -y certbot
+        elif command -v yum &> /dev/null; then
+            sudo yum install -y certbot
+        elif command -v pacman &> /dev/null; then
+            sudo pacman -S --noconfirm certbot
+        else
+            print_error "Could not detect package manager. Please install certbot manually."
+            return 1
+        fi
+    else
+        print_error "Unsupported operating system for automatic certbot installation."
+        return 1
+    fi
+
+    if check_certbot_installed; then
+        print_success "certbot installed successfully"
+        return 0
+    else
+        print_error "certbot installation failed"
+        return 1
+    fi
+}
+
+setup_letsencrypt() {
+    print_step "Setting up Let's Encrypt certificate..."
+
+    # Check for certbot
+    if ! check_certbot_installed; then
+        print_warning "certbot is not installed"
+        read -p "Would you like to install certbot? [Y/n]: " install_choice
+        if [[ ! "$install_choice" =~ ^[Nn]$ ]]; then
+            if ! install_certbot; then
+                print_error "Cannot proceed without certbot"
+                SSL_METHOD="skip"
+                return 1
+            fi
+        else
+            print_error "Cannot proceed without certbot"
+            SSL_METHOD="skip"
+            return 1
+        fi
+    fi
+
+    # Prompt for domain name
+    echo ""
+    read -p "Enter your domain name (e.g., argusai.example.com): " SSL_DOMAIN
+    if [ -z "$SSL_DOMAIN" ]; then
+        print_error "Domain name is required for Let's Encrypt"
+        SSL_METHOD="skip"
+        return 1
+    fi
+
+    # Prompt for email
+    read -p "Enter your email address (for certificate notifications): " SSL_EMAIL
+    if [ -z "$SSL_EMAIL" ]; then
+        print_error "Email is required for Let's Encrypt"
+        SSL_METHOD="skip"
+        return 1
+    fi
+
+    # Create certificate directory
+    mkdir -p "$CERT_DIR"
+
+    # Check if port 80 is available
+    if command -v lsof &> /dev/null && lsof -Pi :80 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        print_warning "Port 80 is currently in use. Certbot needs port 80 for verification."
+        print_info "Please stop any services using port 80 (e.g., nginx, apache) and try again."
+        read -p "Continue anyway? [y/N]: " continue_choice
+        if [[ ! "$continue_choice" =~ ^[Yy]$ ]]; then
+            SSL_METHOD="skip"
+            return 1
+        fi
+    fi
+
+    print_step "Requesting certificate from Let's Encrypt..."
+    print_info "This may take a moment..."
+
+    # Run certbot in standalone mode
+    if sudo certbot certonly --standalone \
+        -d "$SSL_DOMAIN" \
+        --email "$SSL_EMAIL" \
+        --agree-tos \
+        --non-interactive \
+        --cert-name argusai; then
+
+        # Create symlinks to the Let's Encrypt live directory
+        local le_cert="/etc/letsencrypt/live/argusai/fullchain.pem"
+        local le_key="/etc/letsencrypt/live/argusai/privkey.pem"
+
+        if [ -f "$le_cert" ] && [ -f "$le_key" ]; then
+            # Create symlinks in our data/certs directory
+            ln -sf "$le_cert" "$CERT_DIR/cert.pem"
+            ln -sf "$le_key" "$CERT_DIR/key.pem"
+
+            print_success "Let's Encrypt certificate obtained successfully!"
+            print_info "Certificate: $le_cert"
+            print_info "Private key: $le_key"
+            print_info "Symlinks created in: $CERT_DIR/"
+
+            # Configure auto-renewal
+            configure_cert_renewal
+
+            return 0
+        else
+            print_error "Certificate files not found after certbot completion"
+            SSL_METHOD="skip"
+            return 1
+        fi
+    else
+        print_error "Failed to obtain Let's Encrypt certificate"
+        print_info "Common issues:"
+        print_info "  - Domain not pointing to this server"
+        print_info "  - Port 80 blocked by firewall"
+        print_info "  - Rate limit exceeded (try again later)"
+        SSL_METHOD="skip"
+        return 1
+    fi
+}
+
+configure_cert_renewal() {
+    print_step "Configuring automatic certificate renewal..."
+
+    local SERVICE_DIR="$SCRIPT_DIR/services"
+    mkdir -p "$SERVICE_DIR"
+
+    if [ "$OS" = "Linux" ]; then
+        # Create systemd timer for Linux
+        print_step "Creating systemd timer for certificate renewal..."
+
+        # Create renewal service
+        cat > "$SERVICE_DIR/argusai-certbot-renewal.service" << EOF
+[Unit]
+Description=ArgusAI - Certbot Certificate Renewal
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/certbot renew --quiet --cert-name argusai
+ExecStartPost=/bin/systemctl restart argusai-backend.service
+EOF
+
+        # Create renewal timer (runs twice daily as recommended by Let's Encrypt)
+        cat > "$SERVICE_DIR/argusai-certbot-renewal.timer" << EOF
+[Unit]
+Description=ArgusAI - Certbot Certificate Renewal Timer
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+        print_success "Created: $SERVICE_DIR/argusai-certbot-renewal.service"
+        print_success "Created: $SERVICE_DIR/argusai-certbot-renewal.timer"
+        echo ""
+        print_info "To enable automatic renewal:"
+        print_info "  sudo cp $SERVICE_DIR/argusai-certbot-renewal.* /etc/systemd/system/"
+        print_info "  sudo systemctl daemon-reload"
+        print_info "  sudo systemctl enable argusai-certbot-renewal.timer"
+        print_info "  sudo systemctl start argusai-certbot-renewal.timer"
+
+        # Verify with dry-run
+        print_step "Verifying renewal configuration..."
+        if sudo certbot renew --dry-run --cert-name argusai 2>/dev/null; then
+            print_success "Certificate renewal test passed"
+        else
+            print_warning "Certificate renewal dry-run had issues (may still work)"
+        fi
+
+    elif [ "$OS" = "Darwin" ]; then
+        # Create launchd plist for macOS
+        print_step "Creating launchd plist for certificate renewal..."
+
+        local PLIST_FILE="$SERVICE_DIR/com.argusai.certbot-renewal.plist"
+        cat > "$PLIST_FILE" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.argusai.certbot-renewal</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>/usr/local/bin/certbot renew --quiet --cert-name argusai && launchctl kickstart -k gui/\$(id -u)/com.argusai.backend</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Hour</key>
+            <integer>0</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>12</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/argusai-certbot-renewal.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/argusai-certbot-renewal.error.log</string>
+</dict>
+</plist>
+EOF
+
+        print_success "Created: $PLIST_FILE"
+        echo ""
+        print_info "To enable automatic renewal:"
+        print_info "  sudo cp $PLIST_FILE /Library/LaunchDaemons/"
+        print_info "  sudo launchctl load /Library/LaunchDaemons/com.argusai.certbot-renewal.plist"
+
+        # Verify with dry-run
+        print_step "Verifying renewal configuration..."
+        if sudo certbot renew --dry-run --cert-name argusai 2>/dev/null; then
+            print_success "Certificate renewal test passed"
+        else
+            print_warning "Certificate renewal dry-run had issues (may still work)"
+        fi
+    fi
+}
+
+generate_self_signed_cert() {
+    print_step "Generating self-signed certificate..."
+
+    # Create certificate directory
+    mkdir -p "$CERT_DIR"
+
+    # Determine CN (Common Name) - use SERVER_HOSTNAME if set, otherwise localhost
+    local cn="${SERVER_HOSTNAME:-localhost}"
+
+    # Generate 2048-bit RSA key and self-signed certificate
+    print_info "Generating 2048-bit RSA key and certificate (valid for 365 days)..."
+
+    if openssl req -x509 \
+        -newkey rsa:2048 \
+        -keyout "$CERT_DIR/key.pem" \
+        -out "$CERT_DIR/cert.pem" \
+        -days 365 \
+        -nodes \
+        -subj "/CN=$cn" \
+        2>/dev/null; then
+
+        # Set proper file permissions
+        chmod 600 "$CERT_DIR/key.pem"   # Owner read/write only for private key
+        chmod 644 "$CERT_DIR/cert.pem"  # World-readable for certificate
+
+        print_success "Self-signed certificate generated successfully!"
+        print_info "Certificate: $CERT_DIR/cert.pem"
+        print_info "Private key: $CERT_DIR/key.pem"
+        print_info "Common Name (CN): $cn"
+
+        # Display browser warning
+        display_self_signed_warning
+    else
+        print_error "Failed to generate self-signed certificate"
+        print_info "Please ensure openssl is installed"
+        SSL_METHOD="skip"
+        return 1
+    fi
+}
+
+display_self_signed_warning() {
+    echo ""
+    echo -e "${YELLOW}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║                    IMPORTANT NOTICE                            ║${NC}"
+    echo -e "${YELLOW}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}You are using a self-signed certificate.${NC}"
+    echo ""
+    echo "When you access ArgusAI via HTTPS, your browser will show a security"
+    echo "warning because the certificate is not from a trusted authority."
+    echo ""
+    echo "To proceed in your browser:"
+    echo ""
+    echo "  Chrome/Edge:  Click 'Advanced' → 'Proceed to [site] (unsafe)'"
+    echo "  Firefox:      Click 'Advanced' → 'Accept the Risk and Continue'"
+    echo "  Safari:       Click 'Show Details' → 'visit this website'"
+    echo ""
+    echo "Alternative - Add certificate to system trust store:"
+    echo ""
+    if [ "$OS" = "Darwin" ]; then
+        echo "  macOS:"
+        echo "    sudo security add-trusted-cert -d -r trustRoot \\"
+        echo "      -k /Library/Keychains/System.keychain $CERT_DIR/cert.pem"
+    else
+        echo "  Linux (Ubuntu/Debian):"
+        echo "    sudo cp $CERT_DIR/cert.pem /usr/local/share/ca-certificates/argusai.crt"
+        echo "    sudo update-ca-certificates"
+        echo ""
+        echo "  Linux (RHEL/CentOS/Fedora):"
+        echo "    sudo cp $CERT_DIR/cert.pem /etc/pki/ca-trust/source/anchors/argusai.crt"
+        echo "    sudo update-ca-trust"
+    fi
+    echo ""
+}
+
+handle_ssl_skip() {
+    print_warning "Skipping SSL configuration"
+    echo ""
+    print_info "ArgusAI will run on HTTP only."
+    echo ""
+    echo -e "${YELLOW}Note: Push notifications require HTTPS to function properly.${NC}"
+    echo "If you need push notifications, you can run the SSL setup later:"
+    echo ""
+    echo "  ./install.sh --ssl-only"
+    echo ""
+}
+
+update_env_ssl_config() {
+    print_step "Updating .env with SSL configuration..."
+
+    local env_file="$BACKEND_DIR/.env"
+
+    if [ ! -f "$env_file" ]; then
+        print_warning ".env file not found, will be created during backend setup"
+        return 0
+    fi
+
+    # Function to update or add env variable
+    update_env_var() {
+        local key="$1"
+        local value="$2"
+        if grep -q "^${key}=" "$env_file"; then
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                sed -i '' "s|^${key}=.*|${key}=${value}|" "$env_file"
+            else
+                sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+            fi
+        else
+            echo "${key}=${value}" >> "$env_file"
+        fi
+    }
+
+    if [ "$SSL_METHOD" = "letsencrypt" ] || [ "$SSL_METHOD" = "self-signed" ]; then
+        update_env_var "SSL_ENABLED" "True"
+        update_env_var "SSL_CERT_FILE" "$CERT_DIR/cert.pem"
+        update_env_var "SSL_KEY_FILE" "$CERT_DIR/key.pem"
+        update_env_var "SSL_REDIRECT_HTTP" "True"
+        print_success "SSL enabled in .env"
+
+        # Update CORS origins for HTTPS
+        if [ -n "$SERVER_HOSTNAME" ]; then
+            local current_cors=$(grep "^CORS_ORIGINS=" "$env_file" | cut -d'=' -f2-)
+            local https_origins="https://$SERVER_HOSTNAME:443,https://$SERVER_HOSTNAME:3000"
+            if [ -n "$current_cors" ]; then
+                local new_cors="${current_cors},${https_origins}"
+                update_env_var "CORS_ORIGINS" "$new_cors"
+            else
+                update_env_var "CORS_ORIGINS" "http://localhost:3000,http://localhost:8000,$https_origins"
+            fi
+            print_success "CORS origins updated for HTTPS"
+        fi
+    else
+        update_env_var "SSL_ENABLED" "False"
+        print_info "SSL disabled in .env"
+    fi
 }
 
 #-------------------------------------------------------------------------------
@@ -990,6 +1448,20 @@ print_summary() {
 
     echo -e "${GREEN}ArgusAI has been installed successfully.${NC}"
     echo ""
+
+    # Show SSL configuration status
+    echo "Configuration Summary:"
+    echo "  - Server hostname: ${SERVER_HOSTNAME:-localhost}"
+    if [ "$SSL_METHOD" = "letsencrypt" ]; then
+        echo -e "  - SSL: ${GREEN}Enabled (Let's Encrypt)${NC}"
+        echo "  - Domain: $SSL_DOMAIN"
+    elif [ "$SSL_METHOD" = "self-signed" ]; then
+        echo -e "  - SSL: ${YELLOW}Enabled (Self-signed)${NC}"
+    else
+        echo -e "  - SSL: ${YELLOW}Not configured (HTTP only)${NC}"
+    fi
+    echo ""
+
     echo "Next Steps:"
     echo ""
     echo "1. Configure AI Provider API Keys:"
@@ -1011,8 +1483,13 @@ print_summary() {
     echo "     npm run dev"
     echo ""
     echo "3. Access the Application:"
-    echo "   - Dashboard: http://localhost:3000"
-    echo "   - API Docs:  http://localhost:8000/docs"
+    if [ "$SSL_METHOD" = "letsencrypt" ] || [ "$SSL_METHOD" = "self-signed" ]; then
+        echo "   - Dashboard: https://${SERVER_HOSTNAME:-localhost}:3000"
+        echo "   - API Docs:  https://${SERVER_HOSTNAME:-localhost}:443/docs"
+    else
+        echo "   - Dashboard: http://${SERVER_HOSTNAME:-localhost}:3000"
+        echo "   - API Docs:  http://${SERVER_HOSTNAME:-localhost}:8000/docs"
+    fi
     echo ""
     echo "4. Optional - Configure Cameras:"
     echo "   - UniFi Protect: Settings > UniFi Protect > Add Controller"
@@ -1023,6 +1500,12 @@ print_summary() {
     echo "   - Run: ./install.sh --services"
     echo "   - Follow the printed instructions to install service files"
     echo ""
+    if [ "$SSL_METHOD" = "skip" ] || [ -z "$SSL_METHOD" ]; then
+        echo "6. Optional - Configure SSL Later:"
+        echo "   - Run: ./install.sh --ssl-only"
+        echo "   - Required for push notifications to work"
+        echo ""
+    fi
     print_info "For more information, see README.md"
 }
 
@@ -1061,6 +1544,10 @@ main() {
                 VERBOSE=true
                 shift
                 ;;
+            --ssl-only)
+                SSL_ONLY=true
+                shift
+                ;;
             *)
                 print_error "Unknown option: $1"
                 echo "Use --help for usage information"
@@ -1079,6 +1566,23 @@ main() {
     # Services only mode
     if [ "$SERVICES_ONLY" = true ]; then
         generate_all_services
+        exit 0
+    fi
+
+    # SSL only mode (for existing installations)
+    if [ "$SSL_ONLY" = true ]; then
+        prompt_ssl_setup
+        update_env_ssl_config
+        print_header "SSL Configuration Complete"
+        if [ "$SSL_METHOD" = "letsencrypt" ] || [ "$SSL_METHOD" = "self-signed" ]; then
+            echo -e "${GREEN}SSL has been configured successfully.${NC}"
+            echo ""
+            echo "Next steps:"
+            echo "  1. Restart the ArgusAI backend to apply SSL settings"
+            echo "  2. Access ArgusAI at https://$SERVER_HOSTNAME (or your configured hostname)"
+        else
+            echo "SSL configuration was skipped."
+        fi
         exit 0
     fi
 
@@ -1117,6 +1621,9 @@ main() {
     # Prompt for server hostname
     prompt_server_hostname
 
+    # Prompt for SSL configuration
+    prompt_ssl_setup
+
     # Configure Linux system (firewall, SELinux)
     configure_linux_system
 
@@ -1128,6 +1635,9 @@ main() {
     if [ "$INSTALL_FRONTEND" = true ]; then
         setup_frontend
     fi
+
+    # Update .env with SSL configuration after backend setup
+    update_env_ssl_config
 
     # Print summary
     print_summary

@@ -1,0 +1,183 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>P9-5</epicId>
+    <storyId>5.2</storyId>
+    <title>Add Certificate Generation to Install Script</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-23</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-5-2-add-certificate-generation-to-install-script.md</sourceStoryPath>
+    <githubIssue>https://github.com/bbengt1/ArgusAI/issues/169</githubIssue>
+  </metadata>
+
+  <story>
+    <asA>system administrator</asA>
+    <iWant>the install script to offer SSL certificate generation options</iWant>
+    <soThat>I can easily set up HTTPS for secure connections without manual certificate management</soThat>
+    <tasks>
+      <task id="1">Add SSL setup prompt function to install.sh (AC: #1)
+        <subtask>Create prompt_ssl_setup() function with three options</subtask>
+        <subtask>Add --ssl-only flag for standalone SSL setup</subtask>
+        <subtask>Display clear descriptions for each option</subtask>
+      </task>
+      <task id="2">Implement Let's Encrypt certificate generation (AC: #2, #3)
+        <subtask>Check for certbot installation, offer to install if missing</subtask>
+        <subtask>Prompt for domain name and email</subtask>
+        <subtask>Run certbot in standalone mode</subtask>
+        <subtask>Copy certificates to data/certs/</subtask>
+      </task>
+      <task id="3">Configure Let's Encrypt auto-renewal (AC: #3)
+        <subtask>Create systemd timer for Linux systems</subtask>
+        <subtask>Create launchd plist for macOS systems</subtask>
+        <subtask>Set up post-renewal hook to restart services</subtask>
+      </task>
+      <task id="4">Implement self-signed certificate generation (AC: #4)
+        <subtask>Create generate_self_signed_cert() function</subtask>
+        <subtask>Use openssl to generate 2048-bit RSA key</subtask>
+        <subtask>Set proper file permissions (600 for key)</subtask>
+      </task>
+      <task id="5">Add browser warning for self-signed certs (AC: #5)
+        <subtask>Display prominent warning after generation</subtask>
+        <subtask>Explain how to add certificate exception</subtask>
+      </task>
+      <task id="6">Implement skip option (AC: #6)
+        <subtask>Handle skip gracefully</subtask>
+        <subtask>Remind about HTTPS for push notifications</subtask>
+      </task>
+      <task id="7">Update .env with SSL configuration (All ACs)</task>
+      <task id="8">Integrate SSL setup into main install flow (All ACs)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Given I run the install script, When prompted for SSL, Then I see options: Let's Encrypt, Self-signed, Skip.</criterion>
+    <criterion id="2">Given I choose Let's Encrypt, When I provide my domain and email, Then certbot obtains certificates and stores them in data/certs/.</criterion>
+    <criterion id="3">Given Let's Encrypt succeeds, When setup completes, Then auto-renewal is configured via cron/systemd timer.</criterion>
+    <criterion id="4">Given I choose Self-signed, When generation runs, Then a self-signed certificate is created in data/certs/ with 2048-bit RSA.</criterion>
+    <criterion id="5">Given I choose Self-signed, When setup completes, Then I'm warned about browser security warnings.</criterion>
+    <criterion id="6">Given I choose Skip, When setup completes, Then ArgusAI runs on HTTP only with no certificate files.</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P9-5.md</path>
+        <title>Epic P9-5 Technical Specification</title>
+        <section>Certificate Generation Commands</section>
+        <snippet>Contains certbot and openssl commands for certificate generation.</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase9.md</path>
+        <title>Phase 9 PRD</title>
+        <section>Infrastructure &amp; DevOps (Epic P9-5)</section>
+        <snippet>FR34: Let's Encrypt/Certbot integration. FR35: Self-signed certificate generation.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>install.sh</path>
+        <kind>script</kind>
+        <symbol>main, setup_backend, setup_frontend, prompt_server_hostname</symbol>
+        <lines>1-1137</lines>
+        <reason>Main installation script to extend with SSL setup functions.</reason>
+      </file>
+      <file>
+        <path>backend/app/core/config.py</path>
+        <kind>settings</kind>
+        <symbol>Settings.SSL_ENABLED, SSL_CERT_FILE, SSL_KEY_FILE</symbol>
+        <reason>SSL settings that need to be configured in .env by the script.</reason>
+      </file>
+      <file>
+        <path>backend/.env.example</path>
+        <kind>config</kind>
+        <reason>Template showing SSL environment variables to set.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <system>
+        <package name="certbot">For Let's Encrypt certificate generation</package>
+        <package name="openssl">For self-signed certificate generation (usually pre-installed)</package>
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Must work on both macOS (launchd) and Linux (systemd)</constraint>
+    <constraint>Private keys should have 600 permissions</constraint>
+    <constraint>Certificate files should have 644 permissions</constraint>
+    <constraint>Certbot requires port 80 to be available for HTTP-01 challenge</constraint>
+    <constraint>Never log or display private key contents</constraint>
+    <constraint>Follow existing install.sh patterns (colors, print functions, etc.)</constraint>
+    <constraint>Certificates stored in data/certs/ directory</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>prompt_ssl_setup()</name>
+      <kind>bash function</kind>
+      <signature>
+prompt_ssl_setup() {
+    # Displays SSL options and handles user selection
+    # Sets: SSL_METHOD, SSL_DOMAIN, SSL_EMAIL
+    # Options: letsencrypt, self-signed, skip
+}
+      </signature>
+      <path>install.sh</path>
+    </interface>
+    <interface>
+      <name>setup_letsencrypt()</name>
+      <kind>bash function</kind>
+      <signature>
+setup_letsencrypt() {
+    # Runs certbot to obtain Let's Encrypt certificates
+    # Requires: SSL_DOMAIN, SSL_EMAIL
+    # Creates: data/certs/cert.pem, data/certs/key.pem
+}
+      </signature>
+      <path>install.sh</path>
+    </interface>
+    <interface>
+      <name>generate_self_signed_cert()</name>
+      <kind>bash function</kind>
+      <signature>
+generate_self_signed_cert() {
+    # Generates self-signed certificate using openssl
+    # Uses SERVER_HOSTNAME as CN if available
+    # Creates: data/certs/cert.pem, data/certs/key.pem
+}
+      </signature>
+      <path>install.sh</path>
+    </interface>
+    <interface>
+      <name>configure_cert_renewal()</name>
+      <kind>bash function</kind>
+      <signature>
+configure_cert_renewal() {
+    # Sets up automatic renewal for Let's Encrypt certificates
+    # Linux: Creates systemd timer
+    # macOS: Creates launchd plist
+}
+      </signature>
+      <path>install.sh</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Manual testing on macOS and Linux. Test each SSL option path. Verify file permissions. Test renewal timer configuration with dry-run.
+    </standards>
+    <locations>
+      <location>Manual testing of install.sh script</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test SSL menu displays all three options correctly</idea>
+      <idea ac="2">Test Let's Encrypt with valid domain (requires real domain)</idea>
+      <idea ac="3">Test renewal timer is created and valid</idea>
+      <idea ac="4">Test self-signed cert is created with correct permissions</idea>
+      <idea ac="4">Test self-signed cert has 2048-bit RSA key</idea>
+      <idea ac="5">Test browser warning is displayed for self-signed</idea>
+      <idea ac="6">Test skip option doesn't create certificates</idea>
+      <idea ac="6">Test skip displays push notification warning</idea>
+    </ideas>
+  </tests>
+</story-context>
