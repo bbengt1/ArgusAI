@@ -134,7 +134,8 @@ export function useEntityEvents(
         };
       }
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/${entityId}/events?page=${page}&limit=${limit}`
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/${entityId}/events?page=${page}&limit=${limit}`,
+        { credentials: 'include' }
       );
       if (!response.ok) {
         throw new Error('Failed to fetch entity events');
@@ -173,6 +174,7 @@ export function useUnlinkEvent() {
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/${entityId}/events/${eventId}`,
         {
           method: 'DELETE',
+          credentials: 'include',
         }
       );
       if (!response.ok) {
@@ -223,6 +225,7 @@ export function useAssignEventToEntity() {
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/events/${eventId}/entity`,
         {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
           },
@@ -281,6 +284,7 @@ export function useMergeEntities() {
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/merge`,
         {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
           },
