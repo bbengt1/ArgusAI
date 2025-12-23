@@ -478,6 +478,16 @@ class EntityListResponse(BaseModel):
     total: int = Field(description="Total entity count")
 
 
+class EntityEventsResponse(BaseModel):
+    """Response model for paginated entity events (Story P9-4.2)."""
+    entity_id: str = Field(description="Entity UUID")
+    events: list[EventSummaryForEntity] = Field(description="List of events for this entity")
+    total: int = Field(description="Total event count for this entity")
+    page: int = Field(description="Current page number (1-indexed)")
+    limit: int = Field(description="Events per page")
+    has_more: bool = Field(description="Whether more events exist beyond current page")
+
+
 class EntityCreateRequest(BaseModel):
     """Request model for creating an entity (Story P7-4.1)."""
     entity_type: str = Field(
@@ -827,6 +837,86 @@ async def get_entity(
             )
             for e in entity.get("recent_events", [])
         ],
+    )
+
+
+@router.get("/entities/{entity_id}/events", response_model=EntityEventsResponse)
+async def get_entity_events(
+    entity_id: str,
+    page: int = Query(
+        default=1,
+        ge=1,
+        description="Page number (1-indexed)"
+    ),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=50,
+        description="Number of events per page"
+    ),
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Get paginated events for an entity.
+
+    Story P9-4.2: Build Entity Event List View
+
+    Returns paginated list of events associated with an entity,
+    sorted by timestamp descending (newest first).
+
+    Args:
+        entity_id: UUID of the entity
+        page: Page number (1-indexed, default 1)
+        limit: Events per page (1-50, default 20)
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        EntityEventsResponse with paginated events and metadata
+
+    Raises:
+        404: If entity not found
+    """
+    # Verify entity exists
+    entity = await entity_service.get_entity(
+        db=db,
+        entity_id=entity_id,
+        include_events=False,
+    )
+
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    # Get paginated events
+    offset = (page - 1) * limit
+    events_data = await entity_service.get_entity_events_paginated(
+        db=db,
+        entity_id=entity_id,
+        limit=limit,
+        offset=offset,
+    )
+
+    events = events_data.get("events", [])
+    total = events_data.get("total", 0)
+
+    return EntityEventsResponse(
+        entity_id=entity_id,
+        events=[
+            EventSummaryForEntity(
+                id=e["id"],
+                timestamp=e["timestamp"],
+                description=e["description"],
+                thumbnail_url=e["thumbnail_url"],
+                camera_id=e["camera_id"],
+                similarity_score=e.get("similarity_score", 0.0),
+            )
+            for e in events
+        ],
+        total=total,
+        page=page,
+        limit=limit,
+        has_more=(offset + len(events)) < total,
     )
 
 

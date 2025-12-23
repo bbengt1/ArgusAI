@@ -531,7 +531,7 @@ development_status:
   # Focus: Vehicle separation, entity event list, manual assignment, merge entities
   epic-p9-4: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P9-4.md
   p9-4-1-improve-vehicle-entity-extraction-logic: done
-  p9-4-2-build-entity-event-list-view: backlog
+  p9-4-2-build-entity-event-list-view: in-progress
   p9-4-3-implement-event-entity-unlinking: backlog
   p9-4-4-implement-event-entity-assignment: backlog
   p9-4-5-implement-entity-merge: backlog

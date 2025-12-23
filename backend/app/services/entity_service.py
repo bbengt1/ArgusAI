@@ -1214,6 +1214,36 @@ class EntityService:
             for e in events
         ], total
 
+    async def get_entity_events_paginated(
+        self,
+        db: Session,
+        entity_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        """
+        Get paginated events for an entity (Story P9-4.2).
+
+        Args:
+            db: SQLAlchemy database session
+            entity_id: UUID of the entity
+            limit: Maximum number of events per page (default 20)
+            offset: Pagination offset
+
+        Returns:
+            Dict with "events" list and "total" count
+        """
+        events, total = await self.get_entity_events(
+            db=db,
+            entity_id=entity_id,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "events": events,
+            "total": total,
+        }
+
     async def get_entity_thumbnail_path(
         self,
         db: Session,

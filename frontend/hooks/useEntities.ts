@@ -90,6 +90,63 @@ export function useDeleteEntity() {
 }
 
 /**
+ * Response type for paginated entity events (Story P9-4.2)
+ */
+export interface EntityEventsResponse {
+  entity_id: string;
+  events: Array<{
+    id: string;
+    timestamp: string;
+    description: string;
+    thumbnail_url: string | null;
+    camera_id: string;
+    similarity_score: number;
+  }>;
+  total: number;
+  page: number;
+  limit: number;
+  has_more: boolean;
+}
+
+/**
+ * Hook to fetch paginated events for an entity (Story P9-4.2)
+ * @param entityId UUID of the entity
+ * @param page Page number (1-indexed)
+ * @param limit Events per page
+ * @returns Query result with paginated events
+ */
+export function useEntityEvents(
+  entityId: string | null,
+  page: number = 1,
+  limit: number = 20
+) {
+  return useQuery({
+    queryKey: ['entities', entityId, 'events', page, limit],
+    queryFn: async (): Promise<EntityEventsResponse> => {
+      if (!entityId) {
+        return {
+          entity_id: '',
+          events: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          has_more: false,
+        };
+      }
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/entities/${entityId}/events?page=${page}&limit=${limit}`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch entity events');
+      }
+      return response.json();
+    },
+    enabled: !!entityId,
+    staleTime: 30000,
+  });
+}
+
+/**
  * Error type guard for API errors
  */
 export function isApiError(error: unknown): error is ApiError {
