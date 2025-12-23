@@ -193,6 +193,62 @@ export function useUnlinkEvent() {
 }
 
 /**
+ * Response type for assign event operation (Story P9-4.4)
+ */
+export interface AssignEventResponse {
+  success: boolean;
+  message: string;
+  action: 'assign' | 'move' | 'none';
+  entity_id: string;
+  entity_name: string | null;
+}
+
+/**
+ * Hook to assign an event to an entity (Story P9-4.4)
+ * Handles both new assignments and moving events between entities.
+ * @returns Mutation for assigning event
+ */
+export function useAssignEventToEntity() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      eventId,
+      entityId,
+    }: {
+      eventId: string;
+      entityId: string;
+    }): Promise<AssignEventResponse> => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/context/events/${eventId}/entity`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ entity_id: entityId }),
+        }
+      );
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to assign event');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate entity events queries for the target entity
+      queryClient.invalidateQueries({ queryKey: ['entities', data.entity_id, 'events'] });
+      // Invalidate entity detail to update occurrence count
+      queryClient.invalidateQueries({ queryKey: ['entities', data.entity_id] });
+      // Invalidate entity list for occurrence count updates
+      queryClient.invalidateQueries({ queryKey: ['entities'] });
+      // Invalidate events queries to refresh any entity associations displayed on event cards
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+}
+
+/**
  * Error type guard for API errors
  */
 export function isApiError(error: unknown): error is ApiError {

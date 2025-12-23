@@ -1409,6 +1409,160 @@ class EntityService:
             "similarity_score": result.similarity_score,
         }
 
+    async def assign_event(
+        self,
+        db: Session,
+        event_id: str,
+        entity_id: str,
+    ) -> dict:
+        """
+        Assign or move an event to an entity (Story P9-4.4).
+
+        If the event is already linked to another entity, this becomes a "move"
+        operation that unlinks from the old entity and links to the new one.
+        Creates EntityAdjustment record(s) for ML training.
+
+        Args:
+            db: SQLAlchemy database session
+            event_id: UUID of the event to assign
+            entity_id: UUID of the target entity
+
+        Returns:
+            Dict with success status, message, action type, and entity info
+
+        Raises:
+            ValueError: If event or entity not found
+        """
+        from app.models.recognized_entity import RecognizedEntity, EntityEvent
+        from app.models.entity_adjustment import EntityAdjustment
+        from app.models.event import Event
+
+        # Verify event exists
+        event = db.query(Event).filter(Event.id == event_id).first()
+        if not event:
+            raise ValueError(f"Event not found: {event_id}")
+
+        # Verify target entity exists
+        target_entity = db.query(RecognizedEntity).filter(
+            RecognizedEntity.id == entity_id
+        ).first()
+        if not target_entity:
+            raise ValueError(f"Entity not found: {entity_id}")
+
+        # Check if event is already linked to an entity
+        existing_link = db.query(EntityEvent).filter(
+            EntityEvent.event_id == event_id
+        ).first()
+
+        old_entity_id = None
+        action = "assign"
+
+        if existing_link:
+            # This is a move operation
+            old_entity_id = existing_link.entity_id
+
+            if old_entity_id == entity_id:
+                # Already linked to this entity
+                return {
+                    "success": True,
+                    "message": f"Event already linked to {target_entity.name or 'this entity'}",
+                    "action": "none",
+                    "entity_id": entity_id,
+                    "entity_name": target_entity.name,
+                }
+
+            action = "move"
+
+            # Get old entity to update occurrence count
+            old_entity = db.query(RecognizedEntity).filter(
+                RecognizedEntity.id == old_entity_id
+            ).first()
+
+            # Create adjustment record for move_from
+            adjustment_from = EntityAdjustment(
+                event_id=event_id,
+                old_entity_id=old_entity_id,
+                new_entity_id=entity_id,
+                action="move_from",
+                event_description=event.description,
+            )
+            db.add(adjustment_from)
+
+            # Decrement old entity occurrence count
+            if old_entity and old_entity.occurrence_count > 0:
+                old_entity.occurrence_count -= 1
+                old_entity.updated_at = datetime.now(timezone.utc)
+
+            # Update the existing link to point to new entity
+            existing_link.entity_id = entity_id
+            existing_link.similarity_score = 1.0  # Manual assignment = 100% match
+            existing_link.created_at = datetime.now(timezone.utc)
+
+            # Create adjustment record for move_to
+            adjustment_to = EntityAdjustment(
+                event_id=event_id,
+                old_entity_id=old_entity_id,
+                new_entity_id=entity_id,
+                action="move_to",
+                event_description=event.description,
+            )
+            db.add(adjustment_to)
+
+            logger.info(
+                f"Event moved from entity {old_entity_id} to {entity_id}",
+                extra={
+                    "event_type": "event_moved",
+                    "event_id": event_id,
+                    "old_entity_id": old_entity_id,
+                    "new_entity_id": entity_id,
+                }
+            )
+        else:
+            # New assignment
+            entity_event = EntityEvent(
+                entity_id=entity_id,
+                event_id=event_id,
+                similarity_score=1.0,  # Manual assignment = 100% match
+            )
+            db.add(entity_event)
+
+            # Create adjustment record for assign
+            adjustment = EntityAdjustment(
+                event_id=event_id,
+                old_entity_id=None,
+                new_entity_id=entity_id,
+                action="assign",
+                event_description=event.description,
+            )
+            db.add(adjustment)
+
+            logger.info(
+                f"Event assigned to entity: event={event_id}, entity={entity_id}",
+                extra={
+                    "event_type": "event_assigned",
+                    "event_id": event_id,
+                    "entity_id": entity_id,
+                }
+            )
+
+        # Increment target entity occurrence count
+        target_entity.occurrence_count += 1
+        target_entity.last_seen_at = event.timestamp
+        target_entity.updated_at = datetime.now(timezone.utc)
+
+        db.commit()
+
+        entity_name = target_entity.name or f"{target_entity.entity_type.title()} entity"
+        message = f"Event {'moved to' if action == 'move' else 'added to'} {entity_name}"
+
+        return {
+            "success": True,
+            "message": message,
+            "action": action,
+            "entity_id": entity_id,
+            "entity_name": target_entity.name,
+        }
+
 
 # Global singleton instance
 _entity_service: Optional[EntityService] = None

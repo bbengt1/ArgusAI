@@ -926,6 +926,59 @@ class UnlinkEventResponse(BaseModel):
     message: str
 
 
+class AssignEventRequest(BaseModel):
+    """Request for event assignment operation (Story P9-4.4)."""
+    entity_id: str = Field(description="UUID of the entity to assign the event to")
+
+
+class AssignEventResponse(BaseModel):
+    """Response for event assignment operation (Story P9-4.4)."""
+    success: bool = Field(description="Whether the operation succeeded")
+    message: str = Field(description="Human-readable result message")
+    action: str = Field(description="Action taken: 'assign', 'move', or 'none'")
+    entity_id: str = Field(description="UUID of the target entity")
+    entity_name: Optional[str] = Field(default=None, description="Name of the target entity")
+
+
+@router.post("/events/{event_id}/entity", response_model=AssignEventResponse)
+async def assign_event_to_entity(
+    event_id: str,
+    request: AssignEventRequest,
+    db: Session = Depends(get_db),
+    entity_service: EntityService = Depends(get_entity_service),
+):
+    """
+    Assign or move an event to an entity.
+
+    Story P9-4.4: Implement Event-Entity Assignment
+
+    If the event has no entity, assigns it to the specified entity.
+    If the event already has an entity, moves it to the new entity.
+    Creates EntityAdjustment record(s) for ML training.
+
+    Args:
+        event_id: UUID of the event to assign
+        request: Request body with target entity_id
+        db: Database session
+        entity_service: Entity service instance
+
+    Returns:
+        AssignEventResponse with success status, message, and entity info
+
+    Raises:
+        404: If event or entity not found
+    """
+    try:
+        result = await entity_service.assign_event(
+            db=db,
+            event_id=event_id,
+            entity_id=request.entity_id,
+        )
+        return AssignEventResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @router.delete("/entities/{entity_id}/events/{event_id}", response_model=UnlinkEventResponse)
 async def unlink_event_from_entity(
     entity_id: str,

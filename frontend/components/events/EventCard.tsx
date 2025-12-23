@@ -4,11 +4,13 @@
 
 'use client';
 
-import { useState, memo } from 'react';
+import { useState, memo, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Video, ChevronDown, ChevronUp, Images } from 'lucide-react';
+import { Video, ChevronDown, ChevronUp, Images, UserPlus, ArrowRightLeft, User, Car } from 'lucide-react';
+import { toast } from 'sonner';
 import type { IEvent, SmartDetectionType } from '@/types/event';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { SourceTypeBadge } from './SourceTypeBadge';
 import { SmartDetectionBadge } from './SmartDetectionBadge';
 import { CorrelationIndicator } from './CorrelationIndicator';
@@ -21,6 +23,8 @@ import { FeedbackButtons } from './FeedbackButtons';
 import { AnomalyBadge } from './AnomalyBadge';
 import { FrameGalleryModal } from './FrameGalleryModal';
 import { VideoPlayerModal } from '@/components/video/VideoPlayerModal';
+import { EntitySelectModal } from '@/components/entities/EntitySelectModal';
+import { useAssignEventToEntity } from '@/hooks/useEntities';
 import { cn } from '@/lib/utils';
 
 interface EventCardProps {
@@ -64,9 +68,36 @@ export const EventCard = memo(function EventCard({
   const [frameGalleryOpen, setFrameGalleryOpen] = useState(false);
   // Story P8-3.2: Video player modal state
   const [videoPlayerOpen, setVideoPlayerOpen] = useState(false);
+  // Story P9-4.4: Entity select modal state
+  const [entityModalOpen, setEntityModalOpen] = useState(false);
+
+  // Story P9-4.4: Mutation hook for assigning events to entities
+  const assignEventMutation = useAssignEventToEntity();
+
+  // Story P9-4.4: Handle entity selection confirmation
+  const handleEntitySelect = useCallback(
+    async (entityId: string, entityName: string | null) => {
+      try {
+        const result = await assignEventMutation.mutateAsync({
+          eventId: event.id,
+          entityId,
+        });
+        toast.success(result.message);
+        setEntityModalOpen(false);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Failed to assign event'
+        );
+      }
+    },
+    [event.id, assignEventMutation]
+  );
 
   // Story P2-4.4: Check if event has correlations
   const hasCorrelations = event.correlated_events && event.correlated_events.length > 0;
+
+  // Story P9-4.4: Check if event has entity association
+  const hasEntity = !!event.entity_id;
 
   const eventDate = parseUTCTimestamp(event.timestamp);
   const relativeTime = formatDistanceToNow(eventDate, {
@@ -251,9 +282,48 @@ export const EventCard = memo(function EventCard({
             />
           )}
 
-          {/* Story P4-5.1: Feedback Buttons (AC1, AC2, AC8, AC9, AC10) */}
-          {/* Story P9-3.3: Pass smart_detection_type for package feedback */}
-          <div className="flex justify-end mt-2">
+          {/* Story P9-4.4: Entity badge and assign button (AC-4.4.1, AC-4.4.2, AC-4.4.6) */}
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2">
+              {/* Entity badge - shows linked entity name */}
+              {hasEntity && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                  {event.objects_detected?.includes('person') ? (
+                    <User className="h-3 w-3" />
+                  ) : event.objects_detected?.includes('vehicle') ? (
+                    <Car className="h-3 w-3" />
+                  ) : (
+                    <User className="h-3 w-3" />
+                  )}
+                  {event.entity_name}
+                </span>
+              )}
+              {/* Add to Entity / Move to Entity button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEntityModalOpen(true);
+                }}
+              >
+                {hasEntity ? (
+                  <>
+                    <ArrowRightLeft className="h-3 w-3 mr-1" />
+                    Move to Entity
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    Add to Entity
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Story P4-5.1: Feedback Buttons (AC1, AC2, AC8, AC9, AC10) */}
+            {/* Story P9-3.3: Pass smart_detection_type for package feedback */}
             <FeedbackButtons
               eventId={event.id}
               existingFeedback={event.feedback}
@@ -262,6 +332,20 @@ export const EventCard = memo(function EventCard({
           </div>
         </div>
       </div>
+
+      {/* Story P9-4.4: Entity Select Modal (AC-4.4.3, AC-4.4.4, AC-4.4.5) */}
+      <EntitySelectModal
+        open={entityModalOpen}
+        onOpenChange={setEntityModalOpen}
+        onSelect={handleEntitySelect}
+        title={hasEntity ? 'Move to Entity' : 'Add to Entity'}
+        description={
+          hasEntity
+            ? 'Select a different entity to move this event to'
+            : 'Select an entity to associate this event with'
+        }
+        isLoading={assignEventMutation.isPending}
+      />
 
       {/* Story P8-2.2: Frame Gallery Modal (AC2.1 - AC2.8) */}
       <FrameGalleryModal
