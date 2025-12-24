@@ -1,0 +1,466 @@
+{
+  "name": "BMAD - Full Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bmad-pipeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "bmad-pipeline-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate and prepare pipeline input\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const body = item.json.body || {};\n  \n  results.push({\n    json: {\n      epicId: body.epicId || null,\n      storyId: body.storyId || null,\n      autoImplement: body.autoImplement !== false,\n      notifyOnFailure: body.notifyOnFailure !== false,\n      pipelineStartedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:create-story 2>&1' }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "create-story",
+      "name": "1. Create Story",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [620, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse create-story output\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  // Extract story file path\n  const storyPathMatch = stdout.match(/(?:Created|Story file):\\s*([\\w\\/\\-\\.]+\\.md)/i);\n  const storyPath = storyPathMatch ? storyPathMatch[1] : null;\n  \n  const pipelineInput = $('Validate Input').first().json;\n  \n  results.push({\n    json: {\n      ...pipelineInput,\n      stage: 'create-story',\n      stageSuccess: !isError && storyPath !== null,\n      storyPath: storyPath,\n      stageOutput: stdout,\n      stageError: isError ? (stderr || stdout) : null,\n      stageCompletedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-create-story",
+      "name": "Parse Create Story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.stageSuccess }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-create-story",
+      "name": "Check Create Story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:story-context 2>&1' }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "story-context",
+      "name": "2. Story Context",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1280, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse story-context output\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  // Extract context file path\n  const contextPathMatch = stdout.match(/(?:Created|Context|Generated):\\s*([\\w\\/\\-\\.]+\\.xml)/i);\n  const contextPath = contextPathMatch ? contextPathMatch[1] : null;\n  \n  const prevData = $('Parse Create Story').first().json;\n  \n  results.push({\n    json: {\n      ...prevData,\n      stage: 'story-context',\n      stageSuccess: !isError,\n      contextPath: contextPath,\n      stageOutput: stdout,\n      stageError: isError ? (stderr || stdout) : null,\n      stageCompletedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-story-context",
+      "name": "Parse Story Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.stageSuccess && $json.autoImplement }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-context-and-auto",
+      "name": "Check Context & Auto",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1720, 200]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:dev-story 2>&1' }}",
+        "options": {
+          "timeout": 1800000
+        }
+      },
+      "id": "dev-story",
+      "name": "3. Dev Story",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1940, 100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse dev-story output\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  const prevData = $('Parse Story Context').first().json;\n  \n  results.push({\n    json: {\n      ...prevData,\n      stage: 'dev-story',\n      stageSuccess: !isError,\n      implementationOutput: stdout,\n      stageError: isError ? (stderr || stdout) : null,\n      stageCompletedAt: new Date().toISOString(),\n      pipelineCompletedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-dev-story",
+      "name": "Parse Dev Story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.stageSuccess }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-dev-story",
+      "name": "Check Dev Story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2380, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, stage: $json.stage, storyPath: $json.storyPath, contextPath: $json.contextPath, pipelineStartedAt: $json.pipelineStartedAt, pipelineCompletedAt: $json.pipelineCompletedAt || new Date().toISOString() }) }}"
+      },
+      "id": "pipeline-success",
+      "name": "Pipeline Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2600, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare context-only success response (when autoImplement is false)\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  results.push({\n    json: {\n      ...item.json,\n      pipelineCompletedAt: new Date().toISOString(),\n      note: 'Pipeline stopped after story-context (autoImplement=false)'\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "context-only-success",
+      "name": "Context Only Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1940, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, stage: 'story-context', storyPath: $json.storyPath, contextPath: $json.contextPath, note: $json.note, pipelineStartedAt: $json.pipelineStartedAt, pipelineCompletedAt: $json.pipelineCompletedAt }) }}"
+      },
+      "id": "context-success-response",
+      "name": "Context Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2160, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare failure data for notification\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  results.push({\n    json: {\n      workflow: 'BMAD Pipeline',\n      stage: data.stage || 'unknown',\n      storyPath: data.storyPath || 'N/A',\n      error: data.stageError || 'Unknown error',\n      timestamp: new Date().toISOString(),\n      notifyOnFailure: data.notifyOnFailure\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "prepare-failure",
+      "name": "Prepare Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.notifyOnFailure }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-notify",
+      "name": "Check Notify",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1720, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NOTIFICATION_WEBHOOK_URL || '' }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=BMAD Pipeline Failed\\n\\nStage: {{ $json.stage }}\\nStory: {{ $json.storyPath }}\\nError: {{ $json.error }}\\nTime: {{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 450],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, stage: $json.stage, error: $json.error, storyPath: $json.storyPath, timestamp: $json.timestamp }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "pipeline-failure",
+      "name": "Pipeline Failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2160, 500]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "1. Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Create Story": {
+      "main": [
+        [
+          {
+            "node": "Parse Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Create Story": {
+      "main": [
+        [
+          {
+            "node": "Check Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Create Story": {
+      "main": [
+        [
+          {
+            "node": "2. Story Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Story Context": {
+      "main": [
+        [
+          {
+            "node": "Parse Story Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Story Context": {
+      "main": [
+        [
+          {
+            "node": "Check Context & Auto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Context & Auto": {
+      "main": [
+        [
+          {
+            "node": "3. Dev Story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Context Only Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Dev Story": {
+      "main": [
+        [
+          {
+            "node": "Parse Dev Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Dev Story": {
+      "main": [
+        [
+          {
+            "node": "Check Dev Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Dev Story": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Context Only Success": {
+      "main": [
+        [
+          {
+            "node": "Context Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Failure": {
+      "main": [
+        [
+          {
+            "node": "Check Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Notify": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pipeline Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "bmad",
+      "id": "4"
+    },
+    {
+      "name": "automation",
+      "id": "2"
+    },
+    {
+      "name": "pipeline",
+      "id": "5"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-24T12:00:00.000Z",
+  "versionId": "1"
+}

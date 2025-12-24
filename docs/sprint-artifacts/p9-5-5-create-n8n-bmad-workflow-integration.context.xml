@@ -1,0 +1,140 @@
+<story-context id="p9-5-5-create-n8n-bmad-workflow-integration" v="1.0">
+  <metadata>
+    <epicId>P9-5</epicId>
+    <storyId>5.5</storyId>
+    <title>Create n8n BMAD Workflow Integration</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-5-5-create-n8n-bmad-workflow-integration.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>n8n to execute BMAD method workflows</iWant>
+    <soThat>story creation and development follow our methodology</soThat>
+    <tasks>
+      <task id="1">Create n8n workflow for BMAD story creation</task>
+      <task id="2">Create n8n workflow for story context generation</task>
+      <task id="3">Create n8n workflow for story implementation</task>
+      <task id="4">Create master orchestration workflow</task>
+      <task id="5">Implement error handling and notifications</task>
+      <task id="6">Create documentation for BMAD n8n integration</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC5.5.1">Given n8n receives story creation trigger, when BMAD node executes, then create-story skill is invoked</criterion>
+    <criterion id="AC5.5.2">Given BMAD workflow runs, when create-story completes, then story file path is extracted from output</criterion>
+    <criterion id="AC5.5.3">Given story is created, when story-context node runs, then context XML is generated</criterion>
+    <criterion id="AC5.5.4">Given context is ready, when dev-story node runs, then implementation begins</criterion>
+    <criterion id="AC5.5.5">Given BMAD workflow fails, when error occurs, then failure is logged and admin notified</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P9-5.md" title="Epic P9-5 Tech Spec" section="P9-5.5">
+        Implementation details including BMAD skill invocation patterns, workflow chaining,
+        error handling, and notification configuration.
+      </doc>
+      <doc path="docs/epics-phase9.md" title="Phase 9 Epics" section="Story P9-5.5">
+        Story definition with acceptance criteria and technical notes.
+      </doc>
+    </docs>
+    <code>
+      <file path="n8n/workflows/claude-code-basic.json" relevance="high">
+        Base workflow template for Claude Code execution (from P9-5.4).
+        Provides Execute Command node patterns and output parsing.
+      </file>
+      <file path="n8n/workflows/claude-code-with-git.json" relevance="high">
+        Extended workflow with git status detection (from P9-5.4).
+        Provides git change tracking patterns for BMAD workflows.
+      </file>
+      <file path="n8n/workflows/README.md" relevance="medium">
+        Workflow documentation and import instructions.
+      </file>
+    </code>
+    <dependencies>
+      <system>
+        <dependency>n8n (deployed via Docker or npm)</dependency>
+        <dependency>Claude Code CLI (@anthropic-ai/claude-code)</dependency>
+        <dependency>BMAD workflows installed in project</dependency>
+        <dependency>Git (for status detection)</dependency>
+      </system>
+      <env>
+        <variable>ANTHROPIC_API_KEY</variable>
+        <variable>N8N_WEBHOOK_URL</variable>
+        <variable>ARGUSAI_PROJECT_PATH</variable>
+        <variable>SLACK_WEBHOOK_URL (optional)</variable>
+        <variable>DISCORD_WEBHOOK_URL (optional)</variable>
+      </env>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Use Claude Code CLI --skill flag for BMAD workflow invocation</constraint>
+    <constraint>Skill pattern: claude --skill bmad:bmm:workflows:&lt;workflow-name&gt;</constraint>
+    <constraint>Chain workflows: create-story → story-context → dev-story</constraint>
+    <constraint>Timeout: 10min for create-story, 5min for context, 30min for dev-story</constraint>
+    <constraint>Parse output to extract file paths and status</constraint>
+    <constraint>Log all workflow executions with timestamps</constraint>
+    <constraint>Notify on failure via configured webhook</constraint>
+    <constraint>Store workflow templates as JSON in n8n/workflows/</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="BMAD Story Creation Trigger" kind="HTTP">
+      <signature>POST /webhook/bmad-create-story { epicId: string, storyId: string }</signature>
+      <notes>Triggers story creation from epic reference</notes>
+    </interface>
+    <interface name="BMAD Pipeline Trigger" kind="HTTP">
+      <signature>POST /webhook/bmad-pipeline { epicId: string, storyId: string, autoImplement?: boolean }</signature>
+      <notes>Full pipeline from story creation through implementation</notes>
+    </interface>
+    <interface name="Create Story Output" kind="n8n">
+      <signature>{ success: boolean, storyPath: string, storyTitle: string }</signature>
+      <notes>Output from create-story workflow node</notes>
+    </interface>
+    <interface name="Story Context Output" kind="n8n">
+      <signature>{ success: boolean, contextPath: string }</signature>
+      <notes>Output from story-context workflow node</notes>
+    </interface>
+    <interface name="Dev Story Output" kind="n8n">
+      <signature>{ success: boolean, filesChanged: string[], output: string }</signature>
+      <notes>Output from dev-story workflow node</notes>
+    </interface>
+    <interface name="Failure Notification" kind="webhook">
+      <signature>POST { workflow: string, stage: string, error: string, timestamp: string }</signature>
+      <notes>Notification payload sent on workflow failure</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Manual testing via n8n UI. Import workflows, trigger webhooks, verify outputs.
+      No automated tests for n8n workflows in this story.
+    </standards>
+    <locations>
+      <location>n8n/workflows/ (workflow JSON files)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC5.5.1">Trigger create-story webhook, verify skill invocation in output</idea>
+      <idea ac="AC5.5.2">Run create-story, check story path extracted from output</idea>
+      <idea ac="AC5.5.3">Trigger story-context after create-story, verify XML exists</idea>
+      <idea ac="AC5.5.4">Run full pipeline, verify dev-story executes after context</idea>
+      <idea ac="AC5.5.5">Force failure in workflow, verify notification sent</idea>
+    </ideas>
+  </tests>
+
+  <relatedStories>
+    <story id="P9-5.4" status="done">
+      Create n8n Claude Code Integration - provides base workflow templates
+    </story>
+    <story id="P9-5.3" status="done">
+      Deploy n8n instance - prerequisite infrastructure
+    </story>
+    <story id="P9-5.6" status="backlog">
+      Build n8n Monitoring Dashboard and Approval Gates - builds on this story
+    </story>
+  </relatedStories>
+</story-context>

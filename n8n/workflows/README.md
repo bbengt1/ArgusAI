@@ -94,6 +94,139 @@ Webhook → Git Status Before → Store Status → Execute Claude Code → Git S
 - `D` - Deleted
 - `R` - Renamed
 
+---
+
+## BMAD Workflow Integration
+
+These workflows execute BMAD (Big Mad Agile Development) methodology workflows for automated story creation, context generation, and implementation.
+
+### bmad-create-story.json
+
+Executes the BMAD create-story workflow to generate a new story file.
+
+**Flow:**
+```
+Webhook → Execute Create Story → Parse Output → Check Success → Response
+```
+
+**Webhook Endpoint:** `POST /webhook/bmad-create-story`
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "storyPath": "docs/sprint-artifacts/story-name.md",
+  "storyTitle": "Story Title",
+  "epicId": "P9-5",
+  "storyId": "5.5",
+  "executedAt": "2025-12-24T12:00:00.000Z"
+}
+```
+
+### bmad-story-context.json
+
+Generates story context XML from an existing story file.
+
+**Flow:**
+```
+Webhook → Validate Input → Execute Story Context → Parse Output → Check Success → Response
+```
+
+**Webhook Endpoint:** `POST /webhook/bmad-story-context`
+
+**Request Body (optional):**
+```json
+{
+  "storyPath": "docs/sprint-artifacts/story-name.md"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "contextPath": "docs/sprint-artifacts/story-name.context.xml",
+  "executedAt": "2025-12-24T12:00:00.000Z"
+}
+```
+
+### bmad-dev-story.json
+
+Implements a story using the BMAD dev-story workflow with git change tracking.
+
+**Flow:**
+```
+Webhook → Git Status Before → Store Status → Execute Dev Story → Git Status After → Compare Status → Check Success → Response
+```
+
+**Webhook Endpoint:** `POST /webhook/bmad-dev-story`
+
+**Timeout:** 30 minutes (1,800,000ms) for complex implementations
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "storyStatus": "completed",
+  "hasChanges": true,
+  "changedFiles": [
+    { "status": "M", "file": "src/app.ts" },
+    { "status": "??", "file": "src/new-feature.ts" }
+  ],
+  "tasksCompleted": 5,
+  "executedAt": "2025-12-24T12:00:00.000Z"
+}
+```
+
+### bmad-pipeline.json
+
+Master orchestration workflow that chains all BMAD workflows together.
+
+**Flow:**
+```
+Webhook → Validate Input → Create Story → Parse → Story Context → Parse → Dev Story → Parse → Success/Failure
+                                      ↓                       ↓                    ↓
+                                  (on fail) ─────────────────────────────────► Notify → Failure Response
+```
+
+**Webhook Endpoint:** `POST /webhook/bmad-pipeline`
+
+**Request Body:**
+```json
+{
+  "epicId": "P9-5",
+  "storyId": "5.6",
+  "autoImplement": true,
+  "notifyOnFailure": true
+}
+```
+
+**Options:**
+- `autoImplement` (default: true): If false, stops after story-context generation
+- `notifyOnFailure` (default: true): Sends notification webhook on pipeline failure
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "stage": "dev-story",
+  "storyPath": "docs/sprint-artifacts/p9-5-6-story.md",
+  "contextPath": "docs/sprint-artifacts/p9-5-6-story.context.xml",
+  "pipelineStartedAt": "2025-12-24T12:00:00.000Z",
+  "pipelineCompletedAt": "2025-12-24T12:30:00.000Z"
+}
+```
+
+### BMAD Environment Variables
+
+Additional environment variables for BMAD workflows:
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `NOTIFICATION_WEBHOOK_URL` | URL for failure notifications (Slack/Discord) | No |
+
+---
+
 ## Importing Workflows
 
 ### Via n8n UI

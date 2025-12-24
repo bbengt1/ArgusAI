@@ -1,0 +1,179 @@
+{
+  "name": "BMAD - Story Context",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bmad-story-context",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "bmad-story-context-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate input and prepare for story context generation\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const body = item.json.body || {};\n  const storyPath = body.storyPath || null;\n  \n  results.push({\n    json: {\n      storyPath: storyPath,\n      hasStoryPath: storyPath !== null\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:story-context 2>&1' }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "execute-story-context",
+      "name": "Execute Story Context",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse story-context output to extract context file path\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  \n  // Check for errors\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  // Extract context file path from output\n  // Look for patterns like \"Created: story.context.xml\" or \"Context: story.context.xml\"\n  const contextPathMatch = stdout.match(/(?:Created|Context|Generated):\\s*([\\w\\/\\-\\.]+\\.context\\.xml)/i);\n  const contextPath = contextPathMatch ? contextPathMatch[1] : null;\n  \n  // Also check for .xml files if specific pattern not found\n  const xmlMatch = stdout.match(/([\\w\\/\\-\\.]+\\.xml)/i);\n  const finalContextPath = contextPath || (xmlMatch ? xmlMatch[1] : null);\n  \n  results.push({\n    json: {\n      success: !isError,\n      exitCode: exitCode,\n      contextPath: finalContextPath,\n      output: stdout,\n      error: isError ? (stderr || stdout) : null,\n      executedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-output",
+      "name": "Parse Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-success",
+      "name": "Check Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, contextPath: $json.contextPath, executedAt: $json.executedAt }) }}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error, exitCode: $json.exitCode, executedAt: $json.executedAt }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Execute Story Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Story Context": {
+      "main": [
+        [
+          {
+            "node": "Parse Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Output": {
+      "main": [
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Success": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "bmad",
+      "id": "4"
+    },
+    {
+      "name": "automation",
+      "id": "2"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-24T12:00:00.000Z",
+  "versionId": "1"
+}

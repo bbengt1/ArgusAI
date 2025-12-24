@@ -1,0 +1,158 @@
+{
+  "name": "BMAD - Create Story",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bmad-create-story",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "bmad-create-story-webhook"
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:create-story 2>&1' }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "execute-create-story",
+      "name": "Execute Create Story",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse create-story output to extract story file path\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  \n  // Check for errors\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  // Extract story file path from output\n  // Look for patterns like \"Created: docs/sprint-artifacts/story-name.md\"\n  // or \"Story file: docs/sprint-artifacts/story-name.md\"\n  const storyPathMatch = stdout.match(/(?:Created|Story file):\\s*([\\w\\/\\-\\.]+\\.md)/i);\n  const storyPath = storyPathMatch ? storyPathMatch[1] : null;\n  \n  // Extract story title if present\n  const titleMatch = stdout.match(/Story:\\s*(.+?)(?:\\n|$)/i);\n  const storyTitle = titleMatch ? titleMatch[1].trim() : null;\n  \n  // Extract epic and story IDs if present\n  const epicMatch = stdout.match(/Epic:\\s*([\\w\\-\\.]+)/i);\n  const storyIdMatch = stdout.match(/Story ID:\\s*([\\w\\-\\.]+)/i);\n  \n  results.push({\n    json: {\n      success: !isError && storyPath !== null,\n      exitCode: exitCode,\n      storyPath: storyPath,\n      storyTitle: storyTitle,\n      epicId: epicMatch ? epicMatch[1] : null,\n      storyId: storyIdMatch ? storyIdMatch[1] : null,\n      output: stdout,\n      error: isError ? (stderr || stdout) : null,\n      executedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-output",
+      "name": "Parse Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-success",
+      "name": "Check Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, storyPath: $json.storyPath, storyTitle: $json.storyTitle, epicId: $json.epicId, storyId: $json.storyId, executedAt: $json.executedAt }) }}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error, exitCode: $json.exitCode, executedAt: $json.executedAt }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Create Story": {
+      "main": [
+        [
+          {
+            "node": "Parse Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Output": {
+      "main": [
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Success": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "bmad",
+      "id": "4"
+    },
+    {
+      "name": "automation",
+      "id": "2"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-24T12:00:00.000Z",
+  "versionId": "1"
+}
