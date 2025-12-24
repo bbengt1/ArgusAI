@@ -287,8 +287,9 @@ async def change_password(
             detail=error_message,
         )
 
-    # Update password
+    # Update password - must add to session to ensure changes are tracked
     current_user.password_hash = hash_password(password_data.new_password)
+    db.add(current_user)
     db.commit()
 
     logger.info(
