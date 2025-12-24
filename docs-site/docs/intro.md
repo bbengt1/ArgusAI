@@ -48,12 +48,28 @@ cd argusai
 ./scripts/install.sh
 ```
 
+## Deployment Options
+
+| Method | Best For |
+|--------|----------|
+| [Docker Compose](./getting-started/docker-deployment) | Single server, easy setup |
+| [Kubernetes](./getting-started/kubernetes-deployment) | Scalable clusters, fine control |
+| [Helm Chart](./getting-started/helm-deployment) | Template-based K8s, GitOps |
+| [Manual](./getting-started/installation) | Development, customization |
+
+Pre-built Docker images are available from [GitHub Container Registry](./getting-started/ci-cd).
+
 ## System Requirements
 
 ### Docker Deployment
 - **Docker Engine**: 20.10 or higher
 - **Docker Compose**: V2 or higher
 - **Optional**: SSL certificates for HTTPS
+
+### Kubernetes Deployment
+- **Kubernetes**: 1.25 or higher
+- **Helm**: 3.10 or higher (for Helm deployments)
+- **kubectl**: Configured with cluster access
 
 ### Manual Installation
 - **Python**: 3.11 or higher
@@ -69,7 +85,13 @@ Camera Capture → Motion Detection → Event Queue → AI Description → Datab
 
 ## Next Steps
 
-- [Docker Deployment](./getting-started/docker-deployment) - Deploy with Docker Compose (recommended)
-- [Installation Guide](./getting-started/installation) - Manual installation options
+### Deployment
+- [Docker Compose](./getting-started/docker-deployment) - Single-server deployment (recommended)
+- [Kubernetes](./getting-started/kubernetes-deployment) - Deploy with K8s manifests
+- [Helm Chart](./getting-started/helm-deployment) - Template-based K8s deployment
+- [CI/CD Pipeline](./getting-started/ci-cd) - Automated builds and deployments
+
+### Configuration & Features
+- [Installation Guide](./getting-started/installation) - All installation options
 - [Configuration](./getting-started/configuration) - Configure cameras and AI providers
 - [Features](./features/ai-analysis) - Learn about all the features

@@ -22,6 +22,16 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Deployment',
+      items: [
+        'getting-started/docker-deployment',
+        'getting-started/kubernetes-deployment',
+        'getting-started/helm-deployment',
+        'getting-started/ci-cd',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Features',
       items: [
         'features/unifi-protect',

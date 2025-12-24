@@ -283,6 +283,12 @@ ls -la data/certs/
 docker-compose exec nginx nginx -t
 ```
 
+## Alternative Deployment Options
+
+- [Kubernetes Deployment](./kubernetes-deployment) - Deploy with raw Kubernetes manifests
+- [Helm Chart](./helm-deployment) - Template-based Kubernetes deployment
+- [CI/CD Pipeline](./ci-cd) - Automated builds with GitHub Actions
+
 ## Next Steps
 
 - [Configuration](./configuration) - Configure AI providers and cameras

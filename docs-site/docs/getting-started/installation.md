@@ -10,11 +10,15 @@ This guide will help you install ArgusAI on your system.
 
 | Method | Best For | Requirements |
 |--------|----------|--------------|
-| [Docker Deployment](./docker-deployment) | Production, Easy setup | Docker, Docker Compose |
+| [Docker Compose](./docker-deployment) | Single server, Easy setup | Docker, Docker Compose |
+| [Kubernetes](./kubernetes-deployment) | Scalable clusters, Fine control | Kubernetes 1.25+, kubectl |
+| [Helm Chart](./helm-deployment) | Template-based K8s, GitOps | Kubernetes 1.25+, Helm 3.10+ |
 | Manual Installation | Development, Customization | Python 3.11+, Node.js 18+ |
 
 :::tip Recommended
-For most users, we recommend [Docker Deployment](./docker-deployment) for the easiest setup and production-ready configuration.
+- **Single server**: Use [Docker Compose](./docker-deployment) for the easiest setup
+- **Kubernetes clusters**: Use [Helm Chart](./helm-deployment) for customizable deployments
+- **CI/CD pipelines**: Pre-built images are available from [GitHub Container Registry](./ci-cd)
 :::
 
 ## Prerequisites (Manual Installation)
@@ -124,5 +128,12 @@ npm run start
 
 ## Next Steps
 
+### Deployment Options
+- [Docker Compose](./docker-deployment) - Single-server deployment with Docker Compose
+- [Kubernetes](./kubernetes-deployment) - Deploy with raw Kubernetes manifests
+- [Helm Chart](./helm-deployment) - Template-based Kubernetes deployment
+- [CI/CD Pipeline](./ci-cd) - Automated builds and deployments
+
+### Configuration
 - [Configuration](./configuration) - Configure AI providers and cameras
 - [UniFi Protect](../features/unifi-protect) - Set up UniFi camera integration
