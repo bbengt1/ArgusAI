@@ -1,0 +1,116 @@
+{
+  "name": "Monitoring Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "dashboard-metrics",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "dashboard-metrics-webhook"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($env.N8N_URL || 'http://localhost:5678') + '/api/v1/executions?limit=100' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-executions",
+      "name": "Get Executions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "n8n-api-key",
+          "name": "n8n API Key"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate metrics from executions\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const executions = item.json.data || [];\n  const now = new Date();\n  const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);\n  const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);\n  const oneMonthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);\n  \n  // Filter by time periods\n  const last24h = executions.filter(e => new Date(e.startedAt) > oneDayAgo);\n  const last7d = executions.filter(e => new Date(e.startedAt) > oneWeekAgo);\n  const last30d = executions.filter(e => new Date(e.startedAt) > oneMonthAgo);\n  \n  // Calculate success rates\n  const calcSuccessRate = (execs) => {\n    if (execs.length === 0) return 0;\n    const successful = execs.filter(e => e.status === 'success').length;\n    return Math.round((successful / execs.length) * 100);\n  };\n  \n  // Calculate average duration (for completed executions)\n  const calcAvgDuration = (execs) => {\n    const completed = execs.filter(e => e.stoppedAt && e.startedAt);\n    if (completed.length === 0) return 0;\n    const totalMs = completed.reduce((sum, e) => {\n      return sum + (new Date(e.stoppedAt) - new Date(e.startedAt));\n    }, 0);\n    return Math.round(totalMs / completed.length / 1000); // seconds\n  };\n  \n  // Count active/running workflows\n  const activeWorkflows = executions.filter(e => e.status === 'running' || e.status === 'waiting').length;\n  \n  // Count by status\n  const statusCounts = executions.reduce((acc, e) => {\n    acc[e.status] = (acc[e.status] || 0) + 1;\n    return acc;\n  }, {});\n  \n  // Get failed workflows (last 10)\n  const failedWorkflows = executions\n    .filter(e => e.status === 'error' || e.status === 'failed')\n    .slice(0, 10)\n    .map(e => ({\n      id: e.id,\n      workflowName: e.workflowData?.name || 'Unknown',\n      startedAt: e.startedAt,\n      error: e.data?.resultData?.error?.message || 'Unknown error'\n    }));\n  \n  // Get waiting workflows (approval gates)\n  const waitingWorkflows = executions\n    .filter(e => e.status === 'waiting')\n    .map(e => ({\n      id: e.id,\n      workflowName: e.workflowData?.name || 'Unknown',\n      startedAt: e.startedAt,\n      waitingSince: e.startedAt\n    }));\n  \n  results.push({\n    json: {\n      timestamp: now.toISOString(),\n      metrics: {\n        activeWorkflows: activeWorkflows,\n        queueDepth: waitingWorkflows.length,\n        totalExecutions: {\n          last24h: last24h.length,\n          last7d: last7d.length,\n          last30d: last30d.length\n        },\n        successRate: {\n          last24h: calcSuccessRate(last24h),\n          last7d: calcSuccessRate(last7d),\n          last30d: calcSuccessRate(last30d)\n        },\n        avgDurationSeconds: {\n          last24h: calcAvgDuration(last24h),\n          last7d: calcAvgDuration(last7d),\n          last30d: calcAvgDuration(last30d)\n        },\n        statusCounts: statusCounts\n      },\n      failedWorkflows: failedWorkflows,\n      waitingWorkflows: waitingWorkflows\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "calculate-metrics",
+      "name": "Calculate Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Executions": {
+      "main": [
+        [
+          {
+            "node": "Calculate Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Metrics": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "monitoring",
+      "id": "7"
+    },
+    {
+      "name": "dashboard",
+      "id": "8"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-24T12:00:00.000Z",
+  "versionId": "1"
+}

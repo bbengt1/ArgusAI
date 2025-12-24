@@ -1,0 +1,694 @@
+{
+  "name": "BMAD - Full Pipeline with Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bmad-pipeline-approval",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "bmad-pipeline-approval-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate and prepare pipeline input\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const body = item.json.body || {};\n  \n  results.push({\n    json: {\n      epicId: body.epicId || null,\n      storyId: body.storyId || null,\n      autoImplement: body.autoImplement !== false,\n      requireApproval: body.requireApproval !== false,\n      notifyOnFailure: body.notifyOnFailure !== false,\n      pipelineStartedAt: new Date().toISOString(),\n      executionId: $executionId\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:create-story 2>&1' }}",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "create-story",
+      "name": "1. Create Story",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [620, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse create-story output\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  const storyPathMatch = stdout.match(/(?:Created|Story file):\\s*([\\w\\/\\-\\.]+\\.md)/i);\n  const storyPath = storyPathMatch ? storyPathMatch[1] : null;\n  \n  const titleMatch = stdout.match(/Story:\\s*(.+?)(?:\\n|$)/i);\n  const storyTitle = titleMatch ? titleMatch[1].trim() : 'New Story';\n  \n  const pipelineInput = $('Validate Input').first().json;\n  \n  results.push({\n    json: {\n      ...pipelineInput,\n      stage: 'create-story',\n      stageSuccess: !isError && storyPath !== null,\n      storyPath: storyPath,\n      storyTitle: storyTitle,\n      stageOutput: stdout,\n      stageError: isError ? (stderr || stdout) : null,\n      stageCompletedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-create-story",
+      "name": "Parse Create Story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.stageSuccess }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-create-story",
+      "name": "Check Create Story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:story-context 2>&1' }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "story-context",
+      "name": "2. Story Context",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1280, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse story-context output\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  const contextPathMatch = stdout.match(/(?:Created|Context|Generated):\\s*([\\w\\/\\-\\.]+\\.xml)/i);\n  const contextPath = contextPathMatch ? contextPathMatch[1] : null;\n  \n  const prevData = $('Parse Create Story').first().json;\n  \n  results.push({\n    json: {\n      ...prevData,\n      stage: 'story-context',\n      stageSuccess: !isError,\n      contextPath: contextPath,\n      stageOutput: stdout,\n      stageError: isError ? (stderr || stdout) : null,\n      stageCompletedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-story-context",
+      "name": "Parse Story Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.stageSuccess && $json.autoImplement }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-context-and-auto",
+      "name": "Check Context & Auto",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1720, 200]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && claude --skill bmad:bmm:workflows:dev-story 2>&1' }}",
+        "options": {
+          "timeout": 1800000
+        }
+      },
+      "id": "dev-story",
+      "name": "3. Dev Story",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1940, 100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse dev-story output and prepare for PR creation\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const stderr = item.json.stderr || '';\n  const exitCode = item.json.exitCode || 0;\n  const isError = exitCode !== 0 || stderr.includes('Error:');\n  \n  const prevData = $('Parse Story Context').first().json;\n  \n  results.push({\n    json: {\n      ...prevData,\n      stage: 'dev-story',\n      stageSuccess: !isError,\n      implementationOutput: stdout,\n      stageError: isError ? (stderr || stdout) : null,\n      stageCompletedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-dev-story",
+      "name": "Parse Dev Story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.stageSuccess }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-dev-story",
+      "name": "Check Dev Story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2380, 100]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && git add -A && git commit -m \"feat: ' + $json.storyTitle + '\" && git push origin HEAD 2>&1' }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "git-commit-push",
+      "name": "Git Commit & Push",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2600, 0],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && gh pr create --title \"' + $json.storyTitle + '\" --body \"Automated implementation of ' + $json.storyPath + '\" 2>&1' }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "create-pr",
+      "name": "Create PR",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2820, 0],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract PR URL and prepare approval notification\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const stdout = item.json.stdout || '';\n  const prUrlMatch = stdout.match(/(https:\\/\\/github\\.com\\/[^\\s]+\\/pull\\/\\d+)/);\n  const prUrl = prUrlMatch ? prUrlMatch[1] : null;\n  \n  const prevData = $('Parse Dev Story').first().json;\n  const n8nUrl = $env.N8N_URL || 'http://localhost:5678';\n  const executionId = prevData.executionId;\n  \n  results.push({\n    json: {\n      ...prevData,\n      stage: 'pr-created',\n      prUrl: prUrl,\n      approveUrl: n8nUrl + '/webhook/approve/' + executionId,\n      rejectUrl: n8nUrl + '/webhook/reject/' + executionId,\n      prCreatedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "prepare-approval",
+      "name": "Prepare Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3040, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.requireApproval }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-require-approval",
+      "name": "Check Require Approval",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3260, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NOTIFICATION_WEBHOOK_URL || '' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"PR Ready for Review\",\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*PR Ready for Review*\\n\\n*Story:* {{ $json.storyTitle }}\\n*Path:* {{ $json.storyPath }}\\n*PR:* {{ $json.prUrl }}\"\n      }\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"Approve\" },\n          \"url\": \"{{ $json.approveUrl }}\",\n          \"style\": \"primary\"\n        },\n        {\n          \"type\": \"button\",\n          \"text\": { \"type\": \"plain_text\", \"text\": \"Reject\" },\n          \"url\": \"{{ $json.rejectUrl }}\",\n          \"style\": \"danger\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "send-approval-notification",
+      "name": "Send Approval Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3480, -100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {
+          "webhookSuffix": "={{ '/approve/' + $json.executionId }}",
+          "timeout": 604800,
+          "timeoutUnit": "seconds"
+        }
+      },
+      "id": "wait-for-approval",
+      "name": "Wait for Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3700, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log approval action\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const webhookData = item.json.body || {};\n  const prevData = $('Prepare Approval').first().json;\n  \n  results.push({\n    json: {\n      ...prevData,\n      stage: 'approved',\n      approvalAction: 'approved',\n      approver: webhookData.approver || 'unknown',\n      approvalReason: webhookData.reason || null,\n      approvedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "log-approval",
+      "name": "Log Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3920, -100]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && gh pr merge --squash --delete-branch 2>&1' }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "merge-pr",
+      "name": "Merge PR",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [4140, -100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final success response\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const prevData = $('Log Approval').first().json;\n  \n  results.push({\n    json: {\n      success: true,\n      stage: 'merged',\n      storyPath: prevData.storyPath,\n      storyTitle: prevData.storyTitle,\n      prUrl: prevData.prUrl,\n      approver: prevData.approver,\n      pipelineStartedAt: prevData.pipelineStartedAt,\n      pipelineCompletedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "pipeline-success",
+      "name": "Pipeline Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4360, -100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Skip approval - auto-merge\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  results.push({\n    json: {\n      ...item.json,\n      stage: 'auto-approved',\n      approvalAction: 'auto-approved',\n      approver: 'system',\n      approvedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "auto-approve",
+      "name": "Auto Approve",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3480, 100]
+    },
+    {
+      "parameters": {
+        "command": "={{ 'cd ' + ($env.ARGUSAI_PROJECT_PATH || '/path/to/argusai') + ' && gh pr merge --squash --delete-branch 2>&1' }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "auto-merge-pr",
+      "name": "Auto Merge PR",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [3700, 100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Context-only success (when autoImplement is false)\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  results.push({\n    json: {\n      ...item.json,\n      pipelineCompletedAt: new Date().toISOString(),\n      note: 'Pipeline stopped after story-context (autoImplement=false)'\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "context-only-success",
+      "name": "Context Only Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1940, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare failure data for notification\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  results.push({\n    json: {\n      workflow: 'BMAD Pipeline with Approval',\n      stage: data.stage || 'unknown',\n      storyPath: data.storyPath || 'N/A',\n      error: data.stageError || 'Unknown error',\n      timestamp: new Date().toISOString(),\n      notifyOnFailure: data.notifyOnFailure\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "prepare-failure",
+      "name": "Prepare Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.notifyOnFailure }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-notify",
+      "name": "Check Notify",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1720, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NOTIFICATION_WEBHOOK_URL || '' }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=BMAD Pipeline Failed\\n\\nStage: {{ $json.stage }}\\nStory: {{ $json.storyPath }}\\nError: {{ $json.error }}\\nTime: {{ $json.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-failure-notification",
+      "name": "Send Failure Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 450],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pipeline failure response\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  results.push({\n    json: {\n      success: false,\n      stage: item.json.stage,\n      error: item.json.error,\n      storyPath: item.json.storyPath,\n      timestamp: item.json.timestamp\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "pipeline-failure",
+      "name": "Pipeline Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 500]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "1. Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Create Story": {
+      "main": [
+        [
+          {
+            "node": "Parse Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Create Story": {
+      "main": [
+        [
+          {
+            "node": "Check Create Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Create Story": {
+      "main": [
+        [
+          {
+            "node": "2. Story Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Story Context": {
+      "main": [
+        [
+          {
+            "node": "Parse Story Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Story Context": {
+      "main": [
+        [
+          {
+            "node": "Check Context & Auto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Context & Auto": {
+      "main": [
+        [
+          {
+            "node": "3. Dev Story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Context Only Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Dev Story": {
+      "main": [
+        [
+          {
+            "node": "Parse Dev Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Dev Story": {
+      "main": [
+        [
+          {
+            "node": "Check Dev Story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Dev Story": {
+      "main": [
+        [
+          {
+            "node": "Git Commit & Push",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Git Commit & Push": {
+      "main": [
+        [
+          {
+            "node": "Create PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create PR": {
+      "main": [
+        [
+          {
+            "node": "Prepare Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Approval": {
+      "main": [
+        [
+          {
+            "node": "Check Require Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Require Approval": {
+      "main": [
+        [
+          {
+            "node": "Send Approval Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auto Approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Approval Notification": {
+      "main": [
+        [
+          {
+            "node": "Wait for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Approval": {
+      "main": [
+        [
+          {
+            "node": "Log Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Approval": {
+      "main": [
+        [
+          {
+            "node": "Merge PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge PR": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Approve": {
+      "main": [
+        [
+          {
+            "node": "Auto Merge PR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Merge PR": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Failure": {
+      "main": [
+        [
+          {
+            "node": "Check Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Notify": {
+      "main": [
+        [
+          {
+            "node": "Send Failure Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pipeline Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Failure Notification": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "bmad",
+      "id": "4"
+    },
+    {
+      "name": "automation",
+      "id": "2"
+    },
+    {
+      "name": "pipeline",
+      "id": "5"
+    },
+    {
+      "name": "approval",
+      "id": "6"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-12-24T12:00:00.000Z",
+  "versionId": "1"
+}

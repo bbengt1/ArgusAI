@@ -1,0 +1,132 @@
+<story-context id="p9-5-6-build-n8n-monitoring-dashboard-and-approval-gates" v="1.0">
+  <metadata>
+    <epicId>P9-5</epicId>
+    <storyId>5.6</storyId>
+    <title>Build n8n Monitoring Dashboard and Approval Gates</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p9-5-6-build-n8n-monitoring-dashboard-and-approval-gates.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>to monitor pipeline status and approve changes before merge</iWant>
+    <soThat>automation doesn't proceed without human oversight when needed</soThat>
+    <tasks>
+      <task id="1">Create n8n workflow with approval gate</task>
+      <task id="2">Integrate approval gate into BMAD pipeline</task>
+      <task id="3">Create monitoring dashboard workflow</task>
+      <task id="4">Implement approval logging</task>
+      <task id="5">Create documentation for approval gates</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC5.6.1">Given n8n workflows are running, when I view dashboard, then I see active workflows and status</criterion>
+    <criterion id="AC5.6.2">Given dashboard is open, when I view metrics, then I see success rate and average duration</criterion>
+    <criterion id="AC5.6.3">Given workflow reaches approval gate, when human review needed, then notification is sent</criterion>
+    <criterion id="AC5.6.4">Given approval notification sent, when I click approve link, then workflow resumes</criterion>
+    <criterion id="AC5.6.5">Given approval notification sent, when I click reject link, then workflow is cancelled</criterion>
+    <criterion id="AC5.6.6">Given approval action taken, when workflow updates, then approval is logged with timestamp and approver</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P9-5.md" title="Epic P9-5 Tech Spec" section="P9-5.6">
+        Implementation details including Wait node configuration, webhook endpoints,
+        notification content, and monitoring metrics.
+      </doc>
+      <doc path="docs/epics-phase9.md" title="Phase 9 Epics" section="Story P9-5.6">
+        Story definition with acceptance criteria and technical notes.
+      </doc>
+    </docs>
+    <code>
+      <file path="n8n/workflows/bmad-pipeline.json" relevance="high">
+        Master orchestration workflow to be updated with approval gate.
+      </file>
+      <file path="n8n/workflows/bmad-dev-story.json" relevance="medium">
+        Dev story workflow that precedes approval gate in pipeline.
+      </file>
+      <file path="n8n/workflows/README.md" relevance="medium">
+        Workflow documentation to be updated with approval gate section.
+      </file>
+    </code>
+    <dependencies>
+      <system>
+        <dependency>n8n (with Wait node support)</dependency>
+        <dependency>Slack/Discord for notifications (optional)</dependency>
+        <dependency>n8n API for monitoring metrics</dependency>
+      </system>
+      <env>
+        <variable>N8N_URL</variable>
+        <variable>NOTIFICATION_WEBHOOK_URL</variable>
+        <variable>SLACK_WEBHOOK_URL (optional)</variable>
+        <variable>DISCORD_WEBHOOK_URL (optional)</variable>
+      </env>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Use n8n Wait node with webhook resume for approval gate</constraint>
+    <constraint>Approval timeout: 7 days with warning at 5 days</constraint>
+    <constraint>Webhook endpoints: /webhook/approve/{id} and /webhook/reject/{id}</constraint>
+    <constraint>Log all approval actions with timestamp and approver</constraint>
+    <constraint>Send notification with approve/reject links</constraint>
+    <constraint>Query n8n API for execution metrics</constraint>
+    <constraint>Store workflow templates as JSON in n8n/workflows/</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Approve Webhook" kind="HTTP">
+      <signature>POST /webhook/approve/{executionId} { approver?: string }</signature>
+      <notes>Resumes paused workflow with approval</notes>
+    </interface>
+    <interface name="Reject Webhook" kind="HTTP">
+      <signature>POST /webhook/reject/{executionId} { reason?: string }</signature>
+      <notes>Cancels paused workflow with rejection</notes>
+    </interface>
+    <interface name="Dashboard Trigger" kind="HTTP">
+      <signature>GET /webhook/dashboard-metrics</signature>
+      <notes>Returns current workflow metrics</notes>
+    </interface>
+    <interface name="Approval Notification" kind="webhook">
+      <signature>POST { prUrl: string, approveUrl: string, rejectUrl: string, summary: string }</signature>
+      <notes>Notification sent when approval gate is reached</notes>
+    </interface>
+    <interface name="Metrics Output" kind="n8n">
+      <signature>{ activeWorkflows: number, successRate: number, avgDuration: number, queueDepth: number }</signature>
+      <notes>Dashboard metrics structure</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Manual testing via n8n UI. Import workflows, trigger approval gates, verify notifications.
+      No automated tests for n8n workflows in this story.
+    </standards>
+    <locations>
+      <location>n8n/workflows/ (workflow JSON files)</location>
+    </locations>
+    <ideas>
+      <idea ac="AC5.6.1">View n8n dashboard, verify active workflows shown</idea>
+      <idea ac="AC5.6.2">Check metrics display for success rate and duration</idea>
+      <idea ac="AC5.6.3">Trigger pipeline, verify approval notification sent</idea>
+      <idea ac="AC5.6.4">Click approve link, verify workflow resumes</idea>
+      <idea ac="AC5.6.5">Click reject link, verify workflow cancelled</idea>
+      <idea ac="AC5.6.6">Check logs for approval action with timestamp</idea>
+    </ideas>
+  </tests>
+
+  <relatedStories>
+    <story id="P9-5.5" status="done">
+      Create n8n BMAD Workflow Integration - provides base pipeline workflow
+    </story>
+    <story id="P9-5.4" status="done">
+      Create n8n Claude Code Integration - provides execution patterns
+    </story>
+    <story id="P9-5.3" status="done">
+      Deploy n8n instance - prerequisite infrastructure
+    </story>
+  </relatedStories>
+</story-context>

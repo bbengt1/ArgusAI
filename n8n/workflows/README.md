@@ -227,6 +227,117 @@ Additional environment variables for BMAD workflows:
 
 ---
 
+## Approval Gates & Monitoring
+
+### bmad-pipeline-with-approval.json
+
+Full BMAD pipeline with human approval gate before PR merge.
+
+**Flow:**
+```
+Webhook → Create Story → Story Context → Dev Story → Git Push → Create PR → Approval Gate → Merge PR
+                                                                      ↓
+                                                              (notification sent)
+                                                                      ↓
+                                                              Wait for approval/reject webhook
+```
+
+**Webhook Endpoint:** `POST /webhook/bmad-pipeline-approval`
+
+**Request Body:**
+```json
+{
+  "epicId": "P9-5",
+  "storyId": "5.6",
+  "autoImplement": true,
+  "requireApproval": true,
+  "notifyOnFailure": true
+}
+```
+
+**Options:**
+- `requireApproval` (default: true): If false, auto-merges without human approval
+- `autoImplement` (default: true): If false, stops after story-context generation
+- `notifyOnFailure` (default: true): Sends notification on pipeline failure
+
+**Approval Endpoints:**
+- `POST /webhook/approve/{executionId}` - Approves and resumes workflow
+- `POST /webhook/reject/{executionId}` - Rejects and cancels workflow
+
+**Approval Request Body (optional):**
+```json
+{
+  "approver": "username",
+  "reason": "Looks good to merge"
+}
+```
+
+**Approval Timeout:** 7 days (604,800 seconds)
+
+### monitoring-dashboard.json
+
+Provides workflow execution metrics and status monitoring.
+
+**Webhook Endpoint:** `GET /webhook/dashboard-metrics`
+
+**Response:**
+```json
+{
+  "timestamp": "2025-12-24T12:00:00.000Z",
+  "metrics": {
+    "activeWorkflows": 2,
+    "queueDepth": 1,
+    "totalExecutions": {
+      "last24h": 15,
+      "last7d": 87,
+      "last30d": 342
+    },
+    "successRate": {
+      "last24h": 93,
+      "last7d": 89,
+      "last30d": 91
+    },
+    "avgDurationSeconds": {
+      "last24h": 245,
+      "last7d": 312,
+      "last30d": 298
+    },
+    "statusCounts": {
+      "success": 310,
+      "error": 25,
+      "running": 2,
+      "waiting": 1
+    }
+  },
+  "failedWorkflows": [
+    {
+      "id": "exec-123",
+      "workflowName": "BMAD Pipeline",
+      "startedAt": "2025-12-24T11:30:00.000Z",
+      "error": "Command failed: exit code 1"
+    }
+  ],
+  "waitingWorkflows": [
+    {
+      "id": "exec-456",
+      "workflowName": "BMAD Pipeline with Approval",
+      "startedAt": "2025-12-24T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Note:** Requires n8n API authentication. Configure `httpHeaderAuth` credentials with your n8n API key.
+
+### Approval Gate Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `N8N_URL` | Base URL of n8n instance (for webhook URLs) | Yes |
+| `NOTIFICATION_WEBHOOK_URL` | Slack/Discord webhook for notifications | Yes |
+
+---
+
 ## Importing Workflows
 
 ### Via n8n UI
