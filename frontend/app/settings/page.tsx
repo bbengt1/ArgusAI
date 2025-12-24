@@ -63,6 +63,7 @@ import { PromptRefinementModal } from '@/components/settings/PromptRefinementMod
 import { CostWarningModal } from '@/components/settings/CostWarningModal';
 import { VideoStorageWarningModal } from '@/components/settings/VideoStorageWarningModal';
 import { FrameSamplingStrategySelector, type FrameSamplingStrategy } from '@/components/settings/FrameSamplingStrategySelector';
+import { PasswordChangeForm } from '@/components/settings/PasswordChangeForm';
 import { ControllerForm, type ControllerData, DeleteControllerDialog, DiscoveredCameraList } from '@/components/protect';
 import { useQuery } from '@tanstack/react-query';
 import type { AIProvider } from '@/types/settings';
@@ -631,6 +632,9 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Story P10-1.1: Password Change Form */}
+              <PasswordChangeForm />
 
               {/* Story P8-2.3: Cost Warning Modal */}
               <CostWarningModal
