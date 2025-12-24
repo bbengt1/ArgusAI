@@ -1,0 +1,139 @@
+<story-context id="p8-4-2-design-cloud-relay-architecture" v="1.0">
+  <metadata>
+    <epicId>P8-4</epicId>
+    <storyId>4.2</storyId>
+    <title>Design Cloud Relay Architecture</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p8-4-2-design-cloud-relay-architecture.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>mobile app user</asA>
+    <iWant>a documented cloud relay architecture for secure remote access</iWant>
+    <soThat>I can access my ArgusAI instance from anywhere without port forwarding</soThat>
+    <tasks>
+      <task id="1" status="pending">Define connection requirements (AC: 1)
+        <subtask>Document no port forwarding requirement</subtask>
+        <subtask>Document NAT traversal needs</subtask>
+        <subtask>Document end-to-end encryption requirements</subtask>
+        <subtask>Create connection flow diagram</subtask>
+      </task>
+      <task id="2" status="pending">Evaluate relay providers (AC: 3, 5)
+        <subtask>Document Cloudflare Tunnel features and setup</subtask>
+        <subtask>Document Tailscale features and setup</subtask>
+        <subtask>Document AWS API Gateway option</subtask>
+        <subtask>Document self-hosted relay option</subtask>
+        <subtask>Create comparison matrix</subtask>
+        <subtask>Include cost estimates</subtask>
+      </task>
+      <task id="3" status="pending">Design authentication flow (AC: 2)
+        <subtask>Document device pairing sequence</subtask>
+        <subtask>Document JWT token-based access</subtask>
+        <subtask>Document token refresh mechanism</subtask>
+        <subtask>Document certificate pinning</subtask>
+      </task>
+      <task id="4" status="pending">Document security considerations (AC: 4)
+        <subtask>Document encryption approach</subtask>
+        <subtask>Document rate limiting strategy</subtask>
+        <subtask>Document abuse prevention</subtask>
+        <subtask>Document token security</subtask>
+      </task>
+      <task id="5" status="pending">Create sequence diagrams (AC: 6)
+        <subtask>Pairing flow diagram</subtask>
+        <subtask>Remote access flow diagram</subtask>
+        <subtask>Token refresh diagram</subtask>
+        <subtask>Local network fallback diagram</subtask>
+      </task>
+      <task id="6" status="pending">Document recommendation and save (AC: 7)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC2.1">Given design complete, when document reviewed, then connection flow (app -> relay -> local) diagrammed</criterion>
+    <criterion id="AC2.2">Given design complete, when document reviewed, then authentication/pairing mechanism documented</criterion>
+    <criterion id="AC2.3">Given design complete, when document reviewed, then Cloudflare Tunnel + Tailscale options compared</criterion>
+    <criterion id="AC2.4">Given design complete, when document reviewed, then security considerations addressed</criterion>
+    <criterion id="AC2.5">Given design complete, when document reviewed, then cost estimates per provider included</criterion>
+    <criterion id="AC2.6">Given design complete, when document reviewed, then sequence diagrams for key flows included</criterion>
+    <criterion id="AC2.7">Given design complete, then document saved to docs/architecture/cloud-relay-design.md</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P8-4.md</path>
+        <title>Epic Technical Specification: Native Apple Apps Foundation</title>
+        <section>P8-4.2: Design Cloud Relay Architecture</section>
+        <snippet>Design cloud relay architecture for NAT traversal and remote access. Cloudflare Tunnel + Tailscale fallback. Device pairing codes for auth.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase8.md</path>
+        <title>Phase 8 Epic Breakdown</title>
+        <section>Epic P8-4: Native Apple Apps Foundation</section>
+        <snippet>Story P8-4.2 documents cloud relay architecture for secure remote access without port forwarding.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture-phase8.md</path>
+        <title>Phase 8 Architecture</title>
+        <section>Cloud Relay Architecture</section>
+        <snippet>Cloud Relay: Cloudflare Tunnel (free tier) + Tailscale fallback. Mobile Auth: Device pairing codes (6-digit, 5-min expiry).</snippet>
+      </doc>
+      <doc>
+        <path>docs/research/apple-apps-technology.md</path>
+        <title>Apple Apps Technology Research</title>
+        <section>Implementation Roadmap</section>
+        <snippet>Phase 1: iPhone MVP with pairing flow and push notifications. SwiftUI native development.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>docs/architecture/</path>
+        <kind>directory</kind>
+        <reason>Output directory for cloud relay design document - may need to be created</reason>
+      </file>
+    </code>
+    <dependencies>
+      <note>This is a documentation/architecture story with no code dependencies. Output is a markdown document.</note>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">Cloudflare Tunnel is the primary relay option per architecture-phase8.md</constraint>
+    <constraint type="architecture">Tailscale is the fallback option for advanced users</constraint>
+    <constraint type="security">Device pairing uses 6-digit codes with 5-minute expiry</constraint>
+    <constraint type="security">Access tokens expire after 1 hour, refresh tokens after 30 days</constraint>
+    <constraint type="security">All traffic must use TLS 1.3 encryption</constraint>
+    <constraint type="output">Document must be saved to docs/architecture/cloud-relay-design.md</constraint>
+    <constraint type="content">Must include connection diagrams, provider comparison, security analysis, cost estimates</constraint>
+  </constraints>
+
+  <interfaces>
+    <note>No API interfaces - this is a documentation story. Architecture defines interfaces for future implementation.</note>
+    <planned>
+      <interface>POST /api/v1/mobile/auth/pair - Generate pairing code (6-digit, 5-min TTL)</interface>
+      <interface>POST /api/v1/mobile/auth/verify - Verify pairing code, return JWT tokens</interface>
+      <interface>POST /api/v1/mobile/auth/refresh - Refresh access token</interface>
+    </planned>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Architecture documentation stories are validated through manual review against acceptance criteria checklist.
+      No automated tests - document completeness verification.
+    </standards>
+    <locations>
+      <location>Manual review of docs/architecture/cloud-relay-design.md</location>
+    </locations>
+    <ideas>
+      <idea ac="AC2.1">Verify document contains connection flow diagram (app -> relay -> local)</idea>
+      <idea ac="AC2.2">Verify document describes device pairing mechanism with 6-digit codes</idea>
+      <idea ac="AC2.3">Verify document compares Cloudflare Tunnel and Tailscale with pros/cons</idea>
+      <idea ac="AC2.4">Verify document addresses encryption, rate limiting, abuse prevention</idea>
+      <idea ac="AC2.5">Verify document includes cost estimates for each provider</idea>
+      <idea ac="AC2.6">Verify document contains sequence diagrams for pairing, access, refresh flows</idea>
+      <idea ac="AC2.7">Verify file exists at docs/architecture/cloud-relay-design.md</idea>
+    </ideas>
+  </tests>
+</story-context>
