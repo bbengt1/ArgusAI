@@ -591,7 +591,7 @@ development_status:
   p10-2-3-configure-docker-volumes-and-environment: done
   p10-2-4-create-docker-compose-yml: done
   p10-2-5-add-postgresql-service-to-docker-compose: done
-  p10-2-6-add-nginx-reverse-proxy-with-ssl: backlog
+  p10-2-6-add-nginx-reverse-proxy-with-ssl: review
   epic-p10-2-retrospective: optional
 
   # Epic P10-3: Kubernetes & Helm

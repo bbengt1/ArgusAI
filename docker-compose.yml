@@ -1,10 +1,13 @@
 # ArgusAI Docker Compose Configuration
 # Story P10-2.4: Create docker-compose.yml
 # Story P10-2.5: Add PostgreSQL Service
+# Story P10-2.6: Add nginx Reverse Proxy with SSL
 #
 # Usage:
 #   docker-compose up -d                          # Start backend and frontend (SQLite)
 #   docker-compose --profile postgres up -d       # Start with PostgreSQL
+#   docker-compose --profile ssl up -d            # Start with nginx SSL reverse proxy
+#   docker-compose --profile postgres --profile ssl up -d  # PostgreSQL + SSL
 #   docker-compose down                           # Stop containers (preserves volumes)
 #   docker-compose logs -f                        # Follow logs
 #   docker-compose ps                             # Show running containers
@@ -14,11 +17,23 @@
 #   2. Set POSTGRES_PASSWORD=your-password in .env
 #   3. Run: docker-compose --profile postgres up -d
 #
+# SSL/HTTPS Usage (nginx reverse proxy):
+#   1. Place SSL certificates in data/certs/:
+#      - cert.pem: SSL certificate (or certificate chain)
+#      - key.pem:  Private key
+#   2. Run: docker-compose --profile ssl up -d
+#   3. Access via https://localhost (port 443)
+#
+#   Generate self-signed certificates for testing:
+#     mkdir -p data/certs
+#     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#       -keyout data/certs/key.pem \
+#       -out data/certs/cert.pem \
+#       -subj "/CN=localhost"
+#
 # Prerequisites:
 #   - Copy .env.example to .env and configure required variables
 #   - ENCRYPTION_KEY and JWT_SECRET_KEY are required
-#
-# For SSL profile, see story P10-2.6
 
 services:
   # ==============================================================================
@@ -113,8 +128,8 @@ services:
   # Story P10-2.5: Add PostgreSQL Service
   #
   # To use PostgreSQL instead of SQLite:
-  #   1. Set DATABASE_URL=postgresql://argusai:your-password@postgres:5432/argusai
-  #   2. Set POSTGRES_PASSWORD=your-password
+  #   1. Set POSTGRES_PASSWORD=your-secure-password in .env (defaults to 'changeme' if not set)
+  #   2. Set DATABASE_URL=postgresql://argusai:your-password@postgres:5432/argusai in .env
   #   3. Run: docker-compose --profile postgres up -d
   #
   postgres:
@@ -124,7 +139,7 @@ services:
       - postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-argusai}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required when using postgres profile}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
       - POSTGRES_DB=${POSTGRES_DB:-argusai}
     volumes:
       # Named volume for PostgreSQL data persistence
@@ -136,6 +151,50 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    networks:
+      - argusai-net
+
+  # ==============================================================================
+  # nginx Reverse Proxy with SSL (Optional - use with --profile ssl)
+  # ==============================================================================
+  # Story P10-2.6: Add nginx Reverse Proxy with SSL
+  #
+  # Provides SSL termination and reverse proxy for secure production deployments.
+  # Routes:
+  #   - /api/*          -> backend:8000
+  #   - /ws             -> backend:8000 (WebSocket)
+  #   - /docs, /openapi -> backend:8000
+  #   - /health         -> backend:8000
+  #   - /metrics        -> backend:8000
+  #   - /*              -> frontend:3000
+  #
+  # To use:
+  #   1. Place SSL certificates in data/certs/ (cert.pem, key.pem)
+  #   2. Run: docker-compose --profile ssl up -d
+  #
+  nginx:
+    image: nginx:alpine
+    container_name: argusai-nginx
+    profiles:
+      - ssl
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # nginx configuration (read-only for security)
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL certificates (read-only for security)
+      - ./data/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/nginx-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
     networks:
       - argusai-net
 

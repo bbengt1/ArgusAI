@@ -1,0 +1,218 @@
+<story-context id="p10-2-6-add-nginx-reverse-proxy-with-ssl" v="1.0">
+  <metadata>
+    <epicId>P10-2</epicId>
+    <storyId>P10-2.6</storyId>
+    <title>Add nginx Reverse Proxy with SSL</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p10-2-6-add-nginx-reverse-proxy-with-ssl.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>optional nginx reverse proxy with SSL termination</iWant>
+    <soThat>I can serve ArgusAI securely in production</soThat>
+    <tasks>
+      <task id="1" desc="Create nginx directory and configuration file">
+        <subtask id="1.1">Create nginx/ directory in project root</subtask>
+        <subtask id="1.2">Create nginx/nginx.conf with reverse proxy configuration</subtask>
+        <subtask id="1.3">Configure upstream backends (backend:8000, frontend:3000)</subtask>
+        <subtask id="1.4">Configure SSL settings (TLS 1.2+, modern ciphers)</subtask>
+        <subtask id="1.5">Configure HTTP to HTTPS redirect on port 80</subtask>
+        <subtask id="1.6">Configure HTTPS server on port 443</subtask>
+        <subtask id="1.7">Configure WebSocket proxy for /ws routes</subtask>
+      </task>
+      <task id="2" desc="Add nginx service to docker-compose.yml">
+        <subtask id="2.1">Add nginx service with profile: ["ssl"]</subtask>
+        <subtask id="2.2">Use nginx:alpine image</subtask>
+        <subtask id="2.3">Mount nginx.conf as read-only volume</subtask>
+        <subtask id="2.4">Mount data/certs as read-only volume</subtask>
+        <subtask id="2.5">Expose ports 80 and 443</subtask>
+        <subtask id="2.6">Add depends_on for backend and frontend services</subtask>
+        <subtask id="2.7">Add restart policy and network configuration</subtask>
+      </task>
+      <task id="3" desc="Configure location routing in nginx">
+        <subtask id="3.1">Route /api/* to backend service</subtask>
+        <subtask id="3.2">Route /ws to backend with WebSocket upgrade headers</subtask>
+        <subtask id="3.3">Route /docs and /openapi.json to backend</subtask>
+        <subtask id="3.4">Route / (all other paths) to frontend</subtask>
+      </task>
+      <task id="4" desc="Update documentation">
+        <subtask id="4.1">Update docker-compose.yml header comments with SSL usage</subtask>
+        <subtask id="4.2">Document certificate placement in data/certs</subtask>
+        <subtask id="4.3">Document combined profile usage (--profile postgres --profile ssl)</subtask>
+      </task>
+      <task id="5" desc="Test and validate SSL configuration">
+        <subtask id="5.1">Run docker-compose --profile ssl config to validate syntax</subtask>
+        <subtask id="5.2">Verify nginx config syntax with nginx -t</subtask>
+        <subtask id="5.3">Document manual testing steps</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">
+      <given>I want SSL/HTTPS</given>
+      <when>I run `docker-compose --profile ssl up`</when>
+      <then>nginx container starts as reverse proxy with HTTPS on port 443 and HTTP redirects to HTTPS</then>
+    </criterion>
+    <criterion id="2">
+      <given>I have certificates in data/certs</given>
+      <when>nginx starts</when>
+      <then>it uses my SSL certificates and connections are properly secured</then>
+    </criterion>
+    <criterion id="3">
+      <given>I use compose profiles</given>
+      <when>I run without --profile ssl</when>
+      <then>nginx is not started and I can access backend/frontend directly</then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P10-2.md</path>
+        <title>Epic P10-2 Technical Specification</title>
+        <section>Story P10-2.6: nginx Reverse Proxy with SSL</section>
+        <snippet>Defines nginx service with profile: ["ssl"], nginx:alpine image, SSL termination on port 443, HTTP redirect from port 80, upstream backends for API and frontend, WebSocket proxy support.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase10.md</path>
+        <title>Phase 10 Epic Breakdown</title>
+        <section>Story P10-2.6</section>
+        <snippet>Optional nginx reverse proxy with SSL termination. Covers FR21 (docker-compose includes optional nginx reverse proxy with SSL) and FR22 (Compose profiles allow selective service startup).</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase10.md</path>
+        <title>Phase 10 PRD</title>
+        <section>FR21, FR22</section>
+        <snippet>FR21: docker-compose includes optional nginx reverse proxy with SSL. FR22: Compose profiles allow selective service startup.</snippet>
+      </doc>
+      <doc>
+        <path>CLAUDE.md</path>
+        <title>Project Instructions</title>
+        <section>SSL/HTTPS Configuration</section>
+        <snippet>ArgusAI supports SSL/HTTPS for secure connections. SSL is required for push notifications. Certificates should be placed in data/certs/ directory.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>docker-compose.yml</path>
+        <kind>orchestration</kind>
+        <symbol>services</symbol>
+        <lines>1-168</lines>
+        <reason>Main docker-compose file to add nginx service to. Contains existing backend, frontend, and postgres services with profile pattern.</reason>
+      </file>
+      <file>
+        <path>backend/Dockerfile</path>
+        <kind>dockerfile</kind>
+        <symbol>backend</symbol>
+        <reason>Backend container - nginx will proxy /api/* requests to this service on port 8000.</reason>
+      </file>
+      <file>
+        <path>frontend/Dockerfile</path>
+        <kind>dockerfile</kind>
+        <symbol>frontend</symbol>
+        <reason>Frontend container - nginx will proxy / requests to this service on port 3000.</reason>
+      </file>
+      <file>
+        <path>.env.example</path>
+        <kind>config</kind>
+        <symbol>SSL_*</symbol>
+        <lines>58-72</lines>
+        <reason>SSL configuration environment variables already defined. nginx service should use these patterns.</reason>
+      </file>
+      <file>
+        <path>backend/app/core/config.py</path>
+        <kind>config</kind>
+        <symbol>Settings.ssl_*</symbol>
+        <reason>Backend SSL settings. nginx handles SSL termination, backend may need SSL_ENABLED=false when behind nginx.</reason>
+      </file>
+      <file>
+        <path>backend/app/middleware/https_redirect.py</path>
+        <kind>middleware</kind>
+        <symbol>HTTPSRedirectMiddleware</symbol>
+        <reason>Backend HTTPS redirect middleware. May conflict with nginx redirect - consider disabling when behind nginx.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <docker>
+        <package>nginx:alpine</package>
+        <note>Official nginx alpine image for minimal footprint (~40MB)</note>
+      </docker>
+      <existing>
+        <package>postgres:16-alpine</package>
+        <note>PostgreSQL service uses same profile pattern (profiles: ["postgres"])</note>
+      </existing>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="architecture">nginx must use compose profile: ["ssl"] to be optional like postgres service</constraint>
+    <constraint type="architecture">nginx.conf must be mounted read-only for security</constraint>
+    <constraint type="architecture">Certificates mounted read-only from data/certs/</constraint>
+    <constraint type="security">TLS 1.2 minimum, TLS 1.3 preferred</constraint>
+    <constraint type="security">Modern cipher suite (ECDHE-based, no RC4/3DES)</constraint>
+    <constraint type="network">nginx joins argusai-net bridge network</constraint>
+    <constraint type="network">nginx does NOT expose backend/frontend ports directly when active</constraint>
+    <constraint type="pattern">Follow existing profile pattern established by postgres service</constraint>
+    <constraint type="pattern">Use depends_on for proper startup order</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>nginx upstream: backend</name>
+      <kind>HTTP proxy</kind>
+      <signature>upstream backend { server backend:8000; }</signature>
+      <path>nginx/nginx.conf</path>
+    </interface>
+    <interface>
+      <name>nginx upstream: frontend</name>
+      <kind>HTTP proxy</kind>
+      <signature>upstream frontend { server frontend:3000; }</signature>
+      <path>nginx/nginx.conf</path>
+    </interface>
+    <interface>
+      <name>API routes</name>
+      <kind>location</kind>
+      <signature>location /api/ { proxy_pass http://backend; }</signature>
+      <path>nginx/nginx.conf</path>
+    </interface>
+    <interface>
+      <name>WebSocket route</name>
+      <kind>location</kind>
+      <signature>location /ws { proxy_pass http://backend; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; }</signature>
+      <path>nginx/nginx.conf</path>
+    </interface>
+    <interface>
+      <name>Frontend routes</name>
+      <kind>location</kind>
+      <signature>location / { proxy_pass http://frontend; }</signature>
+      <path>nginx/nginx.conf</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Docker Compose configuration validation using `docker-compose config` and `docker-compose --profile ssl config`.
+      nginx configuration syntax validation using `nginx -t` within container.
+      Manual testing of HTTPS connection and certificate verification.
+      No automated unit tests required for infrastructure configuration files.
+    </standards>
+    <locations>
+      <location>Manual testing via docker-compose commands</location>
+      <location>docker-compose --profile ssl config (syntax validation)</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Validate nginx service starts with --profile ssl and serves HTTPS on 443</idea>
+      <idea ac="1">Verify HTTP on port 80 redirects to HTTPS on 443</idea>
+      <idea ac="2">Test with self-signed certificates in data/certs/</idea>
+      <idea ac="2">Verify SSL/TLS connection with openssl s_client</idea>
+      <idea ac="3">Confirm nginx does NOT start without --profile ssl flag</idea>
+      <idea ac="3">Verify direct access to backend:8000 and frontend:3000 works without ssl profile</idea>
+    </ideas>
+  </tests>
+</story-context>
