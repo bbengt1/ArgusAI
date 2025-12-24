@@ -1,0 +1,135 @@
+<story-context id="p10-2-3-configure-docker-volumes-and-environment" v="1.0">
+  <metadata>
+    <epicId>P10-2</epicId>
+    <storyId>P10-2.3</storyId>
+    <title>Configure Docker Volumes and Environment</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p10-2-3-configure-docker-volumes-and-environment.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>persistent storage and environment configuration for containers</iWant>
+    <soThat>data survives container restarts and configuration is flexible</soThat>
+    <tasks>
+      <task id="1">Create .env.example with all configuration options
+        <subtask id="1.1">Document required environment variables (ENCRYPTION_KEY, JWT_SECRET_KEY)</subtask>
+        <subtask id="1.2">Document optional environment variables (DATABASE_URL, AI provider keys, SSL settings)</subtask>
+        <subtask id="1.3">Add generation commands for keys in comments</subtask>
+      </task>
+      <task id="2">Update backend Dockerfile for volume mount points
+        <subtask id="2.1">Ensure /app/data directory exists and is writable by appuser</subtask>
+        <subtask id="2.2">Verify VOLUME instruction for /app/data</subtask>
+      </task>
+      <task id="3">Document volume mappings
+        <subtask id="3.1">Document data volume (database, thumbnails, frames, certs)</subtask>
+        <subtask id="3.2">Document USB camera device mounting (Linux only)</subtask>
+      </task>
+      <task id="4">Validate environment variable handling
+        <subtask id="4.1">Verify backend reads all environment variables correctly</subtask>
+        <subtask id="4.2">Verify ENCRYPTION_KEY is required (fails without it)</subtask>
+        <subtask id="4.3">Verify DATABASE_URL defaults to SQLite if not set</subtask>
+      </task>
+      <task id="5">Update frontend for environment configuration
+        <subtask id="5.1">Document NEXT_PUBLIC_API_URL and NEXT_PUBLIC_WS_URL</subtask>
+        <subtask id="5.2">Add frontend environment variables to .env.example</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-2.3.1">
+      Given the backend container is running with volumes,
+      When the container is stopped and restarted,
+      Then all database data, thumbnails, frames, and certificates persist.
+    </criterion>
+    <criterion id="AC-2.3.2">
+      Given I configure environment variables,
+      When the container starts,
+      Then all settings are applied from environment and no secrets are baked into the image.
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P10-2.md">Technical specification with volume and environment details</doc>
+      <doc path="docs/epics-phase10.md">Epic breakdown with story P10-2.3 requirements</doc>
+      <doc path="docs/architecture/deployment-architecture.md">Deployment architecture reference</doc>
+    </docs>
+    <code>
+      <file path="backend/Dockerfile" status="existing">
+        Backend Dockerfile created in P10-2.1. Contains /app/data directory creation at line 53.
+        Uses non-root user appuser (uid 1000).
+        Default env vars DEBUG=false, LOG_LEVEL=INFO set at lines 65-66.
+      </file>
+      <file path="frontend/Dockerfile" status="existing">
+        Frontend Dockerfile created in P10-2.2. Uses NEXT_PUBLIC_API_URL build-time ARG.
+        Non-root user nextjs (uid 1001).
+      </file>
+      <file path="backend/.env.example" status="existing">
+        Existing .env.example with DATABASE_URL, ENCRYPTION_KEY, DEBUG, LOG_LEVEL, SSL settings, HomeKit settings.
+        Missing: JWT_SECRET_KEY, AI provider keys, VAPID keys, frontend-specific variables.
+      </file>
+      <file path=".env.example" status="create">
+        Root-level .env.example for docker-compose with all unified configuration.
+      </file>
+    </code>
+    <dependencies>
+      <dep>P10-2.1 (Backend Dockerfile) - COMPLETED</dep>
+      <dep>P10-2.2 (Frontend Dockerfile) - COMPLETED</dep>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="security">ENCRYPTION_KEY must be required - container should fail to start without it</constraint>
+    <constraint type="security">No secrets should be baked into Docker images</constraint>
+    <constraint type="security">JWT_SECRET_KEY must be required for authentication</constraint>
+    <constraint type="compatibility">USB camera device mounting only works on Linux hosts</constraint>
+    <constraint type="compatibility">NEXT_PUBLIC_* variables must be set at build time, not runtime</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface type="volume" path="/app/data">
+      Backend data directory containing:
+      - app.db (SQLite database)
+      - thumbnails/ (event thumbnails)
+      - frames/ (video frames)
+      - certs/ (SSL certificates)
+      - homekit/ (HomeKit pairing state)
+    </interface>
+    <interface type="device" path="/dev/video0">
+      Optional USB camera device (Linux only). Requires --device flag in docker run.
+    </interface>
+    <interface type="env" name="ENCRYPTION_KEY">
+      Required. Fernet key for encrypting API keys.
+      Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    </interface>
+    <interface type="env" name="JWT_SECRET_KEY">
+      Required. Secret key for JWT token signing.
+      Generate: openssl rand -hex 32
+    </interface>
+    <interface type="env" name="DATABASE_URL">
+      Optional. Database connection string.
+      Default: sqlite:///data/app.db
+      PostgreSQL: postgresql://user:pass@postgres:5432/argusai
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      No unit tests required for this infrastructure/configuration story.
+      Validation is primarily documentation and verification of existing configurations.
+    </standards>
+    <locations>
+      - backend/Dockerfile (verify data directory exists)
+      - .env.example (verify all variables documented)
+    </locations>
+    <ideas>
+      <idea>Verify ENCRYPTION_KEY validation in backend startup</idea>
+      <idea>Verify DATABASE_URL default behavior</idea>
+      <idea>Document volume mount commands in story completion notes</idea>
+    </ideas>
+  </tests>
+</story-context>
