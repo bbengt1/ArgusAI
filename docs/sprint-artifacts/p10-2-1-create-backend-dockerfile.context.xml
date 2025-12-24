@@ -1,0 +1,106 @@
+<story-context id="p10-2-1-create-backend-dockerfile" v="1.0">
+  <metadata>
+    <epicId>P10-2</epicId>
+    <storyId>2.1</storyId>
+    <title>Create Backend Dockerfile</title>
+    <status>drafted</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p10-2-1-create-backend-dockerfile.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer</asA>
+    <iWant>a Docker container for the FastAPI backend</iWant>
+    <soThat>I can deploy the backend consistently across environments</soThat>
+    <tasks>
+      <task id="1">Create multi-stage Dockerfile (AC: 1)</task>
+      <task id="2">Install runtime system dependencies (AC: 1, 3)</task>
+      <task id="3">Configure container security (AC: 1)</task>
+      <task id="4">Add health check configuration (AC: 2)</task>
+      <task id="5">Build and test container (AC: 1-3)</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-2.1.1">Given the Dockerfile is built, when the container starts, then the FastAPI backend runs successfully and all Python dependencies are installed and database migrations can be applied</criterion>
+    <criterion id="AC-2.1.2">Given the container is running, when I access the health endpoint, then it returns a healthy status</criterion>
+    <criterion id="AC-2.1.3">Given I want to use PostgreSQL instead of SQLite, when I set the DATABASE_URL environment variable, then the backend connects to PostgreSQL and all features work correctly</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P10-2.md" title="Epic P10-2 Tech Spec" section="Story P10-2.1" snippet="Use Python 3.11-slim as base image, multi-stage build with builder and runtime stages. System dependencies: ffmpeg, libopencv-dev, libgl1, libglib2.0-0." />
+      <doc path="docs/architecture/deployment-architecture.md" title="Deployment Architecture" section="Production Deployment" snippet="Basic Dockerfile template exists but needs multi-stage enhancement. Backend runs on port 8000 with uvicorn." />
+      <doc path="docs/epics-phase10.md" title="Epic P10-2" section="Story P10-2.1" snippet="Create Backend Dockerfile with Python 3.11 slim base, multi-stage build, system deps for ffmpeg/opencv, health checks, and PostgreSQL support." />
+      <doc path="docs/PRD-phase10.md" title="PRD Phase 10" section="FR12-FR18" snippet="Backend runs in Docker container with all dependencies, multi-stage builds for minimal image size, health checks work with orchestration." />
+    </docs>
+    <code>
+      <file path="backend/main.py" kind="entry" symbol="health_check" lines="779-780" reason="Health endpoint at /health - must work in container for HEALTHCHECK" />
+      <file path="backend/requirements.txt" kind="deps" symbol="requirements" lines="1-69" reason="Python dependencies to install in container - includes opencv, ffmpeg, pytorch (sentence-transformers)" />
+      <file path="backend/app/core/config.py" kind="config" symbol="settings" reason="Configuration settings loaded from environment variables - critical for containerization" />
+      <file path="backend/app/core/database.py" kind="db" symbol="engine" reason="Database connection - must support both SQLite and PostgreSQL via DATABASE_URL" />
+    </code>
+    <dependencies>
+      <python>
+        <package name="fastapi" version="0.115.0" />
+        <package name="uvicorn" version="0.24.0" />
+        <package name="sqlalchemy" version=">=2.0.36" />
+        <package name="alembic" version=">=1.14.0" />
+        <package name="opencv-python-headless" version=">=4.12.0" />
+        <package name="av" version=">=12.0.0" note="PyAV for video processing" />
+        <package name="sentence-transformers" version=">=2.2.0" note="Requires torch, may increase image size" />
+        <package name="HAP-python" version=">=4.9.0" />
+        <package name="cryptography" version="44.0.1" />
+        <package name="pytest" version="7.4.3" />
+      </python>
+      <system>
+        <package name="ffmpeg" reason="Video processing for av/PyAV" />
+        <package name="libopencv-dev" reason="OpenCV dependencies" />
+        <package name="libgl1" reason="OpenGL for opencv" />
+        <package name="libglib2.0-0" reason="GLib for opencv" />
+        <package name="gcc" reason="Build dependencies for cryptography/torch" />
+        <package name="libffi-dev" reason="Build dependency for cffi" />
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Multi-stage build required to minimize image size (target: under 500MB)</constraint>
+    <constraint>Non-root user required for security</constraint>
+    <constraint>No secrets baked into image - all config via environment variables</constraint>
+    <constraint>Must support both SQLite (default) and PostgreSQL databases</constraint>
+    <constraint>Health check must use existing /health endpoint</constraint>
+    <constraint>ENTRYPOINT: uvicorn main:app --host 0.0.0.0 --port 8000</constraint>
+    <constraint>PYTHONPATH=/app, PYTHONUNBUFFERED=1, PYTHONDONTWRITEBYTECODE=1</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="Health Endpoint" kind="REST endpoint" path="backend/main.py">
+      <signature>GET /health -> {"status": "healthy"}</signature>
+    </interface>
+    <interface name="API Documentation" kind="REST endpoint" path="backend/main.py">
+      <signature>GET /docs -> Swagger UI</signature>
+    </interface>
+    <interface name="System Health" kind="REST endpoint" path="backend/app/api/v1/system.py">
+      <signature>GET /api/v1/system/health -> SystemHealth</signature>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Backend uses Pytest with pytest-asyncio for async tests. Tests are located in backend/tests/. Coverage reporting via pytest-cov. Integration tests use httpx for async HTTP client testing.</standards>
+    <locations>
+      <location>backend/tests/</location>
+      <location>backend/tests/test_services/</location>
+      <location>backend/tests/test_api/</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC-2.1.1">Build Docker image and verify it starts without errors</idea>
+      <idea acRef="AC-2.1.1">Verify all Python dependencies are importable in container</idea>
+      <idea acRef="AC-2.1.2">Run container and test /health endpoint returns 200 OK</idea>
+      <idea acRef="AC-2.1.2">Test HEALTHCHECK instruction via docker inspect</idea>
+      <idea acRef="AC-2.1.3">Run container with DATABASE_URL pointing to PostgreSQL</idea>
+      <idea acRef="AC-2.1.3">Verify alembic migrations work with PostgreSQL</idea>
+    </ideas>
+  </tests>
+</story-context>

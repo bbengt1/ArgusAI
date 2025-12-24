@@ -585,8 +585,8 @@ development_status:
   # Epic P10-2: Docker Containerization
   # Priority: P2
   # Focus: Dockerfiles, docker-compose, volumes, environment
-  epic-p10-2: backlog
-  p10-2-1-create-backend-dockerfile: backlog
+  epic-p10-2: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P10-2.md
+  p10-2-1-create-backend-dockerfile: review
   p10-2-2-create-frontend-dockerfile: backlog
   p10-2-3-configure-docker-volumes-and-environment: backlog
   p10-2-4-create-docker-compose-yml: backlog
