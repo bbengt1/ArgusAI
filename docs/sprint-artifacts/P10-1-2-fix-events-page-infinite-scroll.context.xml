@@ -1,0 +1,179 @@
+<story-context id="P10-1-2-fix-events-page-infinite-scroll" v="1.0">
+  <metadata>
+    <epicId>P10-1</epicId>
+    <storyId>1.2</storyId>
+    <title>Fix Events Page Infinite Scroll</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-24</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/P10-1-2-fix-events-page-infinite-scroll.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>events to load automatically as I scroll</iWant>
+    <soThat>I can browse my event history without manual pagination</soThat>
+    <tasks>
+      <task id="1" ac="1,2">Fix parameter name mismatch in API client
+        <subtask>Change params.set('skip') to params.set('offset') in api-client.ts</subtask>
+        <subtask>Verify IEventFilters type uses skip consistently with hook</subtask>
+      </task>
+      <task id="2" ac="1">Update useEvents hook for clarity
+        <subtask>Verify pageParam is correctly passed as skip to API client</subtask>
+        <subtask>Confirm getNextPageParam correctly calculates next offset</subtask>
+      </task>
+      <task id="3" ac="1">Verify scroll handler behavior
+        <subtask>Test scroll handler triggers at correct threshold (500px from bottom)</subtask>
+        <subtask>Verify hasNextPage and fetchNextPage work correctly</subtask>
+      </task>
+      <task id="4" ac="3">Add retry functionality
+        <subtask>Check if TanStack Query provides retry on error</subtask>
+        <subtask>Add manual retry button if not automatically retrying</subtask>
+      </task>
+      <task id="5" ac="all">Write/update tests
+        <subtask>Update existing useEvents hook tests to verify offset parameter</subtask>
+        <subtask>Add integration test for infinite scroll pagination</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="1">Given I'm on Events page with more events than initially displayed, when I scroll near bottom, then loading indicator appears and additional events are fetched and appended</criterion>
+    <criterion id="2">Given no more events to load, when I scroll to bottom, then no additional fetch is triggered and "end of timeline" message appears</criterion>
+    <criterion id="3">Given next page fails to load, when error occurs, then error message is shown with "Retry" button</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/epics-phase10.md</path>
+        <title>Phase 10 Epics</title>
+        <section>Story P10-1.2: Fix Events Page Infinite Scroll</section>
+        <snippet>Events page loads additional events automatically when scrolling to bottom. Infinite scroll triggers correctly at scroll threshold. Loading indicator shows during pagination fetch.</snippet>
+      </doc>
+      <doc>
+        <path>docs/backlog.md</path>
+        <title>Project Backlog</title>
+        <section>BUG-014</section>
+        <snippet>Events Page Infinite Scroll Not Loading - scrolling to bottom continues but does not load additional events. Check infinite scroll hook, intersection observer, hasNextPage flag, and API pagination parameters.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/07-api-contracts.md</path>
+        <title>API Contracts</title>
+        <section>Events API</section>
+        <snippet>GET /api/v1/events with offset/limit pagination. Returns EventListResponse with events array, total_count, has_more, and offset fields.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>frontend/lib/api-client.ts</path>
+        <kind>API Client</kind>
+        <symbol>apiClient.events.list</symbol>
+        <lines>347-363</lines>
+        <reason>BUG LOCATION: Line 350 sends 'skip' parameter but backend expects 'offset'</reason>
+      </file>
+      <file>
+        <path>frontend/lib/hooks/useEvents.ts</path>
+        <kind>React Hook</kind>
+        <symbol>useEvents</symbol>
+        <lines>36-53</lines>
+        <reason>useInfiniteQuery hook that manages pagination state and triggers fetchNextPage</reason>
+      </file>
+      <file>
+        <path>frontend/app/events/page.tsx</path>
+        <kind>Page Component</kind>
+        <symbol>EventsPage</symbol>
+        <lines>254-269</lines>
+        <reason>Scroll handler that triggers fetchNextPage when user scrolls near bottom</reason>
+      </file>
+      <file>
+        <path>frontend/types/event.ts</path>
+        <kind>TypeScript Types</kind>
+        <symbol>IEventFilters, IEventsResponse</symbol>
+        <lines>155-195</lines>
+        <reason>Type definitions for events API - IEventFilters.skip and IEventsResponse.offset</reason>
+      </file>
+      <file>
+        <path>backend/app/api/v1/events.py</path>
+        <kind>API Endpoint</kind>
+        <symbol>list_events</symbol>
+        <lines>275-295</lines>
+        <reason>Backend endpoint expects 'offset' parameter (line 292), not 'skip'</reason>
+      </file>
+      <file>
+        <path>backend/app/schemas/event.py</path>
+        <kind>Pydantic Schema</kind>
+        <symbol>EventListResponse</symbol>
+        <lines>231-238</lines>
+        <reason>Response schema with offset field returned to frontend</reason>
+      </file>
+      <file>
+        <path>frontend/__tests__/hooks/useEvents.test.tsx</path>
+        <kind>Test File</kind>
+        <symbol>useEvents tests</symbol>
+        <lines>147-252</lines>
+        <reason>Existing tests for useEvents hook including pagination test</reason>
+      </file>
+    </code>
+    <dependencies>
+      <node>
+        <package>@tanstack/react-query</package>
+        <version>^5.59.0</version>
+        <usage>useInfiniteQuery hook for pagination</usage>
+      </node>
+      <node>
+        <package>react</package>
+        <version>^19.0.0</version>
+        <usage>React hooks and components</usage>
+      </node>
+      <node>
+        <package>next</package>
+        <version>15.0.2</version>
+        <usage>Next.js App Router</usage>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">Use existing TanStack Query patterns for pagination</constraint>
+    <constraint type="naming">Keep internal variable name 'skip' in IEventFilters for clarity, only change URL parameter to 'offset'</constraint>
+    <constraint type="compatibility">Maintain backward compatibility with existing event list filters</constraint>
+    <constraint type="testing">Update existing useEvents hook tests to verify correct offset parameter is sent</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>GET /api/v1/events</name>
+      <kind>REST endpoint</kind>
+      <signature>GET /api/v1/events?offset=0&amp;limit=20&amp;[filters...]</signature>
+      <path>backend/app/api/v1/events.py:275</path>
+    </interface>
+    <interface>
+      <name>apiClient.events.list</name>
+      <kind>API client method</kind>
+      <signature>list(filters?: IEventFilters): Promise&lt;IEventsResponse&gt;</signature>
+      <path>frontend/lib/api-client.ts:347</path>
+    </interface>
+    <interface>
+      <name>useEvents</name>
+      <kind>React hook</kind>
+      <signature>useEvents(filters?: IEventFilters): UseInfiniteQueryResult&lt;IEventsResponse&gt;</signature>
+      <path>frontend/lib/hooks/useEvents.ts:36</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Use Vitest + React Testing Library. Tests should verify API calls include correct parameters. Mock apiClient.events.list for unit tests. Follow patterns from existing useEvents.test.tsx.</standards>
+    <locations>
+      <location>frontend/__tests__/hooks/useEvents.test.tsx</location>
+      <location>frontend/__tests__/**/*.test.tsx</location>
+    </locations>
+    <ideas>
+      <idea ac="1">Test that list() sends offset parameter (not skip) to URL</idea>
+      <idea ac="1">Test fetchNextPage increments offset correctly</idea>
+      <idea ac="2">Test hasNextPage is false when all events loaded</idea>
+      <idea ac="2">Test no additional fetch when hasNextPage is false</idea>
+      <idea ac="3">Test error handling shows error message</idea>
+    </ideas>
+  </tests>
+</story-context>
