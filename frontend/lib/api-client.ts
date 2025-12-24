@@ -347,7 +347,7 @@ export const apiClient = {
     list: async (filters?: IEventFilters): Promise<IEventsResponse> => {
       const params = new URLSearchParams();
       if (filters) {
-        if (filters.skip !== undefined) params.set('skip', String(filters.skip));
+        if (filters.skip !== undefined) params.set('offset', String(filters.skip));
         if (filters.limit !== undefined) params.set('limit', String(filters.limit));
         if (filters.camera_id !== undefined) params.set('camera_id', String(filters.camera_id));
         if (filters.start_time) params.set('start_time', filters.start_time);
@@ -758,7 +758,7 @@ export const apiClient = {
       const params = new URLSearchParams();
       if (filters?.rule_id !== undefined) params.set('rule_id', String(filters.rule_id));
       if (filters?.success !== undefined) params.set('success', String(filters.success));
-      if (filters?.offset !== undefined) params.set('skip', String(filters.offset));
+      if (filters?.offset !== undefined) params.set('offset', String(filters.offset));
       if (filters?.limit !== undefined) params.set('limit', String(filters.limit));
       const queryString = params.toString();
       return apiFetch(`/webhooks/logs${queryString ? `?${queryString}` : ''}`);
@@ -805,7 +805,7 @@ export const apiClient = {
     }): Promise<INotificationListResponse> => {
       const params = new URLSearchParams();
       if (filters?.unread_only) params.set('unread_only', 'true');
-      if (filters?.skip !== undefined) params.set('skip', String(filters.skip));
+      if (filters?.skip !== undefined) params.set('offset', String(filters.skip));
       if (filters?.limit !== undefined) params.set('limit', String(filters.limit));
       const queryString = params.toString();
       return apiFetch(`/notifications${queryString ? `?${queryString}` : ''}`);
