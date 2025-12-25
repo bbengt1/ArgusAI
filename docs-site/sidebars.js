@@ -32,6 +32,20 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'How to Use',
+      items: [
+        'how-to-use/index',
+        'how-to-use/dashboard',
+        'how-to-use/events',
+        'how-to-use/cameras',
+        'how-to-use/entities',
+        'how-to-use/alert-rules',
+        'how-to-use/settings',
+        'how-to-use/summaries',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Features',
       items: [
         'features/unifi-protect',
