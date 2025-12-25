@@ -1,6 +1,6 @@
 # Story P10-5.2: Document Mobile Authentication Flow
 
-Status: review
+Status: done
 
 ## Story
 
