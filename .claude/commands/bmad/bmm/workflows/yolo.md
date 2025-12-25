@@ -1,53 +1,52 @@
 ---
-description: 'run create story then story context and if needed code review'
+description: 'Run create-story, story-context, dev-story, and conditionally code-review'
 ---
 
-IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:
+# Pre-Workflow Setup
+Create a new branch using the story ID (Px-x-x). All development for this workflow will be on this branch.
 
+---
+
+## Method: execute-workflow
+
+<bad_method name="execute-workflow" required_param="workflow-config">
+IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:
 <steps CRITICAL="TRUE">
 1. Always LOAD the FULL @.bmad/core/tasks/workflow.xml
-2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @.bmad/bmm/workflows/4-implementation/create-story/workflow.yaml
-3. Pass the yaml path .bmad/bmm/workflows/4-implementation/create-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions
+2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config
+3. Pass the provided 'workflow-config' parameter to the workflow.xml instructions
 4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions
 5. Save outputs after EACH section when generating any documents from templates
 </steps>
+</bad_method>
 
-Once you complete create-story then move to next step
+---
 
-Open a github issue then move to next step
+## Workflow Sequence
 
-IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:
+1. **create-story**
+   - Execute: `execute-workflow(.bmad/bmm/workflows/4-implementation/create-story/workflow.yaml)`
+   - Then: Open a GitHub issue
 
-<steps CRITICAL="TRUE">
-1. Always LOAD the FULL @.bmad/core/tasks/workflow.xml
-2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @.bmad/bmm/workflows/4-implementation/story-context/workflow.yaml
-3. Pass the yaml path .bmad/bmm/workflows/4-implementation/story-context/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions
-4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions
-5. Save outputs after EACH section when generating any documents from templates
-</steps>
+2. **story-context**
+   - Execute: `execute-workflow(.bmad/bmm/workflows/4-implementation/story-context/workflow.yaml)`
 
-Once you complete story-context then move to next step
+3. **dev-story**
+   - Execute: `execute-workflow(.bmad/bmm/workflows/4-implementation/dev-story/workflow.yaml)`
 
-IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:
+4. **code-review** *(conditional)*
+   - Condition: Only if status indicates review is needed
+   - Execute: `execute-workflow(.bmad/bmm/workflows/4-implementation/code-review/workflow.yaml)`
 
-<steps CRITICAL="TRUE">
-1. Always LOAD the FULL @.bmad/core/tasks/workflow.xml
-2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @.bmad/bmm/workflows/4-implementation/dev-story/workflow.yaml
-3. Pass the yaml path .bmad/bmm/workflows/4-implementation/dev-story/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions
-4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions
-5. Save outputs after EACH section when generating any documents from templates
-</steps>
+---
 
-Once you complete dev-story then move to next step and only if status says a review is needed
+## Post-Workflow Finalization
 
-IT IS CRITICAL THAT YOU FOLLOW THESE STEPS - while staying in character as the current agent persona you may have loaded:
-
-<steps CRITICAL="TRUE">
-1. Always LOAD the FULL @.bmad/core/tasks/workflow.xml
-2. READ its entire contents - this is the CORE OS for EXECUTING the specific workflow-config @.bmad/bmm/workflows/4-implementation/code-review/workflow.yaml
-3. Pass the yaml path .bmad/bmm/workflows/4-implementation/code-review/workflow.yaml as 'workflow-config' parameter to the workflow.xml instructions
-4. Follow workflow.xml instructions EXACTLY as written to process and follow the specific workflow config and its instructions
-5. Save outputs after EACH section when generating any documents from templates
-</steps>
-
-Once complete commit and and push. Look up the github issue link in the backlog or sprint-status documents. create a pull request tying this to the appropriate github issue. If a pull request already exists add to the existing one. Close out the github issue. If this is the last story of the epic and all github actions are passing, merge pull request, otherwise fix tests till passing before the merge. Move to next story.
+1. Commit and push changes
+2. Look up the GitHub issue link in backlog or sprint-status documents
+3. Create a pull request tied to the appropriate GitHub issue
+   - If PR already exists, add to existing one
+4. Close out the GitHub issue
+5. If this is the last story of the epic AND all GitHub actions pass → merge PR
+   - If tests fail, fix until passing before merge
+6. Move to next story
