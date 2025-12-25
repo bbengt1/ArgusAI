@@ -1,0 +1,227 @@
+<story-context id="P10-6-1" v="1.0">
+  <metadata>
+    <epicId>P10-6</epicId>
+    <storyId>6.1</storyId>
+    <title>Research Local MCP Server</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-25</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/P10-6-1-research-local-mcp-server.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>developer planning AI enhancements for ArgusAI</asA>
+    <iWant>comprehensive research on implementing a local MCP (Model Context Protocol) server</iWant>
+    <soThat>future implementation can leverage rich local context (user feedback, known entities, camera patterns) to improve AI event descriptions</soThat>
+    <tasks>
+      <task id="1">Research MCP Specification and SDK (AC: 1, 2)
+        <subtask>Review Model Context Protocol specification from Anthropic</subtask>
+        <subtask>Evaluate mcp-python SDK capabilities and requirements</subtask>
+        <subtask>Document core MCP concepts (tools, resources, prompts, context)</subtask>
+        <subtask>Identify how MCP integrates with AI providers (Claude, OpenAI, etc.)</subtask>
+      </task>
+      <task id="2">Evaluate Hosting Options (AC: 1, 2)
+        <subtask>Document sidecar approach (separate process, IPC communication)</subtask>
+        <subtask>Document embedded approach (within FastAPI backend process)</subtask>
+        <subtask>Document standalone approach (independent service)</subtask>
+        <subtask>Compare trade-offs: latency, resource usage, deployment complexity</subtask>
+        <subtask>Recommend approach for ArgusAI with rationale</subtask>
+      </task>
+      <task id="3">Define Context Data Schema (AC: 3)
+        <subtask>Define user feedback history schema (positive/negative feedback, corrections)</subtask>
+        <subtask>Define known entities schema (people, vehicles with attributes)</subtask>
+        <subtask>Define entity corrections schema (original vs corrected descriptions)</subtask>
+        <subtask>Define camera context schema (location, typical activity patterns)</subtask>
+        <subtask>Define time-of-day patterns schema (activity levels by hour)</subtask>
+        <subtask>Document how context would enhance AI prompts</subtask>
+      </task>
+      <task id="4">Assess Performance Implications (AC: 4)
+        <subtask>Estimate context lookup latency (target less than 100ms)</subtask>
+        <subtask>Evaluate memory footprint for cached context</subtask>
+        <subtask>Consider async vs sync context retrieval</subtask>
+        <subtask>Document impact on overall event processing pipeline</subtask>
+      </task>
+      <task id="5">Document Implementation Roadmap (AC: 5)
+        <subtask>Outline phased implementation approach</subtask>
+        <subtask>Identify dependencies on existing services</subtask>
+        <subtask>Define MVP vs full implementation scope</subtask>
+        <subtask>List open questions for future resolution</subtask>
+      </task>
+      <task id="6">Compile Research Document
+        <subtask>Create docs/research/mcp-server-research.md</subtask>
+        <subtask>Include architecture diagrams (Mermaid)</subtask>
+        <subtask>Add code examples where applicable</subtask>
+        <subtask>Review against all acceptance criteria</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-6.1.1">Given I read the research document, when I understand MCP server patterns, then I know implementation options for ArgusAI (sidecar, embedded, standalone)</criterion>
+    <criterion id="AC-6.1.2">Given the research evaluates hosting options, when I review sidecar vs embedded vs standalone approaches, then trade-offs are clearly documented with recommendations</criterion>
+    <criterion id="AC-6.1.3">Given the research defines context data schema, when I see what data to expose, then I understand entity corrections, feedback history, camera context, and time-of-day pattern structures</criterion>
+    <criterion id="AC-6.1.4">Given the research assesses performance impact, when I review latency estimates, then I know if MCP adds acceptable overhead (less than 100ms target)</criterion>
+    <criterion id="AC-6.1.5">Given future development begins, when implementation starts, then this research document guides design decisions and answers key architectural questions</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P10-6.md</path>
+        <title>Epic P10-6 Technical Specification</title>
+        <section>Story P10-6.1 Acceptance Criteria</section>
+        <snippet>Research-only epic defining MCP context schema, hosting options evaluation, and performance impact assessment. Deliverable is docs/research/mcp-server-research.md</snippet>
+      </doc>
+      <doc>
+        <path>docs/PRD-phase10.md</path>
+        <title>Phase 10 PRD</title>
+        <section>AI Enhancements</section>
+        <snippet>Local MCP server for enhanced AI context - research implementation patterns and context data schema for improved descriptions</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase10.md</path>
+        <title>Phase 10 Epics</title>
+        <section>Epic P10-6: AI and Quality Improvements</section>
+        <snippet>Story P10-6.1 focuses on researching MCP specification, hosting options (sidecar/embedded/standalone), context data schema, and performance implications</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>backend/app/services/ai_service.py</path>
+        <kind>service</kind>
+        <symbol>AIService, MULTI_FRAME_SYSTEM_PROMPT</symbol>
+        <lines>1-100</lines>
+        <reason>Current AI service architecture - multi-provider fallback (OpenAI, Grok, Claude, Gemini). MCP research should consider integration points with existing prompt construction</reason>
+      </file>
+      <file>
+        <path>backend/app/services/context_prompt_service.py</path>
+        <kind>service</kind>
+        <symbol>ContextEnhancedPromptService, build_context_enhanced_prompt</symbol>
+        <lines>1-617</lines>
+        <reason>Existing context enhancement for AI prompts - integrates entity context, similar events, and time patterns. MCP could replace or enhance this service</reason>
+      </file>
+      <file>
+        <path>backend/app/services/embedding_service.py</path>
+        <kind>service</kind>
+        <symbol>EmbeddingService, generate_embedding</symbol>
+        <lines>1-100</lines>
+        <reason>CLIP ViT-B/32 embedding service for similarity matching. MCP could expose these embeddings as context resources</reason>
+      </file>
+      <file>
+        <path>backend/app/services/entity_service.py</path>
+        <kind>service</kind>
+        <symbol>EntityService, EntityMatchResult</symbol>
+        <reason>Entity matching service - recognized entities (people, vehicles). MCP would expose entity data as context resources</reason>
+      </file>
+      <file>
+        <path>backend/app/services/similarity_service.py</path>
+        <kind>service</kind>
+        <symbol>SimilarityService, find_similar_events</symbol>
+        <reason>Similar event lookup using embeddings. MCP could expose similar event context</reason>
+      </file>
+      <file>
+        <path>backend/app/services/pattern_service.py</path>
+        <kind>service</kind>
+        <symbol>PatternService, is_typical_timing</symbol>
+        <reason>Time-of-day pattern analysis. MCP could expose activity patterns as context</reason>
+      </file>
+      <file>
+        <path>backend/app/models/event_feedback.py</path>
+        <kind>model</kind>
+        <symbol>EventFeedback</symbol>
+        <lines>1-93</lines>
+        <reason>User feedback model with rating and corrections. MCP context schema should include feedback history structure</reason>
+      </file>
+      <file>
+        <path>backend/app/models/recognized_entity.py</path>
+        <kind>model</kind>
+        <symbol>RecognizedEntity, EntityEvent</symbol>
+        <lines>1-254</lines>
+        <reason>Entity model with CLIP embeddings, vehicle attributes, VIP/blocked flags. MCP context schema for known entities</reason>
+      </file>
+      <file>
+        <path>backend/app/models/entity_adjustment.py</path>
+        <kind>model</kind>
+        <symbol>EntityAdjustment</symbol>
+        <reason>Entity correction history - manual unlinking and reassignment. MCP context for entity corrections</reason>
+      </file>
+      <file>
+        <path>backend/app/services/event_processor.py</path>
+        <kind>service</kind>
+        <symbol>EventProcessor</symbol>
+        <reason>Event processing pipeline with less than 5s p95 latency target. MCP must not impact this significantly</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package version=">=2.2.0">sentence-transformers</package>
+        <package version=">=1.54.0">openai</package>
+        <package version=">=0.39.0">anthropic</package>
+        <package version=">=0.8.0">google-generativeai</package>
+        <package version="0.115.0">fastapi</package>
+        <package version=">=2.0.36">sqlalchemy</package>
+      </python>
+      <potentialFuture>
+        <package purpose="MCP protocol implementation">mcp-python (Anthropic MCP SDK)</package>
+        <package purpose="Vector similarity search">faiss-cpu</package>
+        <package purpose="Alternative embedding models">transformers</package>
+      </potentialFuture>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="tech-spec">Research-only epic - no implementation required. Deliverable is documentation.</constraint>
+    <constraint source="architecture">MCP server must integrate with existing asyncio-based FastAPI backend</constraint>
+    <constraint source="architecture">Context lookup must not significantly impact event processing latency (less than 100ms overhead)</constraint>
+    <constraint source="architecture">Must fail gracefully - MCP unavailability should not block event processing (fail open)</constraint>
+    <constraint source="architecture">Should work with multiple AI providers, not just Anthropic Claude</constraint>
+    <constraint source="tech-spec">Maintain existing less than 5s p95 event processing latency</constraint>
+    <constraint source="style">Use Mermaid diagrams for architecture visualization</constraint>
+    <constraint source="style">Include Python code examples for integration patterns</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>ContextEnhancedPromptService.build_context_enhanced_prompt</name>
+      <kind>async function</kind>
+      <signature>async def build_context_enhanced_prompt(self, db: Session, event_id: str, base_prompt: str, camera_id: str, event_time: datetime, matched_entity: Optional[EntityMatchResult]) -> ContextEnhancedPromptResult</signature>
+      <path>backend/app/services/context_prompt_service.py</path>
+    </interface>
+    <interface>
+      <name>EntityService.match_entity</name>
+      <kind>async function</kind>
+      <signature>async def match_entity(self, db: Session, embedding: list, entity_type: str) -> Optional[EntityMatchResult]</signature>
+      <path>backend/app/services/entity_service.py</path>
+    </interface>
+    <interface>
+      <name>SimilarityService.find_similar_events</name>
+      <kind>async function</kind>
+      <signature>async def find_similar_events(self, db: Session, event_id: str, limit: int, min_similarity: float, time_window_days: int) -> list[SimilarEvent]</signature>
+      <path>backend/app/services/similarity_service.py</path>
+    </interface>
+    <interface>
+      <name>EmbeddingService.generate_embedding</name>
+      <kind>async function</kind>
+      <signature>async def generate_embedding(self, image_data: bytes) -> list[float]</signature>
+      <path>backend/app/services/embedding_service.py</path>
+    </interface>
+    <interface>
+      <name>Potential MCP Server Context Endpoint</name>
+      <kind>MCP resource (future)</kind>
+      <signature>GET /mcp/context/{event_id} - Retrieve context for event analysis</signature>
+      <path>N/A - research target</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>This is a research-only story - no code tests required. Validation focuses on document quality against acceptance criteria.</standards>
+    <locations>N/A - documentation deliverable</locations>
+    <ideas>
+      <idea acRef="AC-6.1.1">Verify document explains sidecar, embedded, and standalone MCP hosting patterns</idea>
+      <idea acRef="AC-6.1.2">Verify trade-off comparison table exists with clear recommendation</idea>
+      <idea acRef="AC-6.1.3">Verify context data schema includes feedback history, entities, camera context, time patterns</idea>
+      <idea acRef="AC-6.1.4">Verify latency estimates are provided and less than 100ms target is addressed</idea>
+      <idea acRef="AC-6.1.5">Verify implementation roadmap outlines phased approach and dependencies</idea>
+    </ideas>
+  </tests>
+</story-context>
