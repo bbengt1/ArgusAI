@@ -169,19 +169,47 @@ function UnsupportedBanner() {
 /**
  * No Service Worker Banner
  */
-function NoServiceWorkerBanner() {
+function NoServiceWorkerBanner({ error }: { error: string | null }) {
+  // Check if this is a certificate/SSL issue
+  const isCertificateError = error?.toLowerCase().includes('unknown error') ||
+    error?.toLowerCase().includes('failed to register');
+
+  const isCustomDomain = typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+
   return (
     <Alert className="mt-4">
       <Info className="h-4 w-4" />
-      <AlertTitle>Service Worker Required</AlertTitle>
+      <AlertTitle>Service Worker Registration Failed</AlertTitle>
       <AlertDescription>
-        <p>
-          Push notifications require a service worker, which is not yet configured.
-          This feature will be fully available soon.
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          A service worker will be added in a future update to enable push notifications.
-        </p>
+        {isCertificateError && isCustomDomain ? (
+          <>
+            <p>
+              Service workers require a <strong>trusted SSL certificate</strong>.
+              Self-signed certificates are not supported on custom domains.
+            </p>
+            <div className="mt-3 space-y-2 text-sm">
+              <p className="font-medium">To fix this, you can:</p>
+              <ol className="ml-4 list-decimal space-y-1 text-muted-foreground">
+                <li>Access ArgusAI via <code className="bg-muted px-1 rounded">localhost:3000</code> instead</li>
+                <li>Add your self-signed certificate to your system&apos;s trust store</li>
+                <li>Use a trusted certificate (e.g., from Let&apos;s Encrypt)</li>
+              </ol>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>
+              Push notifications require a service worker, but it failed to register.
+            </p>
+            {error && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Error: {error}
+              </p>
+            )}
+          </>
+        )}
       </AlertDescription>
     </Alert>
   );
@@ -306,7 +334,7 @@ export function PushNotificationSettings() {
 
         {/* Show appropriate banner based on status */}
         {status === 'unsupported' && <UnsupportedBanner />}
-        {status === 'no-service-worker' && <NoServiceWorkerBanner />}
+        {status === 'no-service-worker' && <NoServiceWorkerBanner error={error} />}
         {status === 'permission-denied' && <PermissionDeniedBanner />}
 
         {/* Device Info (when subscribed) */}
