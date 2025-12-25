@@ -1,0 +1,101 @@
+<story-context id="p10-4-1" v="1.0">
+  <metadata>
+    <epicId>P10-4</epicId>
+    <storyId>P10-4.1</storyId>
+    <title>Add Entity Assignment from Event Cards</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-25</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/p10-4-1-add-entity-assignment-from-event-cards.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>user</asA>
+    <iWant>to assign entities directly from event cards</iWant>
+    <soThat>I don't need to open the event detail first and can manage entities with fewer clicks</soThat>
+    <tasks>
+      <task status="done">Task 1: Entity action button exists on EventCard</task>
+      <task status="done">Task 2: EntitySelectModal component exists</task>
+      <task status="done">Task 3: Entity search API exists</task>
+      <task status="done">Task 4: Entity assignment works</task>
+      <task status="pending">Task 5: Add "Create New Entity" button to EntitySelectModal</task>
+      <task status="pending">Task 6: Verify existing functionality</task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.1.1" status="existing">Entity button visible on event card</criterion>
+    <criterion id="AC-4.1.2" status="existing">Modal opens with searchable entity list</criterion>
+    <criterion id="AC-4.1.3" status="existing">Search filters entities by name/type</criterion>
+    <criterion id="AC-4.1.4" status="existing">Entity assignment works on confirmation</criterion>
+    <criterion id="AC-4.1.5" status="existing">Entity badge displays on card after assignment</criterion>
+    <criterion id="AC-4.1.6" status="existing">Change Entity option for assigned events</criterion>
+    <criterion id="AC-4.1.7" status="needs-implementation">Create New Entity button in modal</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/sprint-artifacts/tech-spec-epic-P10-4.md" title="Epic P10-4 Tech Spec" section="P10-4.1" snippet="Defines entity assignment from event cards with EntitySelectModal component and Create New button requirement"/>
+      <doc path="docs/epics-phase10.md" title="Phase 10 Epics" section="Epic P10-4" snippet="Entity Management UX epic covering entity assignment, manual creation, and feedback modification"/>
+    </docs>
+    <code>
+      <file path="frontend/components/events/EventCard.tsx" kind="component" symbol="EventCard" lines="285-348" reason="Contains entity button, badge, and EntitySelectModal integration - already implemented"/>
+      <file path="frontend/components/entities/EntitySelectModal.tsx" kind="component" symbol="EntitySelectModal" lines="1-226" reason="Main modal for entity selection - needs Create New button added"/>
+      <file path="frontend/hooks/useEntities.ts" kind="hook" symbol="useEntities, useAssignEventToEntity" lines="27-252" reason="React Query hooks for entity operations - already implemented"/>
+      <file path="backend/app/api/v1/context.py" kind="api" symbol="list_entities" lines="553-593" reason="Entity list API with search parameter - already implemented"/>
+    </code>
+    <dependencies>
+      <node>
+        <package name="@radix-ui/react-dialog" version="existing" purpose="Dialog component for modal"/>
+        <package name="lucide-react" version="existing" purpose="Icons (Plus, UserPlus, etc.)"/>
+        <package name="sonner" version="existing" purpose="Toast notifications"/>
+        <package name="@tanstack/react-query" version="^5.0.0" purpose="Data fetching and caching"/>
+      </node>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="tech-spec">Create New button should be a stub showing toast "Coming soon" until P10-4.2</constraint>
+    <constraint source="tech-spec">Add onCreateNew callback prop to EntitySelectModal for future integration</constraint>
+    <constraint source="architecture">Use existing shadcn/ui Button component for consistency</constraint>
+    <constraint source="accessibility">Ensure button has proper aria-label and keyboard navigation</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="EntitySelectModal props" kind="component-interface">
+      <signature>{`interface EntitySelectModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (entityId: string, entityName: string | null) => void;
+  onCreateNew?: () => void; // NEW: callback for Create New button
+  title?: string;
+  description?: string;
+  isLoading?: boolean;
+}`}</signature>
+      <path>frontend/components/entities/EntitySelectModal.tsx</path>
+    </interface>
+    <interface name="Entity List API" kind="REST">
+      <signature>GET /api/v1/context/entities?search={query}&entity_type={type}&limit={n}&offset={n}</signature>
+      <path>backend/app/api/v1/context.py</path>
+    </interface>
+    <interface name="Event Entity Assignment API" kind="REST">
+      <signature>POST /api/v1/context/events/{event_id}/entity {"entity_id": "uuid"}</signature>
+      <path>backend/app/api/v1/context.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Frontend tests use Vitest with React Testing Library. Component tests in frontend/__tests__/components/. Follow existing patterns in FeedbackButtons.test.tsx.</standards>
+    <locations>
+      <location>frontend/__tests__/components/entities/</location>
+      <location>frontend/__tests__/components/events/</location>
+    </locations>
+    <ideas>
+      <idea acRef="AC-4.1.7">Test Create New button renders in EntitySelectModal</idea>
+      <idea acRef="AC-4.1.7">Test Create New button calls onCreateNew callback when clicked</idea>
+      <idea acRef="AC-4.1.7">Test Create New button shows toast when no callback provided</idea>
+      <idea acRef="AC-4.1.2">Test EntitySelectModal opens from EventCard entity button</idea>
+      <idea acRef="AC-4.1.3">Test search input filters entity list</idea>
+    </ideas>
+  </tests>
+</story-context>

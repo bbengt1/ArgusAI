@@ -2,12 +2,14 @@
  * EntitySelectModal component - select an entity to assign an event to (Story P9-4.4)
  * AC-4.4.3: Searchable entity list modal
  * AC-4.4.4: Filter entities by search query
+ * Story P10-4.1: Added "Create New Entity" button (AC-4.1.7)
  */
 
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
-import { Search, User, Car, HelpCircle, Check } from 'lucide-react';
+import { Search, User, Car, HelpCircle, Check, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -31,6 +33,8 @@ interface EntitySelectModalProps {
   onOpenChange: (open: boolean) => void;
   /** Callback when an entity is selected and confirmed */
   onSelect: (entityId: string, entityName: string | null) => void;
+  /** Story P10-4.1: Callback when "Create New Entity" is clicked. If not provided, shows "Coming soon" toast */
+  onCreateNew?: () => void;
   /** Title to display in the modal */
   title?: string;
   /** Description to display in the modal */
@@ -61,6 +65,7 @@ export function EntitySelectModal({
   open,
   onOpenChange,
   onSelect,
+  onCreateNew,
   title = 'Select Entity',
   description = 'Choose an entity to assign this event to',
   isLoading = false,
@@ -110,6 +115,18 @@ export function EntitySelectModal({
     if (entity.name) return entity.name;
     return `${entity.entity_type.charAt(0).toUpperCase() + entity.entity_type.slice(1)} #${entity.id.slice(0, 8)}`;
   };
+
+  // Story P10-4.1: Handle "Create New Entity" button click (AC-4.1.7)
+  const handleCreateNew = useCallback(() => {
+    if (onCreateNew) {
+      onCreateNew();
+    } else {
+      // Stub: show "Coming soon" toast when no callback is provided
+      toast.info('Create Entity coming soon', {
+        description: 'This feature will be available in a future update.',
+      });
+    }
+  }, [onCreateNew]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -203,6 +220,17 @@ export function EntitySelectModal({
             )}
           </div>
         </ScrollArea>
+
+        {/* Story P10-4.1: Create New Entity button (AC-4.1.7) */}
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-muted-foreground hover:text-foreground"
+          onClick={handleCreateNew}
+          aria-label="Create new entity"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Create New Entity
+        </Button>
 
         <DialogFooter>
           <Button
