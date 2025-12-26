@@ -1,6 +1,6 @@
 # Sprint Status
 # Auto-generated from epics.md, epics-phase2.md, epics-phase3.md, epics-phase4.md, epics-phase5.md, epics-phase6.md, epics-phase7.md, epics-phase8.md
-# Last updated: 2025-12-20
+# Last updated: 2025-12-25
 
 # STATUS DEFINITIONS:
 # ==================
@@ -641,3 +641,8 @@ development_status:
   # CI/Infrastructure Bugs
   bug-ci-docker-disk-space: done  # P3: Docker Build fails with "No space left on device" in GitHub Actions
   bug-ci-scheduler-logging-error: done  # P3: Logging error during APScheduler shutdown in tests (ValueError: I/O operation on closed file)
+
+  # Integration Bugs (2025-12-25)
+  bug-mqtt-logging-keyerror: done  # P2: MQTT test connection 500 error - 'message' is reserved LogRecord attribute
+  bug-mqtt-discovery-path: done  # P2: MQTT publish discovery 404 - frontend called wrong endpoint path
+  bug-entity-modal-propagation: done  # P3: EntitySelectModal confirm button opens EventCard - event propagation issue
