@@ -65,6 +65,9 @@ psutil>=5.9.0
 httpx[http2]>=0.26.0  # HTTP/2 client for APNS
 PyJWT>=2.8.0  # JWT generation for APNS authentication
 
+# FCM Push Notifications (Phase 11 - Story P11-2.2)
+firebase-admin>=6.4.0  # Firebase Admin SDK for FCM
+
 # Development and Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1

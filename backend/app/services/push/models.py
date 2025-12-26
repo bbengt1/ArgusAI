@@ -2,6 +2,7 @@
 Pydantic models for push notification providers.
 
 Story P11-2.1: APNS provider models
+Story P11-2.2: FCM provider models
 """
 
 from dataclasses import dataclass, field
@@ -187,6 +188,185 @@ class APNSPayload(BaseModel):
         payload.update(self.custom_data)
 
         return payload
+
+
+# =============================================================================
+# FCM (Firebase Cloud Messaging) Models - Story P11-2.2
+# =============================================================================
+
+
+class FCMConfig(BaseModel):
+    """Configuration for FCM provider.
+
+    Attributes:
+        project_id: Firebase project ID
+        credentials_path: Path to the service account JSON file
+    """
+
+    project_id: str = Field(..., description="Firebase project ID")
+    credentials_path: str = Field(..., description="Path to service account JSON file")
+
+    @field_validator("credentials_path")
+    @classmethod
+    def validate_credentials_path(cls, v: str) -> str:
+        """Validate that credentials path is not empty."""
+        if not v or not v.strip():
+            raise ValueError("credentials_path cannot be empty")
+        return v
+
+
+class FCMPayload(BaseModel):
+    """FCM notification payload.
+
+    Formats notifications according to FCM message format.
+    See: https://firebase.google.com/docs/cloud-messaging/send-message
+
+    Attributes:
+        title: Notification title
+        body: Notification body text
+        image_url: Optional image URL for BigPicture style
+        data: Custom data payload for background processing
+        channel_id: Android notification channel ID
+        priority: Message priority (high or normal)
+        icon: Android notification icon name
+        color: Notification icon color (hex format)
+        sound: Sound name or "default"
+        click_action: Action to perform on notification click
+        tag: Notification tag for grouping/replacing
+    """
+
+    title: str = Field(..., description="Notification title")
+    body: str = Field(..., description="Notification body text")
+    image_url: Optional[str] = Field(None, description="Image URL for BigPicture style")
+    data: Dict[str, str] = Field(default_factory=dict, description="Custom data payload")
+    channel_id: str = Field(default="argusai_events", description="Android channel ID")
+    priority: str = Field(default="high", description="Message priority")
+    icon: str = Field(default="ic_notification", description="Notification icon")
+    color: str = Field(default="#4A90D9", description="Icon color (hex)")
+    sound: str = Field(default="default", description="Sound name")
+    click_action: Optional[str] = Field(None, description="Click action")
+    tag: Optional[str] = Field(None, description="Notification tag for grouping")
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: str) -> str:
+        """Validate priority is one of the allowed values."""
+        allowed = {"high", "normal"}
+        if v not in allowed:
+            raise ValueError(f"Priority must be one of: {allowed}")
+        return v
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: str) -> str:
+        """Validate color is a valid hex format."""
+        if not v.startswith("#") or len(v) not in (4, 7):
+            raise ValueError("Color must be in hex format (#RGB or #RRGGBB)")
+        return v
+
+
+def format_event_for_fcm(
+    event_id: str,
+    camera_id: str,
+    camera_name: str,
+    description: str,
+    smart_detection_type: Optional[str] = None,
+    thumbnail_url: Optional[str] = None,
+    entity_names: Optional[List[str]] = None,
+    is_vip: bool = False,
+    anomaly_score: Optional[float] = None,
+) -> FCMPayload:
+    """Format an event notification for FCM.
+
+    Creates an FCMPayload from event data, following the same patterns
+    as the APNS format_event_for_apns function.
+
+    Args:
+        event_id: UUID of the event
+        camera_id: UUID of the camera
+        camera_name: Display name of the camera
+        description: AI-generated event description
+        smart_detection_type: Detection type (person, vehicle, etc.)
+        thumbnail_url: URL to event thumbnail
+        entity_names: List of recognized entity names
+        is_vip: Whether any matched entity is VIP
+        anomaly_score: Anomaly score 0.0-1.0
+
+    Returns:
+        FCMPayload ready for sending
+    """
+    # Build VIP prefix
+    vip_prefix = "" if is_vip else ""
+
+    # Check for high anomaly
+    is_high_anomaly = anomaly_score is not None and anomaly_score >= 0.6
+
+    # Build title based on detection and entity info
+    if entity_names and len(entity_names) > 0:
+        if len(entity_names) == 1:
+            name_str = entity_names[0]
+        elif len(entity_names) == 2:
+            name_str = f"{entity_names[0]} and {entity_names[1]}"
+        else:
+            name_str = f"{entity_names[0]} and {len(entity_names) - 1} others"
+
+        if is_high_anomaly:
+            title = f"{vip_prefix}{name_str} - Unusual Activity at {camera_name}"
+        else:
+            title = f"{vip_prefix}{name_str} at {camera_name}"
+    elif smart_detection_type:
+        detection_labels = {
+            "person": "Person Detected",
+            "vehicle": "Vehicle Detected",
+            "package": "Package Detected",
+            "animal": "Animal Detected",
+            "ring": "Doorbell Ring",
+            "motion": "Motion Detected",
+        }
+        detection_label = detection_labels.get(smart_detection_type, "Motion Detected")
+
+        if is_high_anomaly:
+            title = f"{vip_prefix}{camera_name}: Unusual Activity - {detection_label}"
+        else:
+            title = f"{vip_prefix}{camera_name}: {detection_label}"
+    else:
+        if is_high_anomaly:
+            title = f"{vip_prefix}{camera_name}: Unusual Activity"
+        else:
+            title = f"{vip_prefix}{camera_name}: Motion Detected"
+
+    # Truncate body if too long
+    body = description
+    if len(body) > 100:
+        body = body[:97] + "..."
+
+    # Build data payload (FCM requires string values)
+    data: Dict[str, str] = {
+        "event_id": event_id,
+        "camera_id": camera_id,
+        "camera_name": camera_name,
+        "url": f"/events?highlight={event_id}",
+        "click_action": "OPEN_EVENT",
+    }
+    if smart_detection_type:
+        data["smart_detection_type"] = smart_detection_type
+    if entity_names:
+        data["entity_names"] = ",".join(entity_names)
+    if is_vip:
+        data["is_vip"] = "true"
+    if anomaly_score is not None:
+        data["anomaly_score"] = str(anomaly_score)
+        data["is_unusual"] = "true" if is_high_anomaly else "false"
+
+    return FCMPayload(
+        title=title,
+        body=body,
+        image_url=thumbnail_url,
+        data=data,
+        channel_id="argusai_events",
+        priority="high",
+        tag=camera_id,  # Group by camera
+    )
 
 
 def format_event_for_apns(
