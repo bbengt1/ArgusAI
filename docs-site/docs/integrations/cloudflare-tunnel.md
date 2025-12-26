@@ -259,6 +259,6 @@ Add authentication before users can access ArgusAI:
 
 ## Related Documentation
 
-- [Full Tunnel Setup Guide](/docs/guides/tunnel-setup.md) - Comprehensive reference
-- [Cloud Relay Architecture](/docs/architecture/cloud-relay-architecture.md) - Technical design
+- [Full Tunnel Setup Guide](https://github.com/bbengt1/ArgusAI/blob/main/docs/guides/tunnel-setup.md) - Comprehensive reference
+- [Cloud Relay Architecture](https://github.com/bbengt1/ArgusAI/blob/main/docs/architecture/cloud-relay-architecture.md) - Technical design
 - [Cloudflare Tunnel Docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) - Official documentation
