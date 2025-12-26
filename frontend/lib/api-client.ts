@@ -628,6 +628,32 @@ export const apiClient = {
     getFrameUrl: (eventId: string, frameNumber: number): string => {
       return `${API_V1_PREFIX}/events/${eventId}/frames/${frameNumber}`;
     },
+
+    /**
+     * Export events to CSV format (Story P11-5.4)
+     * @param filters Optional filters (date range, camera)
+     * @returns Blob containing CSV file
+     */
+    exportCsv: async (filters?: {
+      start_date?: string;
+      end_date?: string;
+      camera_id?: string;
+    }): Promise<Blob> => {
+      const params = new URLSearchParams();
+      params.set('format', 'csv');
+      if (filters?.start_date) params.set('start_date', filters.start_date);
+      if (filters?.end_date) params.set('end_date', filters.end_date);
+      if (filters?.camera_id) params.set('camera_id', filters.camera_id);
+      const queryString = params.toString();
+      const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/events/export?${queryString}`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        throw new ApiError('Failed to export events', response.status);
+      }
+      return response.blob();
+    },
   },
 
   settings: {

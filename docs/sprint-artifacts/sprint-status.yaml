@@ -699,9 +699,9 @@ development_status:
   # Epic P11-5: Platform Polish & Documentation
   # Priority: P3
   # Focus: Performance, UX, and documentation
-  epic-p11-5: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P11-5.md
-  p11-5-1-optimize-camera-list-performance: backlog
-  p11-5-2-add-test-connection-before-camera-save: backlog
-  p11-5-3-update-github-pages-documentation-site: backlog
-  p11-5-4-add-export-motion-events-to-csv: backlog
+  epic-p11-5: done  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P11-5.md
+  p11-5-1-optimize-camera-list-performance: done  # Already complete from Phase 6 (P6-1.2, P6-1.3, P6-1.4)
+  p11-5-2-add-test-connection-before-camera-save: done  # Already complete from Phase 6 (P6-1.1)
+  p11-5-3-update-github-pages-documentation-site: done  # Documentation site already fully built
+  p11-5-4-add-export-motion-events-to-csv: done  # Added Export button to Events page
   epic-p11-5-retrospective: optional

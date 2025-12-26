@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { ChevronUp, AlertCircle, Loader2, Filter, RefreshCw, Trash2, X, CheckSquare } from 'lucide-react';
+import { ChevronUp, AlertCircle, Loader2, Filter, RefreshCw, Trash2, X, CheckSquare, Download } from 'lucide-react';
 import { EventCard } from '@/components/events/EventCard';
 import { DoorbellEventCard } from '@/components/events/DoorbellEventCard';
 import { EventFilters } from '@/components/events/EventFilters';
@@ -138,6 +138,9 @@ export default function EventsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Story P11-5.4: Export state
+  const [isExporting, setIsExporting] = useState(false);
+
   // FF-002: Subscribe to WebSocket for real-time updates
   const handleNewEvent = useCallback((data: { event_id: string; camera_id: string; description: string | null }) => {
     // Increment new events counter
@@ -208,6 +211,37 @@ export default function EventsPage() {
       setShowDeleteConfirm(false);
     }
   }, [selectedIds, invalidateEvents]);
+
+  // Story P11-5.4: Export events to CSV
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const blob = await apiClient.events.exportCsv({
+        start_date: filters.start_date,
+        end_date: filters.end_date,
+        camera_id: filters.camera_id,
+      });
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      a.download = `events-${date}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Events exported successfully');
+    } catch (error) {
+      toast.error('Failed to export events', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filters]);
 
   // Sync filters to URL params
   useEffect(() => {
@@ -318,6 +352,24 @@ export default function EventsPage() {
                 <RefreshCw className="w-4 h-4 mr-2" />
                 {newEventsCount > 0 ? `${newEventsCount} new` : 'Refresh'}
               </Button>
+              {/* Story P11-5.4: Export to CSV button */}
+              {allEvents.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="default"
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  className="h-11 min-w-[44px] sm:h-9"
+                  aria-label="Export events to CSV"
+                >
+                  {isExporting ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 mr-2" />
+                  )}
+                  Export
+                </Button>
+              )}
               {/* Mobile Filter Toggle */}
               <Button
                 variant="outline"
