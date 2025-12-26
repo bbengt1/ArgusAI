@@ -44,7 +44,7 @@ workflow_status:
 # Phase 11 Artifacts (in progress)
 phase11_artifacts:
   prd: docs/PRD-phase11.md
-  epics: pending  # Run create-epics-and-stories to generate
+  epics: docs/epics-phase11.md
 
 # Phase 10 Artifacts (completed)
 phase10_artifacts:
