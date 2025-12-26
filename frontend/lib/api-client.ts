@@ -2217,6 +2217,41 @@ export const apiClient = {
       });
     },
   },
+
+  // ============================================================================
+  // Cloudflare Tunnel (Story P11-1.3)
+  // ============================================================================
+  tunnel: {
+    /**
+     * Get Cloudflare Tunnel status
+     * @returns Current tunnel status
+     */
+    getStatus: async (): Promise<TunnelStatus> => {
+      return apiFetch('/system/tunnel/status');
+    },
+
+    /**
+     * Start Cloudflare Tunnel
+     * @param token Optional tunnel token (uses stored if not provided)
+     * @returns Action result with updated status
+     */
+    start: async (token?: string): Promise<TunnelActionResponse> => {
+      return apiFetch('/system/tunnel/start', {
+        method: 'POST',
+        body: token ? JSON.stringify({ token }) : undefined,
+      });
+    },
+
+    /**
+     * Stop Cloudflare Tunnel
+     * @returns Action result with updated status
+     */
+    stop: async (): Promise<TunnelActionResponse> => {
+      return apiFetch('/system/tunnel/stop', {
+        method: 'POST',
+      });
+    },
+  },
 };
 
 // ============================================================================
@@ -2307,4 +2342,26 @@ export interface SummaryFeedbackResponse {
   correction_text: string | null;
   created_at: string;
   updated_at: string | null;
+}
+
+// ============================================================================
+// Cloudflare Tunnel Types (Story P11-1.3)
+// ============================================================================
+
+export interface TunnelStatus {
+  status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  is_connected: boolean;
+  is_running: boolean;
+  hostname: string | null;
+  error: string | null;
+  enabled: boolean;
+  uptime_seconds: number;
+  last_connected: string | null;
+  reconnect_count: number;
+}
+
+export interface TunnelActionResponse {
+  success: boolean;
+  message: string;
+  status?: TunnelStatus;
 }

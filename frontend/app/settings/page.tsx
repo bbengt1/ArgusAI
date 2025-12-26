@@ -57,6 +57,7 @@ import { AccuracyDashboard } from '@/components/settings/AccuracyDashboard';
 import { PushNotificationSettings } from '@/components/settings/PushNotificationSettings';
 import { MQTTSettings } from '@/components/settings/MQTTSettings';
 import { HomekitSettings } from '@/components/settings/HomekitSettings';
+import { TunnelSettings } from '@/components/settings/TunnelSettings';
 import { AnomalySettings } from '@/components/settings/AnomalySettings';
 import { MotionEventsExport } from '@/components/settings/MotionEventsExport';
 import { PromptRefinementModal } from '@/components/settings/PromptRefinementModal';
@@ -1274,8 +1275,11 @@ Keep the summary concise (2-3 paragraphs).`}
               </Card>
             </TabsContent>
 
-            {/* Integrations Tab - Story P4-2.4, P4-6.1 */}
+            {/* Integrations Tab - Story P4-2.4, P4-6.1, P11-1.3 */}
             <TabsContent value="integrations" className="space-y-4">
+              <ErrorBoundary context="Tunnel Settings">
+                <TunnelSettings />
+              </ErrorBoundary>
               <ErrorBoundary context="MQTT Settings">
                 <MQTTSettings />
               </ErrorBoundary>
