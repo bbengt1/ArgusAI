@@ -1,0 +1,220 @@
+<story-context id="P11-3-1" v="1.0">
+  <metadata>
+    <epicId>P11-3</epicId>
+    <storyId>3.1</storyId>
+    <title>Implement MCPContextProvider MVP with Feedback Context</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-12-26</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>docs/sprint-artifacts/P11-3-1.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>system</asA>
+    <iWant>to include user feedback history in AI prompts</iWant>
+    <soThat>the AI learns from corrections and improves accuracy</soThat>
+    <tasks>
+      <task id="1">Create MCPContextProvider class structure (AC: 3.1.1)
+        <subtasks>
+          <subtask>Create backend/app/services/mcp_context.py with class skeleton</subtask>
+          <subtask>Define AIContext, FeedbackContext dataclasses</subtask>
+          <subtask>Implement get_context(camera_id, event_time, entity_id) method signature</subtask>
+          <subtask>Implement format_for_prompt(context) method signature</subtask>
+          <subtask>Add singleton pattern with get_mcp_context_provider() function</subtask>
+        </subtasks>
+      </task>
+      <task id="2">Implement feedback history query (AC: 3.1.2, 3.1.3)
+        <subtasks>
+          <subtask>Create _get_feedback_context(camera_id) method</subtask>
+          <subtask>Query last 50 EventFeedback records by camera_id</subtask>
+          <subtask>Calculate accuracy rate (positive / total)</subtask>
+          <subtask>Handle case of no feedback (return None for accuracy_rate)</subtask>
+          <subtask>Order by created_at DESC to get most recent first</subtask>
+        </subtasks>
+      </task>
+      <task id="3">Extract common correction patterns (AC: 3.1.4)
+        <subtasks>
+          <subtask>Create _extract_common_patterns(corrections: list[str]) helper</subtask>
+          <subtask>Tokenize and count keywords from correction text</subtask>
+          <subtask>Return top 3 most common patterns</subtask>
+          <subtask>Extract recent negative feedback reasons (last 5 with text)</subtask>
+        </subtasks>
+      </task>
+      <task id="4">Create context formatting for prompts (AC: 3.1.5)
+        <subtasks>
+          <subtask>Implement format_for_prompt(context: AIContext) method</subtask>
+          <subtask>Format accuracy as percentage</subtask>
+          <subtask>Format common corrections as comma-separated list</subtask>
+          <subtask>Return empty string if no context available</subtask>
+        </subtasks>
+      </task>
+      <task id="5">Add fail-open error handling (AC: 3.1.6)
+        <subtasks>
+          <subtask>Wrap _get_feedback_context in try/except returning None on error</subtask>
+          <subtask>Log warnings with structured metadata for failures</subtask>
+          <subtask>Return partial AIContext if some components fail</subtask>
+          <subtask>Use asyncio.gather(return_exceptions=True) for parallel gathering</subtask>
+        </subtasks>
+      </task>
+      <task id="6">Write unit tests (AC: all)
+        <subtasks>
+          <subtask>Test feedback context gathering with seeded data</subtask>
+          <subtask>Test accuracy calculation (positive, negative, mixed)</subtask>
+          <subtask>Test common pattern extraction</subtask>
+          <subtask>Test prompt formatting output</subtask>
+          <subtask>Test fail-open behavior (simulate database error)</subtask>
+          <subtask>Test with no feedback data</subtask>
+          <subtask>Target 90%+ coverage</subtask>
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="3.1.1">MCPContextProvider class created in backend/app/services/</criterion>
+    <criterion id="3.1.2">Provider gathers recent feedback (last 50 items)</criterion>
+    <criterion id="3.1.3">Camera-specific accuracy stats included</criterion>
+    <criterion id="3.1.4">Common corrections summarized</criterion>
+    <criterion id="3.1.5">Context formatted for AI prompt injection</criterion>
+    <criterion id="3.1.6">Fail-open design - AI works if context fails</criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>docs/sprint-artifacts/tech-spec-epic-P11-3.md</path>
+        <title>Epic P11-3 Technical Specification</title>
+        <section>Detailed Design - MCPContextProvider</section>
+        <snippet>MCPContextProvider class gathers context via database queries. Uses AIContext, FeedbackContext dataclasses. Target &lt;50ms context gathering.</snippet>
+      </doc>
+      <doc>
+        <path>docs/architecture/phase-11-additions.md</path>
+        <title>Phase 11 Architecture Additions</title>
+        <section>MCP Context Provider (P11-3.1)</section>
+        <snippet>ADR-P11-003: Start with database-backed context rather than full MCP protocol server. Fail-open design for reliability.</snippet>
+      </doc>
+      <doc>
+        <path>docs/epics-phase11.md</path>
+        <title>ArgusAI Phase 11 Epic Breakdown</title>
+        <section>Epic P11-3: AI Context Enhancement (MCP)</section>
+        <snippet>Goal: Improve AI description accuracy through accumulated context. Story P11-3.1 implements MCPContextProvider MVP with feedback context.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>backend/app/models/event_feedback.py</path>
+        <kind>model</kind>
+        <symbol>EventFeedback</symbol>
+        <reason>Core model for feedback storage. Has camera_id (denormalized), rating, correction, correction_type fields. Query by camera_id for camera-specific feedback.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/context_prompt_service.py</path>
+        <kind>service</kind>
+        <symbol>ContextEnhancedPromptService</symbol>
+        <reason>Existing context service that MCPContextProvider will integrate with. Follow similar patterns for singleton, service structure, and error handling.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/feedback_analysis_service.py</path>
+        <kind>service</kind>
+        <symbol>FeedbackAnalysisService</symbol>
+        <reason>Existing service with pattern extraction from corrections. Can reference _categorize_corrections() and keyword extraction logic.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/signed_url_service.py</path>
+        <kind>service</kind>
+        <symbol>SignedURLService</symbol>
+        <reason>Recent service (P11-2.6) with singleton pattern. Follow same structure for get_mcp_context_provider() and reset function.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_signed_url_service.py</path>
+        <kind>test</kind>
+        <symbol>TestSignedURLService</symbol>
+        <reason>Test pattern reference. Uses pytest fixtures, class-based tests, good coverage of success and failure cases.</reason>
+      </file>
+      <file>
+        <path>backend/tests/test_services/test_context_prompt_service.py</path>
+        <kind>test</kind>
+        <symbol>TestContextEnhancedPromptService</symbol>
+        <reason>Test pattern for context services. Reference for testing context gathering and formatting.</reason>
+      </file>
+      <file>
+        <path>backend/app/services/entity_service.py</path>
+        <kind>service</kind>
+        <symbol>EntityService</symbol>
+        <reason>Related service for entity matching. Will be used in P11-3.2 for entity context. Understand existing entity lookup patterns.</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="sqlalchemy" version="2.0+">ORM for database queries</package>
+        <package name="pytest" version="*">Test framework</package>
+        <package name="pytest-asyncio" version="*">Async test support</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="performance">Context gathering must complete within 50ms for uncached queries (NFR3 from tech spec)</constraint>
+    <constraint type="reliability">Fail-open design - if context fails, AI must still work (NFR12)</constraint>
+    <constraint type="architecture">Follow singleton pattern with get_* and reset_* functions (see signed_url_service.py)</constraint>
+    <constraint type="architecture">Use dataclasses for AIContext, FeedbackContext response objects</constraint>
+    <constraint type="architecture">Use structured logging with extra dict for metrics (event_type, duration_ms, etc.)</constraint>
+    <constraint type="testing">Target 90%+ coverage for mcp_context.py</constraint>
+    <constraint type="testing">Use pytest fixtures to seed EventFeedback data</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>MCPContextProvider.get_context</name>
+      <kind>async method</kind>
+      <signature>async def get_context(self, camera_id: str, event_time: datetime, entity_id: Optional[str] = None) -> AIContext</signature>
+      <path>backend/app/services/mcp_context.py</path>
+    </interface>
+    <interface>
+      <name>MCPContextProvider.format_for_prompt</name>
+      <kind>method</kind>
+      <signature>def format_for_prompt(self, context: AIContext) -> str</signature>
+      <path>backend/app/services/mcp_context.py</path>
+    </interface>
+    <interface>
+      <name>FeedbackContext</name>
+      <kind>dataclass</kind>
+      <signature>@dataclass class FeedbackContext: accuracy_rate: Optional[float], total_feedback: int, common_corrections: List[str], recent_negative_reasons: List[str]</signature>
+      <path>backend/app/services/mcp_context.py</path>
+    </interface>
+    <interface>
+      <name>AIContext</name>
+      <kind>dataclass</kind>
+      <signature>@dataclass class AIContext: feedback: Optional[FeedbackContext], entity: Optional[EntityContext], camera: Optional[CameraContext], time_pattern: Optional[TimePatternContext]</signature>
+      <path>backend/app/services/mcp_context.py</path>
+    </interface>
+    <interface>
+      <name>EventFeedback.camera_id</name>
+      <kind>model field</kind>
+      <signature>camera_id = Column(String, ForeignKey('cameras.id', ondelete='SET NULL'), nullable=True, index=True)</signature>
+      <path>backend/app/models/event_feedback.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Use pytest with pytest-asyncio for async tests. Follow existing patterns in backend/tests/test_services/.
+      Use fixtures for database session and seeded data. Test both success paths and failure/edge cases.
+      Use unittest.mock for simulating database errors for fail-open testing.
+    </standards>
+    <locations>
+      <location>backend/tests/test_services/test_mcp_context.py</location>
+    </locations>
+    <ideas>
+      <idea ac="3.1.1">Test MCPContextProvider instantiation and singleton access</idea>
+      <idea ac="3.1.2">Test _get_feedback_context with 0, 25, 50, 100 feedback records</idea>
+      <idea ac="3.1.3">Test accuracy calculation: all positive (100%), all negative (0%), mixed (50%)</idea>
+      <idea ac="3.1.4">Test _extract_common_patterns with varied correction texts</idea>
+      <idea ac="3.1.5">Test format_for_prompt with full context, partial context, empty context</idea>
+      <idea ac="3.1.6">Test fail-open: mock db.execute to raise Exception, verify None returned and no exception propagates</idea>
+      <idea ac="3.1.6">Test partial context: mock one context method to fail, verify others still included</idea>
+    </ideas>
+  </tests>
+</story-context>
