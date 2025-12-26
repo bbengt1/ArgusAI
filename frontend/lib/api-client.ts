@@ -1604,7 +1604,7 @@ export const apiClient = {
      * @returns Discovery publish result
      */
     publishDiscovery: async (): Promise<MQTTPublishDiscoveryResponse> => {
-      return apiFetch('/integrations/mqtt/discovery/publish', {
+      return apiFetch('/integrations/mqtt/publish-discovery', {
         method: 'POST',
       });
     },
