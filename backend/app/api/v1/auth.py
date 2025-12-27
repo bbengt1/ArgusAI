@@ -322,8 +322,26 @@ async def change_password(
         )
 
     # Update password
-    user.password_hash = hash_password(password_data.new_password)
+    new_hash = hash_password(password_data.new_password)
+    user.password_hash = new_hash
+    db.add(user)  # Explicitly add to session to ensure change is tracked
     db.commit()
+    db.refresh(user)  # Refresh to confirm change was persisted
+
+    # Verify the change was saved
+    if user.password_hash != new_hash:
+        logger.error(
+            "Password change failed - hash not persisted",
+            extra={
+                "event_type": "password_change_failed",
+                "reason": "persistence_error",
+                "user_id": user.id,
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save password change",
+        )
 
     logger.info(
         "Password changed successfully",
