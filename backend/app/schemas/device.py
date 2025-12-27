@@ -1,6 +1,6 @@
-"""Device Pydantic schemas for request/response validation (Story P11-2.4, P11-2.5)"""
+"""Device Pydantic schemas for request/response validation (Story P11-2.4, P11-2.5, P12-2.1)"""
 from pydantic import BaseModel, Field, field_validator
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from enum import Enum
 import re
@@ -33,6 +33,12 @@ class DeviceCreate(BaseModel):
         None,
         max_length=100,
         description="User-friendly device name (e.g., 'iPhone 15 Pro')"
+    )
+    # Story P12-2.1: Add device_model field
+    device_model: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="Device hardware model (e.g., 'iPhone 15 Pro', 'Pixel 8')"
     )
     push_token: Optional[str] = Field(
         None,
@@ -102,6 +108,19 @@ class DeviceTokenUpdate(BaseModel):
     )
 
 
+class DeviceUpdate(BaseModel):
+    """Schema for updating device (Story P12-2.2)."""
+    name: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="User-friendly device name"
+    )
+    push_token: Optional[str] = Field(
+        None,
+        description="Push notification token from APNS/FCM"
+    )
+
+
 class DeviceResponse(BaseModel):
     """Schema for device response (excludes push_token for security)."""
     id: str = Field(..., description="Device UUID")
@@ -111,6 +130,11 @@ class DeviceResponse(BaseModel):
     name: Optional[str] = Field(None, description="Device name")
     last_seen_at: Optional[datetime] = Field(None, description="Last activity timestamp")
     created_at: datetime = Field(..., description="Registration timestamp")
+    # Story P12-2.1: Mobile device registration fields
+    device_model: Optional[str] = Field(None, description="Device hardware model")
+    pairing_confirmed: bool = Field(False, description="Whether pairing flow is complete")
+    inactive_warning: bool = Field(False, description="True if device inactive 90+ days")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
     # Quiet hours fields (Story P11-2.5)
     quiet_hours_enabled: bool = Field(False, description="Quiet hours enabled")
     quiet_hours_start: Optional[str] = Field(None, description="Quiet hours start (HH:MM)")

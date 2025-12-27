@@ -25,6 +25,8 @@ from app.models.vehicle_embedding import VehicleEmbedding
 from app.models.frame_embedding import FrameEmbedding
 from app.models.homekit import HomeKitConfig, HomeKitAccessory
 from app.models.device import Device
+from app.models.pairing_code import PairingCode
+from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "ProtectController",
@@ -56,4 +58,6 @@ __all__ = [
     "HomeKitConfig",
     "HomeKitAccessory",
     "Device",
+    "PairingCode",
+    "RefreshToken",
 ]

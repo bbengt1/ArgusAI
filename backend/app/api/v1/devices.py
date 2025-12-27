@@ -1,10 +1,12 @@
 """
-Device Registration API endpoints (Story P11-2.4, P11-2.5)
+Device Registration API endpoints (Story P11-2.4, P11-2.5, P12-2.2)
 
 Endpoints for mobile device registration and token management:
 - POST /api/v1/devices - Register new device
 - GET /api/v1/devices - List user's devices
+- PUT /api/v1/devices/{id} - Update device (rename) (Story P12-2.2)
 - DELETE /api/v1/devices/{device_id} - Revoke device
+- DELETE /api/v1/devices/inactive - Remove inactive devices (Story P12-2.5)
 - PUT /api/v1/devices/{device_id}/token - Update push token
 - PUT /api/v1/devices/{device_id}/preferences - Update device preferences (quiet hours)
 """
@@ -22,6 +24,7 @@ from app.api.v1.auth import get_current_user
 from app.schemas.device import (
     DeviceCreate,
     DeviceTokenUpdate,
+    DeviceUpdate,
     DeviceResponse,
     DeviceListResponse,
     DeviceRegistrationResponse,
@@ -76,6 +79,9 @@ async def register_device(
         # Update existing device
         existing_device.platform = device_data.platform.value
         existing_device.name = device_data.name
+        # Story P12-2.1: Update device_model if provided
+        if device_data.device_model is not None:
+            existing_device.device_model = device_data.device_model
         if device_data.push_token:
             existing_device.set_push_token(device_data.push_token)
         # Update quiet hours if provided (Story P11-2.5)
@@ -120,6 +126,8 @@ async def register_device(
             device_id=device_data.device_id,
             platform=device_data.platform.value,
             name=device_data.name,
+            # Story P12-2.1: Add device_model field
+            device_model=device_data.device_model,
             # Quiet hours (Story P11-2.5)
             quiet_hours_enabled=device_data.quiet_hours_enabled or False,
             quiet_hours_start=device_data.quiet_hours_start,
@@ -190,6 +198,11 @@ async def list_devices(
             name=d.name,
             last_seen_at=d.last_seen_at,
             created_at=d.created_at,
+            # Story P12-2.1: Mobile device registration fields
+            device_model=d.device_model,
+            pairing_confirmed=d.pairing_confirmed,
+            inactive_warning=d.is_inactive,
+            updated_at=d.updated_at,
             # Quiet hours (Story P11-2.5)
             quiet_hours_enabled=d.quiet_hours_enabled,
             quiet_hours_start=d.quiet_hours_start,
@@ -399,9 +412,157 @@ async def update_device_preferences(
         name=device.name,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
+        # Story P12-2.1: Mobile device registration fields
+        device_model=device.device_model,
+        pairing_confirmed=device.pairing_confirmed,
+        inactive_warning=device.is_inactive,
+        updated_at=device.updated_at,
+        # Quiet hours (Story P11-2.5)
         quiet_hours_enabled=device.quiet_hours_enabled,
         quiet_hours_start=device.quiet_hours_start,
         quiet_hours_end=device.quiet_hours_end,
         quiet_hours_timezone=device.quiet_hours_timezone,
         quiet_hours_override_critical=device.quiet_hours_override_critical,
     )
+
+
+# ============================================================================
+# Story P12-2.2: Device Update Endpoint
+# ============================================================================
+
+@router.put(
+    "/{id}",
+    response_model=DeviceResponse,
+    summary="Update device (rename)",
+    description="Update a device's name or push token (Story P12-2.2).",
+    responses={
+        401: {"description": "Not authenticated"},
+        404: {"description": "Device not found"},
+    },
+)
+async def update_device(
+    id: str,
+    device_data: DeviceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DeviceResponse:
+    """
+    Update a device (rename or update push token).
+
+    Args:
+        id: Device UUID
+        device_data: Update data (name, push_token)
+        db: Database session
+        current_user: Authenticated user
+
+    Returns:
+        Updated DeviceResponse
+
+    Raises:
+        HTTPException: 404 if device not found or not owned by user
+    """
+    device = db.query(Device).filter(
+        Device.id == id,
+        Device.user_id == current_user.id,
+    ).first()
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found",
+        )
+
+    # Update provided fields
+    if device_data.name is not None:
+        device.name = device_data.name
+    if device_data.push_token is not None:
+        device.set_push_token(device_data.push_token)
+
+    device.update_last_seen()
+    db.commit()
+    db.refresh(device)
+
+    logger.info(
+        f"Device updated",
+        extra={
+            "device_id": id,
+            "user_id": current_user.id,
+        }
+    )
+
+    return DeviceResponse(
+        id=device.id,
+        user_id=device.user_id,
+        device_id=device.device_id,
+        platform=device.platform,
+        name=device.name,
+        last_seen_at=device.last_seen_at,
+        created_at=device.created_at,
+        device_model=device.device_model,
+        pairing_confirmed=device.pairing_confirmed,
+        inactive_warning=device.is_inactive,
+        updated_at=device.updated_at,
+        quiet_hours_enabled=device.quiet_hours_enabled,
+        quiet_hours_start=device.quiet_hours_start,
+        quiet_hours_end=device.quiet_hours_end,
+        quiet_hours_timezone=device.quiet_hours_timezone,
+        quiet_hours_override_critical=device.quiet_hours_override_critical,
+    )
+
+
+# ============================================================================
+# Story P12-2.5: Inactive Device Cleanup Endpoint
+# ============================================================================
+
+@router.delete(
+    "/inactive",
+    response_model=dict,
+    summary="Remove inactive devices",
+    description="Remove all devices inactive for 90+ days (Story P12-2.5).",
+    responses={
+        401: {"description": "Not authenticated"},
+    },
+)
+async def delete_inactive_devices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Remove all inactive devices for the current user.
+
+    A device is considered inactive if it hasn't been seen in 90+ days.
+
+    Args:
+        db: Database session
+        current_user: Authenticated user
+
+    Returns:
+        Dict with removed_count
+    """
+    from datetime import timedelta
+
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=90)
+
+    # Find and count inactive devices
+    inactive_devices = db.query(Device).filter(
+        Device.user_id == current_user.id,
+        (Device.last_seen_at < cutoff_date) | (Device.last_seen_at.is_(None))
+    ).all()
+
+    removed_count = len(inactive_devices)
+
+    # Delete inactive devices
+    for device in inactive_devices:
+        db.delete(device)
+
+    db.commit()
+
+    logger.info(
+        f"Removed inactive devices",
+        extra={
+            "user_id": current_user.id,
+            "removed_count": removed_count,
+        }
+    )
+
+    return {"removed_count": removed_count}

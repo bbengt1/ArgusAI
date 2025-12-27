@@ -17,6 +17,7 @@ from app.core.logging_config import setup_logging, get_logger
 from app.core.metrics import init_metrics, get_metrics, get_content_type, update_system_metrics
 from app.middleware.logging_middleware import RequestLoggingMiddleware
 from app.middleware.auth_middleware import AuthMiddleware
+from app.middleware.last_seen import LastSeenMiddleware
 from app.middleware.https_redirect import HTTPSRedirectMiddleware
 from app.api.v1.cameras import router as cameras_router, camera_service
 from app.api.v1.motion_events import router as motion_events_router
@@ -44,6 +45,7 @@ from app.api.v1.homekit import router as homekit_router  # Story P5-1.1: HomeKit
 from app.api.v1.discovery import router as discovery_router  # Story P5-2.1: ONVIF Discovery
 from app.api.v1.audio import router as audio_router  # Story P6-3.2: Audio Event Detection
 from app.api.v1.devices import router as devices_router  # Story P11-2.4: Device Registration
+from app.api.v1.mobile_auth import router as mobile_auth_router  # Story P12-3: Mobile Auth
 from app.services.event_processor import initialize_event_processor, shutdown_event_processor
 from app.services.cleanup_service import get_cleanup_service
 from app.services.protect_service import get_protect_service  # Story P2-1.4: Protect WebSocket
@@ -890,6 +892,10 @@ app.add_middleware(RequestLoggingMiddleware)
 # Note: Auth middleware runs after logging middleware (LIFO order)
 app.add_middleware(AuthMiddleware)
 
+# Add device last_seen tracking middleware (Story P12-2.4)
+# Runs after auth to access request.state.user, updates device last_seen_at
+app.add_middleware(LastSeenMiddleware)
+
 # Add HTTPS redirect middleware (Story P9-5.1)
 # Only active when SSL is enabled and redirect is configured
 if settings.SSL_ENABLED and settings.SSL_REDIRECT_HTTP:
@@ -931,6 +937,7 @@ app.include_router(voice_router, prefix=settings.API_V1_PREFIX)  # Story P4-6.3 
 app.include_router(homekit_router, prefix=settings.API_V1_PREFIX)  # Story P5-1.1 - HomeKit API
 app.include_router(audio_router, prefix=settings.API_V1_PREFIX)  # Story P6-3.2 - Audio Event Detection
 app.include_router(devices_router, prefix=settings.API_V1_PREFIX)  # Story P11-2.4 - Device Registration
+app.include_router(mobile_auth_router, prefix=settings.API_V1_PREFIX)  # Story P12-3 - Mobile Auth
 
 # Thumbnail serving endpoint (with CORS support)
 from fastapi.responses import FileResponse, Response as FastAPIResponse

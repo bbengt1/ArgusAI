@@ -45,6 +45,8 @@ import { TimeRangePicker } from './TimeRangePicker';
 import { DaysOfWeekSelector } from './DaysOfWeekSelector';
 import { WebhookConfig } from './WebhookConfig';
 import { RuleTestResults } from './RuleTestResults';
+import { EntityRuleSelector } from './EntityRuleSelector';
+import type { EntityMatchMode } from '@/types/alert-rule';
 
 // Form values type (what we use in the form) - exported for sub-components
 export interface RuleFormValues {
@@ -64,6 +66,9 @@ export interface RuleFormValues {
     webhook?: { url: string; headers?: Record<string, string> } | null;
   };
   cooldown_minutes: number;
+  // Story P12-1.3: Entity-based filtering
+  entity_id?: string | null;
+  entity_match_mode?: EntityMatchMode;
 }
 
 // Form validation schema matching backend Pydantic validators
@@ -90,7 +95,22 @@ const ruleFormSchema = z.object({
     }).nullable().optional(),
   }),
   cooldown_minutes: z.number().min(0).max(1440),
-});
+  // Story P12-1.3: Entity-based filtering
+  entity_id: z.string().nullable().optional(),
+  entity_match_mode: z.enum(['any', 'specific', 'unknown']).optional(),
+}).refine(
+  (data) => {
+    // If entity_match_mode is 'specific', entity_id must be set
+    if (data.entity_match_mode === 'specific' && !data.entity_id) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Please select an entity when using "Specific Entity" mode',
+    path: ['entity_id'],
+  }
+);
 
 interface RuleFormDialogProps {
   open: boolean;
@@ -121,6 +141,9 @@ export function RuleFormDialog({ open, onOpenChange, rule, onClose }: RuleFormDi
       webhook: null,
     },
     cooldown_minutes: 5,
+    // Story P12-1.3: Entity-based filtering
+    entity_id: null,
+    entity_match_mode: 'any',
   };
 
   const form = useForm<RuleFormValues>({
@@ -149,6 +172,9 @@ export function RuleFormDialog({ open, onOpenChange, rule, onClose }: RuleFormDi
           webhook: rule.actions.webhook || null,
         },
         cooldown_minutes: rule.cooldown_minutes,
+        // Story P12-1.3: Entity-based filtering
+        entity_id: rule.entity_id || null,
+        entity_match_mode: rule.entity_match_mode || 'any',
       });
     } else {
       form.reset(defaultValues);
@@ -234,6 +260,9 @@ export function RuleFormDialog({ open, onOpenChange, rule, onClose }: RuleFormDi
       conditions,
       actions,
       cooldown_minutes: values.cooldown_minutes,
+      // Story P12-1.3: Entity-based filtering
+      entity_id: values.entity_match_mode === 'specific' ? values.entity_id : null,
+      entity_match_mode: values.entity_match_mode || 'any',
     };
 
     if (isEditing && rule) {
@@ -308,6 +337,16 @@ export function RuleFormDialog({ open, onOpenChange, rule, onClose }: RuleFormDi
                 )}
               />
             </div>
+
+            {/* Entity Filter Section - Story P12-1.3 */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Entity Filter</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <EntityRuleSelector form={form} />
+              </CardContent>
+            </Card>
 
             {/* Conditions Section */}
             <Card>

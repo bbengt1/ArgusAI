@@ -54,6 +54,40 @@ def _serialize_actions(actions) -> str:
     return json.dumps(actions.model_dump(exclude_none=True))
 
 
+def _enrich_rule_response(rule: AlertRule) -> dict:
+    """
+    Enrich alert rule with entity_name from relationship (Story P12-1.1).
+
+    Args:
+        rule: AlertRule model instance
+
+    Returns:
+        Dictionary suitable for AlertRuleResponse
+    """
+    # Start with ORM model fields
+    data = {
+        "id": rule.id,
+        "name": rule.name,
+        "is_enabled": rule.is_enabled,
+        "conditions": rule.conditions,
+        "actions": rule.actions,
+        "cooldown_minutes": rule.cooldown_minutes,
+        "last_triggered_at": rule.last_triggered_at,
+        "trigger_count": rule.trigger_count,
+        "created_at": rule.created_at,
+        "updated_at": rule.updated_at,
+        "entity_id": rule.entity_id,
+        "entity_match_mode": rule.entity_match_mode or 'any',
+        "entity_name": None
+    }
+
+    # Add entity name from relationship if available
+    if rule.entity_id and hasattr(rule, 'entity') and rule.entity:
+        data["entity_name"] = rule.entity.name or rule.entity.display_name
+
+    return data
+
+
 @router.get("", response_model=AlertRuleListResponse)
 def list_alert_rules(
     is_enabled: Optional[bool] = Query(None, description="Filter by enabled status"),
@@ -90,7 +124,10 @@ def list_alert_rules(
             extra={"total_count": total_count, "is_enabled_filter": is_enabled}
         )
 
-        return AlertRuleListResponse(data=rules, total_count=total_count)
+        # Enrich responses with entity names
+        enriched_rules = [_enrich_rule_response(rule) for rule in rules]
+
+        return AlertRuleListResponse(data=enriched_rules, total_count=total_count)
 
     except Exception as e:
         logger.error(f"Failed to list alert rules: {e}", exc_info=True)
@@ -149,7 +186,10 @@ def create_alert_rule(
             conditions=conditions_json,
             actions=actions_json,
             cooldown_minutes=rule_data.cooldown_minutes,
-            trigger_count=0
+            trigger_count=0,
+            # Story P12-1.1: Entity-based filtering
+            entity_id=rule_data.entity_id,
+            entity_match_mode=rule_data.entity_match_mode
         )
 
         db.add(rule)
@@ -161,11 +201,13 @@ def create_alert_rule(
             extra={
                 "rule_id": rule_id,
                 "rule_name": rule.name,
-                "is_enabled": rule.is_enabled
+                "is_enabled": rule.is_enabled,
+                "entity_id": rule.entity_id,
+                "entity_match_mode": rule.entity_match_mode
             }
         )
 
-        return rule
+        return _enrich_rule_response(rule)
 
     except HTTPException:
         raise
@@ -211,7 +253,7 @@ def get_alert_rule(
 
         logger.debug(f"Retrieved alert rule {rule_id}")
 
-        return rule
+        return _enrich_rule_response(rule)
 
     except HTTPException:
         raise
@@ -278,6 +320,19 @@ def update_alert_rule(
         if rule_data.cooldown_minutes is not None:
             rule.cooldown_minutes = rule_data.cooldown_minutes
 
+        # Story P12-1.1: Entity-based filtering
+        if rule_data.entity_match_mode is not None:
+            rule.entity_match_mode = rule_data.entity_match_mode
+            # If switching away from 'specific', clear entity_id
+            if rule_data.entity_match_mode != 'specific':
+                rule.entity_id = None
+            elif rule_data.entity_id is not None:
+                rule.entity_id = rule_data.entity_id
+        elif rule_data.entity_id is not None:
+            # Allow updating entity_id alone if mode is already 'specific'
+            if rule.entity_match_mode == 'specific':
+                rule.entity_id = rule_data.entity_id
+
         rule.updated_at = datetime.now(timezone.utc)
 
         db.commit()
@@ -288,7 +343,7 @@ def update_alert_rule(
             extra={"rule_id": rule_id, "rule_name": rule.name}
         )
 
-        return rule
+        return _enrich_rule_response(rule)
 
     except HTTPException:
         raise

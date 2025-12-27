@@ -437,6 +437,89 @@ class AlertEngine:
 
         return False
 
+    def _check_entity_match_mode(
+        self,
+        event: Event,
+        rule: AlertRule
+    ) -> bool:
+        """
+        Check if event matches rule's entity filter mode (Story P12-1.2).
+
+        Modes:
+        - 'any': No entity filter (default/legacy behavior) - always matches
+        - 'specific': Trigger only for rule.entity_id match
+        - 'unknown': Trigger only for events with NO matched entity (stranger detection)
+
+        Args:
+            event: Event being evaluated
+            rule: AlertRule with entity_id and entity_match_mode
+
+        Returns:
+            True if entity condition is satisfied
+        """
+        mode = getattr(rule, 'entity_match_mode', None) or 'any'
+
+        # 'any' mode: no entity filter (default/legacy behavior)
+        if mode == 'any':
+            return True
+
+        # Get event's matched entity IDs
+        event_entity_ids = []
+        if event.matched_entity_ids:
+            try:
+                event_entity_ids = json.loads(event.matched_entity_ids)
+            except json.JSONDecodeError:
+                pass
+
+        # 'specific' mode: must match rule.entity_id
+        if mode == 'specific':
+            rule_entity_id = getattr(rule, 'entity_id', None)
+            if not rule_entity_id:
+                # Misconfigured rule (specific mode but no entity_id) - fail open
+                logger.warning(
+                    f"Rule {rule.id} has mode='specific' but no entity_id, failing open",
+                    extra={"rule_id": rule.id, "rule_name": rule.name}
+                )
+                return True
+
+            matched = rule_entity_id in event_entity_ids
+
+            logger.debug(
+                f"Entity match mode 'specific': rule.entity_id={rule_entity_id}, "
+                f"event_entity_ids={event_entity_ids}, matched={matched}",
+                extra={
+                    "rule_id": rule.id,
+                    "rule_entity_id": rule_entity_id,
+                    "event_entity_ids": event_entity_ids,
+                    "matched": matched
+                }
+            )
+
+            return matched
+
+        # 'unknown' mode: event must have NO matched entity (stranger detection)
+        if mode == 'unknown':
+            is_stranger = len(event_entity_ids) == 0
+
+            logger.debug(
+                f"Entity match mode 'unknown': event_entity_ids={event_entity_ids}, "
+                f"is_stranger={is_stranger}",
+                extra={
+                    "rule_id": rule.id,
+                    "event_entity_ids": event_entity_ids,
+                    "is_stranger": is_stranger
+                }
+            )
+
+            return is_stranger
+
+        # Unknown mode - fail open
+        logger.warning(
+            f"Unknown entity_match_mode: {mode}, failing open",
+            extra={"rule_id": rule.id, "mode": mode}
+        )
+        return True
+
     def _get_event_entity_info(self, event: Event) -> Tuple[List[str], List[str]]:
         """
         Get matched entity IDs and names from an event (Story P4-8.4).
@@ -640,7 +723,23 @@ class AlertEngine:
             )
             return False, details
 
-        # 9. Story P6-3.2: Audio event type matching
+        # 9. Story P12-1.2: Simplified entity match mode
+        entity_match_mode_result = self._check_entity_match_mode(event, rule)
+        details["conditions_checked"]["entity_match_mode"] = entity_match_mode_result
+
+        if not entity_match_mode_result:
+            logger.debug(
+                f"Rule '{rule.name}' failed entity_match_mode check",
+                extra={
+                    "rule_id": rule.id,
+                    "entity_match_mode": getattr(rule, 'entity_match_mode', 'any'),
+                    "rule_entity_id": getattr(rule, 'entity_id', None),
+                    "event_entity_ids": event_entity_ids
+                }
+            )
+            return False, details
+
+        # 10. Story P6-3.2: Audio event type matching (renumbered from 9)
         audio_event_types_match = self._check_audio_event_types(
             getattr(event, 'audio_event_type', None),
             conditions.get("audio_event_types")
@@ -839,6 +938,8 @@ class AlertEngine:
         Creates persistent notification record in database and broadcasts
         via WebSocket to all connected dashboard clients.
 
+        Story P12-1.4: Includes entity context in notification when rule is entity-based.
+
         Args:
             event: Event that triggered the alert
             rule: AlertRule that matched
@@ -850,8 +951,20 @@ class AlertEngine:
             from app.services.websocket_manager import get_websocket_manager
             from app.models.notification import Notification
 
-            # Truncate event description for display (max 200 chars)
-            event_description = event.description[:200] if event.description else None
+            # Story P12-1.4: Build entity-aware notification title
+            entity_match_mode = getattr(rule, 'entity_match_mode', 'any')
+            rule_entity = getattr(rule, 'entity', None)
+
+            if entity_match_mode == 'specific' and rule_entity:
+                # Use entity name in notification title
+                notification_title = f"{rule_entity.name or 'Known entity'} detected"
+                event_description = f"{notification_title}: {event.description[:150]}" if event.description else notification_title
+            elif entity_match_mode == 'unknown':
+                notification_title = "Unknown person detected"
+                event_description = event.description[:200] if event.description else notification_title
+            else:
+                notification_title = rule.name
+                event_description = event.description[:200] if event.description else None
 
             # Build thumbnail URL (follows existing pattern from events API)
             thumbnail_url = f"/api/v1/events/{event.id}/thumbnail" if event.thumbnail_path else None
@@ -860,7 +973,7 @@ class AlertEngine:
             notification = Notification(
                 event_id=event.id,
                 rule_id=rule.id,
-                rule_name=rule.name,
+                rule_name=notification_title,  # Use entity-aware title
                 event_description=event_description,
                 thumbnail_url=thumbnail_url,
                 read=False
@@ -874,7 +987,9 @@ class AlertEngine:
                 extra={
                     "notification_id": notification.id,
                     "rule_id": rule.id,
-                    "event_id": event.id
+                    "event_id": event.id,
+                    "entity_match_mode": entity_match_mode,
+                    "entity_id": getattr(rule, 'entity_id', None)
                 }
             )
 
@@ -883,11 +998,17 @@ class AlertEngine:
                 "id": notification.id,
                 "event_id": event.id,
                 "rule_id": rule.id,
-                "rule_name": rule.name,
+                "rule_name": notification_title,
                 "event_description": event_description,
                 "thumbnail_url": thumbnail_url,
                 "created_at": notification.created_at.isoformat() if notification.created_at else None,
-                "read": False
+                "read": False,
+                # Story P12-1.4: Include entity context
+                "entity": {
+                    "id": rule_entity.id if rule_entity else None,
+                    "name": rule_entity.name if rule_entity else None,
+                    "match_mode": entity_match_mode
+                } if entity_match_mode != 'any' else None
             }
 
             # Broadcast via WebSocket

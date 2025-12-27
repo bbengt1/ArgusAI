@@ -2041,6 +2041,27 @@ export const apiClient = {
         body: JSON.stringify({ target_id: targetId }),
       });
     },
+
+    /**
+     * Get alert rules targeting a specific entity (Story P12-1.5)
+     * @param entityId Entity ID
+     * @returns Alert rules targeting this entity
+     */
+    getAlertRules: async (entityId: string): Promise<{
+      rules: Array<{
+        id: string;
+        name: string;
+        is_enabled: boolean;
+        entity_match_mode: string;
+        cooldown_minutes: number;
+        last_triggered_at: string | null;
+        trigger_count: number;
+        created_at: string;
+      }>;
+      total: number;
+    }> => {
+      return apiFetch(`/context/entities/${encodeURIComponent(entityId)}/alert-rules`);
+    },
   },
 
   // ============================================================================
@@ -2189,6 +2210,76 @@ export const apiClient = {
       return apiFetch('/push/preferences', {
         method: 'PUT',
         body: JSON.stringify(request),
+      });
+    },
+
+    // ============================================================================
+    // Device Management (Story P12-2.3)
+    // ============================================================================
+
+    /**
+     * List all registered devices for the current user
+     * @returns List of devices with total count
+     */
+    listDevices: async (): Promise<{
+      devices: Array<{
+        id: string;
+        user_id: string;
+        device_id: string;
+        platform: 'ios' | 'android' | 'web';
+        name: string | null;
+        device_model: string | null;
+        pairing_confirmed: boolean;
+        inactive_warning: boolean;
+        last_seen_at: string | null;
+        created_at: string;
+        updated_at: string | null;
+      }>;
+      total: number;
+    }> => {
+      return apiFetch('/devices');
+    },
+
+    /**
+     * Update a device (rename)
+     * @param id Device UUID
+     * @param data Update data
+     * @returns Updated device
+     */
+    updateDevice: async (id: string, data: { name?: string; push_token?: string }): Promise<{
+      id: string;
+      device_id: string;
+      platform: string;
+      name: string | null;
+      device_model: string | null;
+      pairing_confirmed: boolean;
+      inactive_warning: boolean;
+      last_seen_at: string | null;
+      created_at: string;
+    }> => {
+      return apiFetch(`/devices/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * Revoke (delete) a device registration
+     * @param deviceId The device_id (not UUID) to revoke
+     */
+    revokeDevice: async (deviceId: string): Promise<void> => {
+      await apiFetch(`/devices/${encodeURIComponent(deviceId)}`, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
+     * Remove all inactive devices (90+ days)
+     * @returns Count of removed devices
+     */
+    cleanupInactiveDevices: async (): Promise<{ removed_count: number }> => {
+      return apiFetch('/devices/inactive', {
+        method: 'DELETE',
       });
     },
   },

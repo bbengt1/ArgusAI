@@ -49,6 +49,15 @@ class Device(Base):
         default=lambda: datetime.now(timezone.utc)
     )
 
+    # Story P12-2.1: Mobile device registration fields
+    device_model = Column(String(100), nullable=True)  # "iPhone 15 Pro", "Pixel 8"
+    pairing_confirmed = Column(Boolean, nullable=False, default=False)  # True after pairing flow
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
     # Quiet hours configuration (Story P11-2.5)
     quiet_hours_enabled = Column(Boolean, nullable=False, default=False)
     quiet_hours_start = Column(String(5), nullable=True)  # "HH:MM" format, e.g., "22:00"
@@ -59,11 +68,27 @@ class Device(Base):
     # Relationship to User
     user = relationship("User", back_populates="devices")
 
+    # Story P12-3.1: Relationship to refresh tokens
+    refresh_tokens = relationship(
+        "RefreshToken",
+        back_populates="device",
+        cascade="all, delete-orphan",
+        lazy="dynamic"
+    )
+
     __table_args__ = (
         Index('idx_devices_user', 'user_id'),
         Index('idx_devices_device_id', 'device_id'),
         Index('idx_devices_platform', 'platform'),
+        Index('idx_devices_last_seen', 'last_seen_at'),  # Story P12-2.1
     )
+
+    @property
+    def is_inactive(self) -> bool:
+        """Device inactive if not seen in 90+ days (Story P12-2.1)."""
+        if not self.last_seen_at:
+            return True
+        return (datetime.now(timezone.utc) - self.last_seen_at).days > 90
 
     def __repr__(self):
         return f"<Device(id={self.id}, device_id={self.device_id[:20]}..., platform={self.platform})>"
@@ -113,6 +138,11 @@ class Device(Base):
             "name": self.name,
             "last_seen_at": self.last_seen_at.isoformat() if self.last_seen_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            # Story P12-2.1: Mobile device registration fields
+            "device_model": self.device_model,
+            "pairing_confirmed": self.pairing_confirmed,
+            "inactive_warning": self.is_inactive,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             # Quiet hours (Story P11-2.5)
             "quiet_hours_enabled": self.quiet_hours_enabled,
             "quiet_hours_start": self.quiet_hours_start,

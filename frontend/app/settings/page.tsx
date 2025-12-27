@@ -65,6 +65,8 @@ import { CostWarningModal } from '@/components/settings/CostWarningModal';
 import { VideoStorageWarningModal } from '@/components/settings/VideoStorageWarningModal';
 import { FrameSamplingStrategySelector, type FrameSamplingStrategy } from '@/components/settings/FrameSamplingStrategySelector';
 import { PasswordChangeForm } from '@/components/settings/PasswordChangeForm';
+import { DeviceManager } from '@/components/settings/DeviceManager';
+import { PairingConfirmation } from '@/components/settings/PairingConfirmation';
 import { ControllerForm, type ControllerData, DeleteControllerDialog, DiscoveredCameraList } from '@/components/protect';
 import { useQuery } from '@tanstack/react-query';
 import type { AIProvider } from '@/types/settings';
@@ -1288,9 +1290,17 @@ Keep the summary concise (2-3 paragraphs).`}
               </ErrorBoundary>
             </TabsContent>
 
-            {/* Notifications Tab - Story P4-1.2 */}
+            {/* Notifications Tab - Story P4-1.2, P12-2.3 */}
             <TabsContent value="notifications" className="space-y-4">
               <PushNotificationSettings />
+              {/* Story P12-2.3: Device Manager */}
+              <ErrorBoundary context="Device Manager">
+                <DeviceManager />
+              </ErrorBoundary>
+              {/* Story P12-3.3: Pairing Confirmation */}
+              <ErrorBoundary context="Pairing Confirmation">
+                <PairingConfirmation />
+              </ErrorBoundary>
             </TabsContent>
 
             {/* Logs Tab - FF-001 */}

@@ -1,7 +1,7 @@
 """Alert Rule API Pydantic schemas for request/response validation (Epic 5)"""
 from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 import re
 
 
@@ -183,6 +183,25 @@ class AlertRuleCreate(BaseModel):
         le=1440,
         description="Minimum minutes between triggers (0-1440, max 24 hours)"
     )
+    # Story P12-1.1: Entity-based filtering
+    entity_id: Optional[str] = Field(
+        default=None,
+        description="UUID of specific entity to target (requires entity_match_mode='specific')"
+    )
+    entity_match_mode: Literal['any', 'specific', 'unknown'] = Field(
+        default='any',
+        description="Entity filter mode: 'any' (no filter), 'specific' (match entity_id), 'unknown' (stranger detection)"
+    )
+
+    @model_validator(mode='after')
+    def validate_entity_config(self):
+        """Validate entity_id is set when mode is 'specific'."""
+        if self.entity_match_mode == 'specific' and not self.entity_id:
+            raise ValueError("entity_id is required when entity_match_mode is 'specific'")
+        if self.entity_match_mode != 'specific' and self.entity_id:
+            # Clear entity_id if mode is not 'specific'
+            self.entity_id = None
+        return self
 
     model_config = {
         "json_schema_extra": {
@@ -223,6 +242,15 @@ class AlertRuleUpdate(BaseModel):
         le=1440,
         description="Minimum minutes between triggers (0-1440)"
     )
+    # Story P12-1.1: Entity-based filtering
+    entity_id: Optional[str] = Field(
+        default=None,
+        description="UUID of specific entity to target"
+    )
+    entity_match_mode: Optional[Literal['any', 'specific', 'unknown']] = Field(
+        default=None,
+        description="Entity filter mode"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -249,6 +277,10 @@ class AlertRuleResponse(BaseModel):
     trigger_count: int = Field(..., description="Total trigger count")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+    # Story P12-1.1: Entity-based filtering
+    entity_id: Optional[str] = Field(None, description="UUID of targeted entity")
+    entity_match_mode: str = Field(default='any', description="Entity filter mode")
+    entity_name: Optional[str] = Field(None, description="Name of targeted entity (for display)")
 
     @field_validator('conditions', mode='before')
     @classmethod
