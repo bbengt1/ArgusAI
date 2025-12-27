@@ -1,15 +1,17 @@
 """
-Context-Enhanced Prompt Service for AI Descriptions (Story P4-3.4)
+Context-Enhanced Prompt Service for AI Descriptions (Story P4-3.4, P11-3)
 
 This module provides context-enhanced prompts for AI description generation.
-It integrates with EntityService, SimilarityService, and historical event data
-to provide rich contextual information about recognized visitors and patterns.
+It integrates with EntityService, SimilarityService, PatternService, and
+MCPContextProvider to provide rich contextual information about recognized
+visitors, patterns, user feedback, and camera-specific accuracy.
 
 Architecture:
-    - Orchestrates existing services: EntityService, SimilarityService
+    - Orchestrates existing services: EntityService, SimilarityService, PatternService
+    - Integrates MCPContextProvider for feedback/camera/time pattern context (Story P11-3)
     - Retrieves and formats historical context for AI prompts
     - Implements A/B testing capability for context inclusion
-    - Graceful degradation if context retrieval fails
+    - Graceful degradation if context retrieval fails (fail-open design)
 
 Flow:
     Event Created → ContextEnhancedPromptService.build_context_enhanced_prompt()
@@ -20,7 +22,9 @@ Flow:
                                     ↓
                          Get similar events (SimilarityService)
                                     ↓
-                         Get time pattern context
+                         Get time pattern context (PatternService)
+                                    ↓
+                         Get MCP context (MCPContextProvider) ← Story P11-3
                                     ↓
                          Format and return enhanced prompt
 """
@@ -37,6 +41,11 @@ from sqlalchemy.orm import Session
 from app.services.entity_service import EntityService, EntityMatchResult, get_entity_service
 from app.services.similarity_service import SimilarityService, SimilarEvent, get_similarity_service
 from app.services.pattern_service import PatternService, get_pattern_service
+from app.services.mcp_context import (
+    MCPContextProvider,
+    AIContext,
+    get_mcp_context_provider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +64,12 @@ class ContextEnhancedPromptResult:
     entity_name: Optional[str] = None
     entity_occurrence_count: Optional[int] = None
     similarity_scores: list[float] = field(default_factory=list)
+    # MCP context fields (Story P11-3 integration)
+    mcp_context_included: bool = False
+    mcp_feedback_included: bool = False
+    mcp_camera_included: bool = False
+    mcp_time_pattern_included: bool = False
+    mcp_accuracy_rate: Optional[float] = None
 
 
 class ContextEnhancedPromptService:
@@ -77,6 +92,7 @@ class ContextEnhancedPromptService:
         entity_service: Optional[EntityService] = None,
         similarity_service: Optional[SimilarityService] = None,
         pattern_service: Optional[PatternService] = None,
+        mcp_context_provider: Optional[MCPContextProvider] = None,
     ):
         """
         Initialize ContextEnhancedPromptService.
@@ -88,10 +104,13 @@ class ContextEnhancedPromptService:
                               If None, will use the global singleton.
             pattern_service: PatternService instance for timing analysis.
                            If None, will use the global singleton. (Story P4-3.5)
+            mcp_context_provider: MCPContextProvider instance for feedback/camera/time context.
+                                If None, will use the global singleton. (Story P11-3)
         """
         self._entity_service = entity_service or get_entity_service()
         self._similarity_service = similarity_service or get_similarity_service()
         self._pattern_service = pattern_service or get_pattern_service()
+        self._mcp_context_provider = mcp_context_provider
         logger.info(
             "ContextEnhancedPromptService initialized",
             extra={"event_type": "context_prompt_service_init"}
@@ -156,6 +175,12 @@ class ContextEnhancedPromptService:
         entity_name = None
         entity_occurrence_count = None
         similarity_scores = []
+        # MCP context tracking (Story P11-3)
+        mcp_context_included = False
+        mcp_feedback_included = False
+        mcp_camera_included = False
+        mcp_time_pattern_included = False
+        mcp_accuracy_rate = None
 
         threshold = self._get_similarity_threshold(db)
         time_window_days = self._get_time_window_days(db)
@@ -218,6 +243,55 @@ class ContextEnhancedPromptService:
                 extra={"event_id": event_id, "error": str(e)}
             )
 
+        # 3d: MCP context (Story P11-3 - feedback, camera, time patterns from MCPContextProvider)
+        try:
+            mcp_provider = self._mcp_context_provider or get_mcp_context_provider(db)
+            entity_id = matched_entity.entity_id if matched_entity else None
+
+            mcp_context: AIContext = await mcp_provider.get_context(
+                camera_id=camera_id,
+                event_time=event_time,
+                entity_id=entity_id,
+                db=db,
+            )
+
+            # Format MCP context and add to context parts
+            mcp_formatted = mcp_provider.format_for_prompt(mcp_context)
+            if mcp_formatted:
+                # Add MCP context as separate lines
+                for line in mcp_formatted.split("\n"):
+                    if line.strip():
+                        context_parts.append(line.strip())
+                mcp_context_included = True
+
+                # Track which MCP components were included
+                if mcp_context.feedback and mcp_context.feedback.accuracy_rate is not None:
+                    mcp_feedback_included = True
+                    mcp_accuracy_rate = mcp_context.feedback.accuracy_rate
+                if mcp_context.camera:
+                    mcp_camera_included = True
+                if mcp_context.time_pattern:
+                    mcp_time_pattern_included = True
+
+                logger.debug(
+                    f"MCP context gathered for event {event_id}",
+                    extra={
+                        "event_type": "mcp_context_gathered",
+                        "event_id": event_id,
+                        "camera_id": camera_id,
+                        "feedback_included": mcp_feedback_included,
+                        "camera_included": mcp_camera_included,
+                        "time_pattern_included": mcp_time_pattern_included,
+                        "accuracy_rate": mcp_accuracy_rate,
+                    }
+                )
+        except Exception as e:
+            # Fail-open: MCP context failures don't block AI description
+            logger.warning(
+                f"Failed to get MCP context for event {event_id}: {e}",
+                extra={"event_id": event_id, "camera_id": camera_id, "error": str(e)}
+            )
+
         # Step 4: Build enhanced prompt
         context_gather_time_ms = (time.time() - start_time) * 1000
 
@@ -242,6 +316,12 @@ class ContextEnhancedPromptService:
                 "entity_name": entity_name,
                 "entity_occurrence_count": entity_occurrence_count,
                 "similarity_scores": [round(s, 3) for s in similarity_scores[:5]],  # Top 5
+                # MCP context (Story P11-3)
+                "mcp_context_included": mcp_context_included,
+                "mcp_feedback_included": mcp_feedback_included,
+                "mcp_camera_included": mcp_camera_included,
+                "mcp_time_pattern_included": mcp_time_pattern_included,
+                "mcp_accuracy_rate": round(mcp_accuracy_rate, 3) if mcp_accuracy_rate else None,
             }
         )
 
@@ -255,6 +335,12 @@ class ContextEnhancedPromptService:
             entity_name=entity_name,
             entity_occurrence_count=entity_occurrence_count,
             similarity_scores=similarity_scores,
+            # MCP context fields (Story P11-3)
+            mcp_context_included=mcp_context_included,
+            mcp_feedback_included=mcp_feedback_included,
+            mcp_camera_included=mcp_camera_included,
+            mcp_time_pattern_included=mcp_time_pattern_included,
+            mcp_accuracy_rate=mcp_accuracy_rate,
         )
 
     def _format_entity_context(self, entity: EntityMatchResult) -> Optional[str]:
