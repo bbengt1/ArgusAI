@@ -81,12 +81,16 @@ async def generate_pairing_code(
             detail=str(e)
         )
 
-    expires_in = int((pairing_code.expires_at - datetime.now(timezone.utc)).total_seconds())
+    # Ensure expires_at is timezone-aware for comparison
+    expires_at = pairing_code.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    expires_in = int((expires_at - datetime.now(timezone.utc)).total_seconds())
 
     return PairingCodeResponse(
         code=pairing_code.code,
         expires_in=expires_in,
-        expires_at=pairing_code.expires_at,
+        expires_at=expires_at,
     )
 
 
