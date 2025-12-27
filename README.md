@@ -568,6 +568,97 @@ ArgusAI includes native HomeKit integration via HAP-Python:
 
 See [Troubleshooting Guide](docs/troubleshooting-protect.md) for common issues.
 
+## Home Assistant Automations
+
+ArgusAI publishes events to MQTT which Home Assistant can use to trigger automations and notifications.
+
+### Prerequisites
+
+1. MQTT configured in ArgusAI (**Settings → Integrations → MQTT**)
+2. Home Assistant MQTT integration connected to the same broker
+3. Discovery published (devices appear under MQTT → Devices)
+
+### Available Sensors Per Camera
+
+| Entity | Type | Purpose |
+|--------|------|---------|
+| `sensor.liveobject_{camera}_event` | Sensor | AI description of latest event |
+| `sensor.liveobject_{camera}_status` | Sensor | online/offline/unavailable |
+| `sensor.liveobject_{camera}_last_event` | Sensor | Timestamp of last event |
+| `sensor.liveobject_{camera}_events_today` | Sensor | Daily event count |
+| `binary_sensor.liveobject_{camera}_activity` | Binary | ON when motion detected |
+
+### Basic Notification Automation
+
+```yaml
+automation:
+  - alias: "ArgusAI - Motion Alert"
+    trigger:
+      - platform: state
+        entity_id: sensor.liveobject_front_door_event
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state not in ['unknown', 'unavailable', ''] }}"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          title: "{{ trigger.to_state.attributes.camera_name }}"
+          message: "{{ trigger.to_state.state }}"
+          data:
+            image: "{{ trigger.to_state.attributes.thumbnail_url }}"
+```
+
+### Person Detection Alert
+
+```yaml
+automation:
+  - alias: "ArgusAI - Person Detected"
+    trigger:
+      - platform: state
+        entity_id: sensor.liveobject_front_door_event
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.attributes.smart_detection_type == 'person' }}"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          title: "Person at Front Door"
+          message: "{{ trigger.to_state.state }}"
+          data:
+            image: "{{ trigger.to_state.attributes.thumbnail_url }}"
+```
+
+### Package Delivery Alert
+
+```yaml
+automation:
+  - alias: "ArgusAI - Package Delivered"
+    trigger:
+      - platform: state
+        entity_id: sensor.liveobject_front_porch_event
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.attributes.smart_detection_type == 'package' }}"
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          title: "Package Detected"
+          message: "{{ trigger.to_state.state }}"
+```
+
+### Available Event Attributes
+
+Use these in your automation templates:
+
+- `trigger.to_state.state` - AI description
+- `trigger.to_state.attributes.camera_name` - Camera name
+- `trigger.to_state.attributes.smart_detection_type` - person, vehicle, package, animal, ring
+- `trigger.to_state.attributes.is_doorbell_ring` - true/false
+- `trigger.to_state.attributes.thumbnail_url` - URL to event image
+- `trigger.to_state.attributes.confidence` - 0-100
+
+For comprehensive automation examples, see the [Home Assistant Integration Guide](docs-site/docs/integrations/home-assistant.md).
+
 ## Project Structure
 
 ```
