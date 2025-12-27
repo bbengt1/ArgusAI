@@ -28,7 +28,6 @@ from app.schemas.mobile_auth import (
     PairingCodeResponse,
     PairingConfirmRequest,
     PairingConfirmResponse,
-    PairingStatusRequest,
     PairingStatusResponse,
     TokenExchangeRequest,
     TokenPair,
@@ -131,15 +130,15 @@ async def confirm_pairing_code(
     )
 
 
-@router.post(
-    "/status",
+@router.get(
+    "/status/{code}",
     response_model=PairingStatusResponse,
     summary="Check pairing status",
     description="Check if a pairing code has been confirmed. "
                 "Called by mobile app to poll for confirmation.",
 )
 async def check_pairing_status(
-    request: PairingStatusRequest,
+    code: str,
     db: Session = Depends(get_db),
 ) -> PairingStatusResponse:
     """
@@ -149,7 +148,7 @@ async def check_pairing_status(
     confirmed the code in the web dashboard.
     """
     service = PairingService(db)
-    status_dict = service.check_status(request.code)
+    status_dict = service.check_status(code)
 
     return PairingStatusResponse(**status_dict)
 
