@@ -69,6 +69,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         '/api/v1/auth/setup-status',
         '/api/v1/thumbnails/',  # Thumbnail images (public for img tags)
         '/ws',  # WebSocket connections handle their own auth
+        # Mobile auth endpoints that don't require authentication (Story P12-3)
+        '/api/v1/mobile/auth/pair',      # Mobile initiates pairing
+        '/api/v1/mobile/auth/status/',   # Mobile polls for confirmation
+        '/api/v1/mobile/auth/exchange',  # Mobile exchanges code for tokens
+        '/api/v1/mobile/auth/refresh',   # Mobile refreshes tokens
     )
 
     COOKIE_NAME = "access_token"
