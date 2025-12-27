@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models.refresh_token import RefreshToken
 from app.models.device import Device
+from app.models.user import User
 from app.utils.jwt import create_access_token
 
 logger = logging.getLogger(__name__)
@@ -81,11 +82,13 @@ class TokenService:
 
         self.db.commit()
 
+        # Get user for access token
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise ValueError(f"User not found: {user_id}")
+
         # Generate access token
-        access_token = create_access_token(
-            data={"user_id": user_id, "device_id": device_id},
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
+        access_token = create_access_token(user.id, user.username)
 
         logger.info(
             "Token pair created",
@@ -144,12 +147,11 @@ class TokenService:
                     if new_token:
                         # Return the access token for the new refresh token
                         # (caller should still use their old refresh token)
-                        access_token = create_access_token(
-                            data={"user_id": token_record.user_id, "device_id": device_id},
-                            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-                        )
-                        # Note: We return empty refresh_token to indicate no rotation needed
-                        return access_token, "", ACCESS_TOKEN_EXPIRE_MINUTES * 60
+                        user = self.db.query(User).filter(User.id == token_record.user_id).first()
+                        if user:
+                            access_token = create_access_token(user.id, user.username)
+                            # Note: We return empty refresh_token to indicate no rotation needed
+                            return access_token, "", ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
             logger.warning(
                 "Refresh token invalid",
@@ -187,10 +189,12 @@ class TokenService:
         self.db.commit()
 
         # Generate new access token
-        access_token = create_access_token(
-            data={"user_id": token_record.user_id, "device_id": device_id},
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
+        user = self.db.query(User).filter(User.id == token_record.user_id).first()
+        if not user:
+            logger.error("User not found during token refresh", extra={"user_id": token_record.user_id})
+            return None
+
+        access_token = create_access_token(user.id, user.username)
 
         logger.info(
             "Token refreshed",
