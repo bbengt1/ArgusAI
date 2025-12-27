@@ -18,6 +18,7 @@ from app.services.mqtt_service import MQTTService, get_mqtt_service
 from app.core.database import SessionLocal
 from app.models.mqtt_config import MQTTConfig
 from app.models.camera import Camera
+from app.services.mqtt_status_service import publish_all_camera_statuses
 
 logger = logging.getLogger(__name__)
 
@@ -738,6 +739,20 @@ class MQTTDiscoveryService:
 
             # Then publish all discovery configs
             await self.publish_all_discovery_configs()
+
+            # Publish camera statuses on connect/reconnect (Bug fix: statuses were only
+            # published at startup, not on reconnect, causing "Unknown" in Home Assistant)
+            try:
+                status_count = await publish_all_camera_statuses()
+                logger.info(
+                    f"Published status for {status_count} cameras on MQTT connect",
+                    extra={"event_type": "mqtt_camera_status_on_connect", "count": status_count}
+                )
+            except Exception as status_err:
+                logger.warning(
+                    f"Failed to publish camera statuses on connect: {status_err}",
+                    extra={"event_type": "mqtt_camera_status_connect_error", "error": str(status_err)}
+                )
 
         except Exception as e:
             logger.error(

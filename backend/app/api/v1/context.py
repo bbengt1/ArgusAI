@@ -17,7 +17,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -2722,4 +2722,75 @@ async def export_adjustments(
         headers={
             "Content-Disposition": "attachment; filename=adjustments.jsonl"
         }
+    )
+
+
+# ============================================================================
+# Story P12-1.5: Entity Alert Rules Endpoint
+# ============================================================================
+
+class EntityAlertRuleResponse(BaseModel):
+    """Alert rule targeting a specific entity."""
+    id: str = Field(description="Alert rule UUID")
+    name: str = Field(description="Rule name")
+    is_enabled: bool = Field(description="Whether rule is active")
+    entity_match_mode: str = Field(description="Entity match mode")
+    cooldown_minutes: int = Field(description="Cooldown period in minutes")
+    last_triggered_at: Optional[datetime] = Field(default=None, description="When rule last triggered")
+    trigger_count: int = Field(default=0, description="Total trigger count")
+    created_at: datetime = Field(description="Creation timestamp")
+
+
+class EntityAlertRulesResponse(BaseModel):
+    """Response for entity's alert rules."""
+    rules: list[EntityAlertRuleResponse] = Field(description="Alert rules targeting this entity")
+    total: int = Field(description="Total number of rules")
+
+
+@router.get(
+    "/entities/{entity_id}/alert-rules",
+    response_model=EntityAlertRulesResponse,
+    summary="Get alert rules for entity",
+    description="Returns all alert rules that target a specific entity (entity_match_mode='specific')."
+)
+async def get_entity_alert_rules(
+    entity_id: str = Path(description="Entity UUID"),
+    db: Session = Depends(get_db),
+):
+    """
+    Get alert rules targeting a specific entity (Story P12-1.5).
+
+    Returns all alert rules configured with entity_match_mode='specific'
+    that target the given entity. This is displayed on the entity detail page.
+
+    Args:
+        entity_id: UUID of the entity
+        db: Database session
+
+    Returns:
+        EntityAlertRulesResponse with list of matching rules
+    """
+    from app.models.alert_rule import AlertRule
+
+    # Query rules targeting this specific entity
+    rules = db.query(AlertRule).filter(
+        AlertRule.entity_id == entity_id,
+        AlertRule.entity_match_mode == 'specific'
+    ).order_by(AlertRule.created_at.desc()).all()
+
+    return EntityAlertRulesResponse(
+        rules=[
+            EntityAlertRuleResponse(
+                id=str(rule.id),
+                name=rule.name,
+                is_enabled=rule.is_enabled,
+                entity_match_mode=rule.entity_match_mode or 'any',
+                cooldown_minutes=rule.cooldown_minutes,
+                last_triggered_at=rule.last_triggered_at,
+                trigger_count=rule.trigger_count,
+                created_at=rule.created_at,
+            )
+            for rule in rules
+        ],
+        total=len(rules)
     )
