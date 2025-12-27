@@ -330,6 +330,10 @@ export default function SettingsPage() {
                   <BarChart3 className="h-4 w-4" />
                   <span className="hidden sm:inline">AI Accuracy</span>
                 </TabsTrigger>
+                <TabsTrigger value="security" className="flex items-center gap-2 px-3">
+                  <Shield className="h-4 w-4" />
+                  <span className="hidden sm:inline">Security</span>
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -635,9 +639,6 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Story P10-1.1: Password Change Form */}
-              <PasswordChangeForm />
 
               {/* Story P8-2.3: Cost Warning Modal */}
               <CostWarningModal
@@ -1313,6 +1314,12 @@ Keep the summary concise (2-3 paragraphs).`}
               <ErrorBoundary context="AI Accuracy Dashboard">
                 <AccuracyDashboard />
               </ErrorBoundary>
+            </TabsContent>
+
+            {/* Security Tab - Story P10-1.1 */}
+            <TabsContent value="security" className="space-y-4">
+              <PasswordChangeForm />
+              <DeviceManager />
             </TabsContent>
           </Tabs>
 
