@@ -1,5 +1,6 @@
 """AlertRule SQLAlchemy ORM model for alert rule engine (Epic 5)"""
-from sqlalchemy import Column, String, Integer, Text, DateTime, Boolean, Index
+from sqlalchemy import Column, String, Integer, Text, DateTime, Boolean, Index, ForeignKey
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 import uuid
 from datetime import datetime, timezone
@@ -58,12 +59,36 @@ class AlertRule(Base):
     #     } or null
     # }
 
-    # Story P4-8.4: Entity-based matching
+    # Story P4-8.4: Entity-based matching (list-based, for complex rules)
     entity_ids = Column(Text, nullable=True)
     # Expected structure: ["entity-uuid-1", "entity-uuid-2", ...] or null (any entity)
     entity_names = Column(Text, nullable=True)
     # Expected structure: ["John*", "Mail Carrier", ...] or null (any name)
     # Supports wildcard matching with fnmatch patterns
+
+    # Story P12-1.1: Simplified entity-based filtering (single entity selection)
+    entity_id = Column(
+        String(36),
+        ForeignKey("recognized_entities.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+    # entity_match_mode values:
+    #   'any' - No entity filter (default, existing behavior)
+    #   'specific' - Trigger only for rule.entity_id match
+    #   'unknown' - Trigger only for events with NO matched entity (stranger detection)
+    entity_match_mode = Column(
+        String(20),
+        nullable=False,
+        default='any'
+    )
+
+    # Relationship for eager loading entity name
+    entity = relationship(
+        "RecognizedEntity",
+        foreign_keys=[entity_id],
+        lazy="joined"
+    )
 
     cooldown_minutes = Column(Integer, nullable=False, default=5)
     last_triggered_at = Column(DateTime(timezone=True), nullable=True)
@@ -75,6 +100,7 @@ class AlertRule(Base):
     __table_args__ = (
         Index('idx_alert_rules_is_enabled', 'is_enabled'),
         Index('idx_alert_rules_last_triggered', 'last_triggered_at'),
+        Index('idx_alert_rules_entity_id', 'entity_id'),
     )
 
     def __repr__(self):

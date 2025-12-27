@@ -32,6 +32,14 @@ export interface IAlertRuleActions {
   webhook?: IWebhookConfig;
 }
 
+// Story P12-1.1: Entity match modes for entity-based filtering
+export const ENTITY_MATCH_MODES = [
+  { value: 'any', label: 'Any Entity', description: 'No entity filter (default)' },
+  { value: 'specific', label: 'Specific Entity', description: 'Trigger only for a selected entity' },
+  { value: 'unknown', label: 'Unknown (Stranger)', description: 'Trigger only for unrecognized entities' },
+] as const;
+export type EntityMatchMode = typeof ENTITY_MATCH_MODES[number]['value'];
+
 // Full alert rule response from API
 export interface IAlertRule {
   id: string;
@@ -44,6 +52,10 @@ export interface IAlertRule {
   trigger_count: number;
   created_at: string;
   updated_at: string;
+  // Story P12-1.1: Entity-based filtering
+  entity_id?: string | null;
+  entity_match_mode?: EntityMatchMode;
+  entity_name?: string | null;
 }
 
 // Create alert rule request
@@ -53,6 +65,9 @@ export interface IAlertRuleCreate {
   conditions?: IAlertRuleConditions;
   actions?: IAlertRuleActions;
   cooldown_minutes?: number;
+  // Story P12-1.1: Entity-based filtering
+  entity_id?: string | null;
+  entity_match_mode?: EntityMatchMode;
 }
 
 // Update alert rule request (partial)
@@ -62,6 +77,9 @@ export interface IAlertRuleUpdate {
   conditions?: IAlertRuleConditions;
   actions?: IAlertRuleActions;
   cooldown_minutes?: number;
+  // Story P12-1.1: Entity-based filtering
+  entity_id?: string | null;
+  entity_match_mode?: EntityMatchMode;
 }
 
 // List response with pagination

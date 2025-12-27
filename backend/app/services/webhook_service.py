@@ -238,6 +238,8 @@ class WebhookService:
         """
         Build webhook payload from event and rule data.
 
+        Story P12-1.4: Includes entity context when rule is entity-based.
+
         Args:
             event: Event that triggered the rule
             rule: Alert rule that matched
@@ -270,6 +272,27 @@ class WebhookService:
                 "name": rule.name,
             }
         }
+
+        # Story P12-1.4: Add entity context if rule is entity-based
+        entity_match_mode = getattr(rule, 'entity_match_mode', 'any')
+        if entity_match_mode != 'any':
+            rule_entity = getattr(rule, 'entity', None)
+            if entity_match_mode == 'specific' and rule_entity:
+                payload["entity"] = {
+                    "id": rule_entity.id,
+                    "name": rule_entity.name,
+                    "type": rule_entity.entity_type,
+                    "match_mode": "specific"
+                }
+            elif entity_match_mode == 'unknown':
+                payload["entity"] = {
+                    "id": None,
+                    "name": "Unknown",
+                    "type": "unknown",
+                    "match_mode": "unknown"
+                }
+        else:
+            payload["entity"] = None
 
         # Story P4-7.3: Add anomaly data if available
         if event.anomaly_score is not None:

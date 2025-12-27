@@ -22,7 +22,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useEntity, useEntityEvents } from '@/hooks/useEntities';
 import { EntityNameEdit } from './EntityNameEdit';
 import { EntityEventList } from './EntityEventList';
+import { EntityAlertRules } from './EntityAlertRules';
 import { cn } from '@/lib/utils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { IEntity } from '@/types/entity';
 
 interface EntityDetailProps {
@@ -187,14 +189,24 @@ export function EntityDetail({
               </div>
             </div>
 
-            {/* Events List (Story P9-4.2, P10-1.5: Fixed scrolling) */}
+            {/* Tabs for Events and Alert Rules (Story P9-4.2, P10-1.5, P12-1.5) */}
             <div className="flex-1 pt-4 flex flex-col min-h-0">
-              <h4 className="font-medium text-sm mb-3 flex-shrink-0">
-                Events ({entityDetail.occurrence_count})
-              </h4>
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <EntityEventList entityId={entityDetail.id} />
-              </div>
+              <Tabs defaultValue="events" className="flex flex-col flex-1 min-h-0">
+                <TabsList className="flex-shrink-0 w-full grid grid-cols-2">
+                  <TabsTrigger value="events">
+                    Events ({entityDetail.occurrence_count})
+                  </TabsTrigger>
+                  <TabsTrigger value="alerts">
+                    Alert Rules
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="events" className="flex-1 min-h-0 overflow-hidden mt-3">
+                  <EntityEventList entityId={entityDetail.id} />
+                </TabsContent>
+                <TabsContent value="alerts" className="flex-1 min-h-0 overflow-auto mt-3">
+                  <EntityAlertRules entityId={entityDetail.id} />
+                </TabsContent>
+              </Tabs>
             </div>
           </div>
         )}
