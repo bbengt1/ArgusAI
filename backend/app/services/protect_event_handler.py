@@ -44,6 +44,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from PIL import Image
@@ -63,6 +64,50 @@ if TYPE_CHECKING:
     from app.services.ai_service import AIResult
 
 logger = logging.getLogger(__name__)
+
+
+def _format_timestamp_for_ai(timestamp: datetime, db: Session) -> str:
+    """
+    Format a timestamp for AI prompt using user's configured timezone.
+
+    Reads the timezone setting from system settings and converts the UTC
+    timestamp to local time for more natural AI descriptions.
+
+    Args:
+        timestamp: UTC datetime to format
+        db: Database session for reading settings
+
+    Returns:
+        ISO format string in user's local timezone
+    """
+    try:
+        from app.models.system_setting import SystemSetting
+
+        # Get timezone from system settings (key: settings_timezone)
+        setting = db.query(SystemSetting).filter(
+            SystemSetting.key == "settings_timezone"
+        ).first()
+
+        tz_name = setting.value if setting else "UTC"
+
+        # Ensure timestamp is timezone-aware (assume UTC if naive)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+        # Convert to user's timezone
+        try:
+            user_tz = ZoneInfo(tz_name)
+            local_time = timestamp.astimezone(user_tz)
+            return local_time.isoformat()
+        except Exception:
+            # Invalid timezone, fall back to UTC
+            logger.warning(f"Invalid timezone '{tz_name}', using UTC")
+            return timestamp.isoformat()
+
+    except Exception as e:
+        logger.warning(f"Error formatting timestamp for AI: {e}")
+        return timestamp.isoformat()
+
 
 # Event deduplication cooldown in seconds (Story P2-3.1 AC10)
 # Default 60 seconds, matches motion_cooldown from Camera model
@@ -983,6 +1028,11 @@ class ProtectEventHandler:
                         f"Failed to build context-enhanced prompt for camera '{camera.name}': {ctx_error}",
                         extra={"camera_id": camera.id, "error": str(ctx_error)}
                     )
+
+                # Format timestamp in user's local timezone for AI descriptions
+                self._formatted_timestamp = _format_timestamp_for_ai(
+                    snapshot_result.timestamp, db
+                )
             finally:
                 db.close()
 
@@ -1351,7 +1401,7 @@ class ProtectEventHandler:
                 provider.describe_video(
                     video_path=clip_path,
                     camera_name=camera.name,
-                    timestamp=datetime.now().isoformat(),
+                    timestamp=self._formatted_timestamp,
                     detected_objects=[event_type] if event_type else [],
                     include_audio=include_audio,
                     custom_prompt=custom_prompt
@@ -1502,7 +1552,7 @@ class ProtectEventHandler:
                 provider.describe_video(
                     video_path=clip_path,
                     camera_name=camera.name,
-                    timestamp=datetime.now().isoformat(),
+                    timestamp=self._formatted_timestamp,
                     detected_objects=[event_type] if event_type else [],
                     custom_prompt=custom_prompt
                 ),
@@ -1732,7 +1782,7 @@ class ProtectEventHandler:
                 result = await ai_service.describe_images(
                     images=frames,
                     camera_name=camera.name,
-                    timestamp=snapshot_result.timestamp.isoformat(),
+                    timestamp=self._formatted_timestamp,
                     detected_objects=[event_type],
                     sla_timeout_ms=10000,  # 10s SLA for multi-frame (higher than single-frame)
                     custom_prompt=custom_prompt,
@@ -1859,7 +1909,7 @@ class ProtectEventHandler:
             result = await ai_service.generate_description(
                 frame=frame_bgr,
                 camera_name=camera.name,
-                timestamp=snapshot_result.timestamp.isoformat(),
+                timestamp=self._formatted_timestamp,
                 detected_objects=[event_type],
                 sla_timeout_ms=5000,  # 5s SLA target
                 custom_prompt=custom_prompt
