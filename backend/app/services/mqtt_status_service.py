@@ -163,6 +163,9 @@ async def check_activity_timeouts() -> int:
 
     async with _activity_lock:
         for camera_id, last_event_at in list(_active_cameras.items()):
+            # Ensure last_event_at is timezone-aware for comparison
+            if last_event_at.tzinfo is None:
+                last_event_at = last_event_at.replace(tzinfo=timezone.utc)
             if last_event_at < timeout_threshold:
                 cameras_to_deactivate.append(camera_id)
 
