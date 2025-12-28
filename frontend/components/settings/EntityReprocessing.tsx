@@ -75,7 +75,7 @@ export function EntityReprocessing() {
   // Fetch cameras for filter
   const camerasQuery = useQuery({
     queryKey: ['cameras'],
-    queryFn: () => apiClient.getCameras(),
+    queryFn: () => apiClient.cameras.list(),
   });
 
   // Fetch current job status (polls every 2s when running)
