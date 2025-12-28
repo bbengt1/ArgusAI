@@ -78,7 +78,13 @@ class APIKey(Base):
         """Check if API key has expired."""
         if not self.expires_at:
             return False
-        return datetime.now(timezone.utc) > self.expires_at
+        # Handle both timezone-aware and naive datetimes
+        now = datetime.now(timezone.utc)
+        expires = self.expires_at
+        if expires.tzinfo is None:
+            # Assume naive datetime is UTC
+            expires = expires.replace(tzinfo=timezone.utc)
+        return now > expires
 
     def is_valid(self) -> bool:
         """Check if API key is valid for use."""

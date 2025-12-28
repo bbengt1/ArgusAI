@@ -84,8 +84,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method
 
-        print(f"[DEBUG] AuthMiddleware dispatch: {method} {path}", flush=True)
-
         # Skip auth in test mode (when running pytest)
         # Check for TestClient user-agent or TESTING environment variable
         user_agent = request.headers.get("user-agent", "")
@@ -101,7 +99,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Check for API key first (programmatic access)
-        print(f"[DEBUG] Checking API key for path: {path}", flush=True)
         api_key_valid = await self._check_api_key(request)
         if api_key_valid:
             return await call_next(request)
@@ -234,7 +231,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Stores API key info in request.state if valid.
         """
         api_key_header = request.headers.get("X-API-Key")
-        print(f"[DEBUG] API Key header present: {bool(api_key_header)}", flush=True)
         if not api_key_header:
             return False
 
@@ -242,7 +238,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             service = get_api_key_service()
             api_key = service.verify_key(db, api_key_header)
-            print(f"[DEBUG] API Key verified: {bool(api_key)}", flush=True)
 
             if api_key:
                 # Store API key in request state for downstream use
