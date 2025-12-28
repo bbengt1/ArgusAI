@@ -146,7 +146,7 @@ Technical debt, improvements, and future work items identified during developmen
 | BUG-017 | 2025-12-25 | P2 | Bug | **MQTT Publish Discovery 404 Error** - Clicking "Publish Discovery" button returns 404. Root cause: Frontend API client called `/integrations/mqtt/discovery/publish` but backend endpoint is `/integrations/mqtt/publish-discovery`. Fix: Corrected the frontend API path. | User Report | Done |
 | BUG-018 | 2025-12-25 | P3 | Bug | **EntitySelectModal Opens EventCard on Confirm** - Clicking Confirm in EntitySelectModal also opens the underlying EventCard. Root cause: Click event was propagating to parent EventCard. Fix: Added `e.stopPropagation()` to button handlers. | User Report | Done |
 | BUG-022 | 2025-12-28 | P3 | Bug | **Event Detail Opens When Assigning Entity** - When adding an event to an entity via the entity selection UI, the event detail modal/page opens unnecessarily. Root cause: Entity list item click handler in EntitySelectModal didn't have stopPropagation, allowing clicks to bubble to parent EventCard. Fix: Added `e.stopPropagation()` to handleEntityClick and DialogContent onClick. | User Report | Done |
-| BUG-019 | 2025-12-28 | P2 | Bug | **Registered Devices Only Show After Hard Refresh** - Newly registered/paired devices do not appear in the Settings > Devices UI until the page is hard refreshed. Investigate: (1) Check if device list query is using TanStack Query with proper cache invalidation, (2) Verify pairing confirmation flow triggers query refetch, (3) Check WebSocket subscription for device registration events, (4) Ensure mutation onSuccess handler invalidates device list query, (5) Test if optimistic updates could improve UX. Fix: Add proper query invalidation after successful device pairing/registration, or subscribe to WebSocket device events to update list in real-time. Related: IMP-027 (Mobile Device Registration), IMP-036 (Device Pairing). | User Report | Open |
+| BUG-019 | 2025-12-28 | P2 | Bug | **Registered Devices Only Show After Hard Refresh** - Newly registered/paired devices do not appear in the Settings > Devices UI until the page is hard refreshed. Root cause: Device record is created in `/exchange` endpoint (when mobile app exchanges code for tokens) AFTER web confirmation in `/confirm`. The query invalidation in confirm mutation was correct, but the Device didn't exist yet. Fix: Added `refetchInterval: 5000` to devices query in DeviceManager to poll for new devices, matching PairingConfirmation's polling pattern. | User Report | Done |
 | BUG-020 | 2025-12-28 | P2 | Bug | **Events Not Auto-Assigned to Entities from AI Description** - Events are not being automatically added to recognized entities based on the AI description analysis. Root cause: In protect_event_handler.py, `match_or_create_entity` was called (creating EntityEvent junction records) but `event.matched_entity_ids` was never updated, so events appeared unlinked in UI. Fix: Added `event.matched_entity_ids = json.dumps([entity_result.entity_id])` after entity matching in both normal and no-AI fallback code paths. RTSP/USB events already worked via entity_alert_service. | User Report | Done |
 | BUG-021 | 2025-12-28 | P2 | Bug | **AI Description Not Using Entity Context for Known People/Vehicles** - AI descriptions do not reference known entities by name (e.g., says "A man in blue jacket" instead of "John arrived"). Root cause: protect_event_handler.py had `matched_entity=None` hardcoded, so Protect camera events never got entity context in AI prompt. Fix: Added entity matching before context building - generates embedding from snapshot, calls match_entity_only(), passes result to build_context_enhanced_prompt(). RTSP/USB events already had this working in event_processor.py. | User Report | Done |
 | FF-034 | 2025-12-28 | P3 | Feature | **Reprocess Events for Entity Matching** - Add ability to reprocess existing events to perform entity matching. Useful for: (1) Events created before entity matching was enabled/fixed, (2) Re-running matching after entity threshold changes, (3) Bulk entity assignment after creating new entities. Implementation: (1) Add POST `/api/v1/events/reprocess-entities` endpoint accepting optional filters (date range, camera, has_entity=false), (2) For each event: regenerate embedding if missing, call match_or_create_entity(), update matched_entity_ids, (3) Add progress tracking for large batches, (4) Add "Reprocess Entities" button in Settings > Entities or Events page, (5) Show confirmation with estimated event count, (6) Background task with WebSocket progress updates, (7) Option to only process events without existing entity matches. | User Request | Open |
@@ -160,36 +160,36 @@ All open backlog items have been created as GitHub issues for tracking:
 
 | Backlog ID | GitHub Issue | Title |
 |------------|--------------|-------|
-| TD-002 | [#30](https://github.com/bbengt1/ArgusAI/issues/30) | FeedbackButtons Component Tests |
-| TD-003 | [#31](https://github.com/bbengt1/ArgusAI/issues/31) | Real Camera Integration Testing |
-| TD-004 | [#32](https://github.com/bbengt1/ArgusAI/issues/32) | Performance Baseline Documentation |
-| TD-005 | [#33](https://github.com/bbengt1/ArgusAI/issues/33) | Update README with Frontend Setup |
-| IMP-004 | [#34](https://github.com/bbengt1/ArgusAI/issues/34) | Accessibility Enhancements |
-| IMP-005 | [#35](https://github.com/bbengt1/ArgusAI/issues/35) | Camera List Optimizations |
-| FF-011 | [#36](https://github.com/bbengt1/ArgusAI/issues/36) | Test Connection Before Save |
-| FF-012 | [#37](https://github.com/bbengt1/ArgusAI/issues/37) | MQTT 5.0 Features |
-| FF-013 | [#38](https://github.com/bbengt1/ArgusAI/issues/38) | MQTT Birth/Will Messages |
-| FF-014 | [#39](https://github.com/bbengt1/ArgusAI/issues/39) | ONVIF Camera Discovery |
-| FF-015 | [#40](https://github.com/bbengt1/ArgusAI/issues/40) | Audio Capture from Cameras |
-| FF-016 | [#41](https://github.com/bbengt1/ArgusAI/issues/41) | Multiple Schedule Time Ranges |
-| FF-017 | [#42](https://github.com/bbengt1/ArgusAI/issues/42) | Export Motion Events to CSV |
-| FF-018 | [#43](https://github.com/bbengt1/ArgusAI/issues/43) | Detection Zone Presets |
-| BUG-004 | [#47](https://github.com/bbengt1/ArgusAI/issues/47) | Feedback Status Not Persisting on Page Refresh |
-| IMP-009 | [#155](https://github.com/bbengt1/ArgusAI/issues/155) | Configure SSL/HTTPS |
-| IMP-010 | [#153](https://github.com/bbengt1/ArgusAI/issues/153) | Events Page Button Positioning |
-| IMP-016 | [#154](https://github.com/bbengt1/ArgusAI/issues/154) | Local MCP Server for Enhanced AI Context |
-| IMP-017 | [#156](https://github.com/bbengt1/ArgusAI/issues/156) | Refactor README.md |
-| IMP-018 | [#157](https://github.com/bbengt1/ArgusAI/issues/157) | Allow Feedback Adjustment |
-| IMP-023 | [#158](https://github.com/bbengt1/ArgusAI/issues/158) | Entity Assignment Without Opening Event |
-| BUG-012 | [#159](https://github.com/bbengt1/ArgusAI/issues/159) | Cannot Change Admin Password Through UI |
-| BUG-013 | [#160](https://github.com/bbengt1/ArgusAI/issues/160) | Entity Card Scrolling Issue |
-| BUG-014 | [#161](https://github.com/bbengt1/ArgusAI/issues/161) | Events Page Infinite Scroll Not Loading |
-| FF-022 | [#162](https://github.com/bbengt1/ArgusAI/issues/162) | Query-Adaptive Frame Selection |
-| FF-024 | [#163](https://github.com/bbengt1/ArgusAI/issues/163) | Native Apple Device Apps |
-| FF-025 | [#164](https://github.com/bbengt1/ArgusAI/issues/164) | Cloud Relay for Remote Access |
-| FF-026 | [#165](https://github.com/bbengt1/ArgusAI/issues/165) | GitHub Pages Project Site |
-| FF-027 | [#166](https://github.com/bbengt1/ArgusAI/issues/166) | n8n Automated Development Pipeline |
-| FF-031 | [#167](https://github.com/bbengt1/ArgusAI/issues/167) | Manual Entity Creation |
+| TD-002 | [#30](https://github.com/project-argusai/ArgusAI/issues/30) | FeedbackButtons Component Tests |
+| TD-003 | [#31](https://github.com/project-argusai/ArgusAI/issues/31) | Real Camera Integration Testing |
+| TD-004 | [#32](https://github.com/project-argusai/ArgusAI/issues/32) | Performance Baseline Documentation |
+| TD-005 | [#33](https://github.com/project-argusai/ArgusAI/issues/33) | Update README with Frontend Setup |
+| IMP-004 | [#34](https://github.com/project-argusai/ArgusAI/issues/34) | Accessibility Enhancements |
+| IMP-005 | [#35](https://github.com/project-argusai/ArgusAI/issues/35) | Camera List Optimizations |
+| FF-011 | [#36](https://github.com/project-argusai/ArgusAI/issues/36) | Test Connection Before Save |
+| FF-012 | [#37](https://github.com/project-argusai/ArgusAI/issues/37) | MQTT 5.0 Features |
+| FF-013 | [#38](https://github.com/project-argusai/ArgusAI/issues/38) | MQTT Birth/Will Messages |
+| FF-014 | [#39](https://github.com/project-argusai/ArgusAI/issues/39) | ONVIF Camera Discovery |
+| FF-015 | [#40](https://github.com/project-argusai/ArgusAI/issues/40) | Audio Capture from Cameras |
+| FF-016 | [#41](https://github.com/project-argusai/ArgusAI/issues/41) | Multiple Schedule Time Ranges |
+| FF-017 | [#42](https://github.com/project-argusai/ArgusAI/issues/42) | Export Motion Events to CSV |
+| FF-018 | [#43](https://github.com/project-argusai/ArgusAI/issues/43) | Detection Zone Presets |
+| BUG-004 | [#47](https://github.com/project-argusai/ArgusAI/issues/47) | Feedback Status Not Persisting on Page Refresh |
+| IMP-009 | [#155](https://github.com/project-argusai/ArgusAI/issues/155) | Configure SSL/HTTPS |
+| IMP-010 | [#153](https://github.com/project-argusai/ArgusAI/issues/153) | Events Page Button Positioning |
+| IMP-016 | [#154](https://github.com/project-argusai/ArgusAI/issues/154) | Local MCP Server for Enhanced AI Context |
+| IMP-017 | [#156](https://github.com/project-argusai/ArgusAI/issues/156) | Refactor README.md |
+| IMP-018 | [#157](https://github.com/project-argusai/ArgusAI/issues/157) | Allow Feedback Adjustment |
+| IMP-023 | [#158](https://github.com/project-argusai/ArgusAI/issues/158) | Entity Assignment Without Opening Event |
+| BUG-012 | [#159](https://github.com/project-argusai/ArgusAI/issues/159) | Cannot Change Admin Password Through UI |
+| BUG-013 | [#160](https://github.com/project-argusai/ArgusAI/issues/160) | Entity Card Scrolling Issue |
+| BUG-014 | [#161](https://github.com/project-argusai/ArgusAI/issues/161) | Events Page Infinite Scroll Not Loading |
+| FF-022 | [#162](https://github.com/project-argusai/ArgusAI/issues/162) | Query-Adaptive Frame Selection |
+| FF-024 | [#163](https://github.com/project-argusai/ArgusAI/issues/163) | Native Apple Device Apps |
+| FF-025 | [#164](https://github.com/project-argusai/ArgusAI/issues/164) | Cloud Relay for Remote Access |
+| FF-026 | [#165](https://github.com/project-argusai/ArgusAI/issues/165) | GitHub Pages Project Site |
+| FF-027 | [#166](https://github.com/project-argusai/ArgusAI/issues/166) | n8n Automated Development Pipeline |
+| FF-031 | [#167](https://github.com/project-argusai/ArgusAI/issues/167) | Manual Entity Creation |
 
 **GitHub Labels Created:**
 - `technical-debt`, `testing`, `frontend`, `backend`, `performance`, `feature`, `integration`

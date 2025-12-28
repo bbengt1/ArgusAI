@@ -81,9 +81,12 @@ export function DeviceManager() {
   const [newName, setNewName] = useState('');
 
   // Fetch devices
+  // BUG-019 Fix: Poll for new devices since Device record is created when
+  // mobile app exchanges code for tokens (after web confirmation)
   const { data, isLoading, error } = useQuery({
     queryKey: ['devices'],
     queryFn: () => apiClient.push.listDevices(),
+    refetchInterval: 5000, // Poll every 5 seconds to catch new devices
   });
 
   // Rename device mutation
