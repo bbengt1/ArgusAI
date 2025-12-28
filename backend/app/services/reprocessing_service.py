@@ -316,40 +316,40 @@ class ReprocessingService:
 
                 batch = event_ids[i:i + self.BATCH_SIZE]
 
-                # Process each event in batch
-                db = SessionLocal()
-                try:
-                    for event_id in batch:
-                        if job.cancel_requested:
-                            break
+                # Process each event in batch - use separate session per event for isolation
+                for event_id in batch:
+                    if job.cancel_requested:
+                        break
 
-                        try:
-                            result = await self._process_single_event(
-                                db, event_id, embedding_service, entity_service
-                            )
-                            job.processed += 1
+                    db = SessionLocal()
+                    try:
+                        result = await self._process_single_event(
+                            db, event_id, embedding_service, entity_service
+                        )
+                        db.commit()
+                        job.processed += 1
 
-                            if result.get("matched"):
-                                job.matched += 1
-                            if result.get("embedding_generated"):
-                                job.embeddings_generated += 1
+                        if result.get("matched"):
+                            job.matched += 1
+                        if result.get("embedding_generated"):
+                            job.embeddings_generated += 1
 
-                            job.last_processed_event_id = event_id
+                        job.last_processed_event_id = event_id
 
-                        except Exception as e:
-                            job.errors += 1
-                            logger.warning(
-                                f"Error processing event {event_id}: {e}",
-                                extra={
-                                    "event_type": "reprocessing_event_error",
-                                    "event_id": event_id,
-                                    "error": str(e),
-                                }
-                            )
-
-                    db.commit()
-                finally:
-                    db.close()
+                    except Exception as e:
+                        db.rollback()
+                        job.processed += 1  # Still count as processed
+                        job.errors += 1
+                        logger.warning(
+                            f"Error processing event {event_id}: {e}",
+                            extra={
+                                "event_type": "reprocessing_event_error",
+                                "event_id": event_id,
+                                "error": str(e),
+                            }
+                        )
+                    finally:
+                        db.close()
 
                 # Send progress update if interval elapsed
                 now = time.time()
@@ -441,6 +441,7 @@ class ReprocessingService:
         """
         from app.models.event import Event
         from app.models.event_embedding import EventEmbedding
+        from app.models.recognized_entity import EntityEvent
 
         result = {
             "matched": False,
@@ -451,6 +452,10 @@ class ReprocessingService:
         event = db.query(Event).filter(Event.id == event_id).first()
         if not event or not event.thumbnail_path:
             return result
+
+        # Delete existing entity links for this event (allows re-matching)
+        db.query(EntityEvent).filter(EntityEvent.event_id == event_id).delete()
+        db.flush()
 
         # Check if embedding exists
         existing_embedding = db.query(EventEmbedding).filter(
