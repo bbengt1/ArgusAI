@@ -132,9 +132,12 @@ export function EntityReprocessing() {
   const startMutation = useMutation({
     mutationFn: () => apiClient.reprocessing.start(filters),
     onSuccess: (job) => {
+      // Immediately update cache with returned job so UI shows "running" state
+      queryClient.setQueryData(['reprocessing-status'], job);
       toast.success('Reprocessing Started', {
         description: `Processing ${job.total_events} events`,
       });
+      // Also start polling for updates
       queryClient.invalidateQueries({ queryKey: ['reprocessing-status'] });
     },
     onError: (error: Error) => {
