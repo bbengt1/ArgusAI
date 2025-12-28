@@ -5,9 +5,9 @@
 
 'use client';
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, hasAuthToken } from '@/lib/api-client';
 import { useWebSocket, ConnectionStatus } from '@/lib/hooks/useWebSocket';
 import type { INotification } from '@/types/notification';
 
@@ -39,8 +39,25 @@ const NOTIFICATIONS_QUERY_KEY = ['notifications'];
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Fetch notifications from API
+  // Check auth status on mount and when storage changes
+  useEffect(() => {
+    const checkAuth = () => setIsAuthenticated(hasAuthToken());
+    checkAuth();
+
+    // Listen for storage changes (login/logout in other tabs)
+    window.addEventListener('storage', checkAuth);
+    // Also check periodically in case of same-tab login
+    const interval = setInterval(checkAuth, 1000);
+
+    return () => {
+      window.removeEventListener('storage', checkAuth);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Fetch notifications from API (only when authenticated)
   const {
     data: notificationData,
     isLoading,
@@ -48,8 +65,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   } = useQuery({
     queryKey: NOTIFICATIONS_QUERY_KEY,
     queryFn: () => apiClient.notifications.list({ limit: 20 }),
+    enabled: isAuthenticated, // Only fetch when authenticated
     refetchInterval: 60000, // Refetch every minute as fallback
     staleTime: 30000, // Consider data stale after 30 seconds
+    retry: false, // Don't retry on 401
   });
 
   // Mark single as read mutation

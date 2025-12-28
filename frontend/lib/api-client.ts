@@ -149,6 +149,14 @@ export function clearAuthToken(): void {
 }
 
 /**
+ * Check if auth token exists in localStorage
+ */
+export function hasAuthToken(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+/**
  * Get headers including auth token for direct fetch calls
  */
 function getAuthHeaders(): HeadersInit {
