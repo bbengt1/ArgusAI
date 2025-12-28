@@ -3,7 +3,8 @@ Authentication Middleware (Story 6.3, AC: #6)
 
 Middleware that:
 - Intercepts all API requests
-- Checks for JWT in cookie or Authorization header
+- Checks for API key in X-API-Key header (for programmatic access)
+- Checks for JWT in cookie or Authorization header (for user sessions)
 - Validates token and adds user to request.state
 - Excludes health, auth, metrics, docs endpoints
 """
@@ -19,6 +20,7 @@ from app.core.database import SessionLocal
 from app.core.config import settings
 from app.models.user import User
 from app.utils.jwt import decode_access_token, TokenError
+from app.services.api_key_service import get_api_key_service
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +98,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if method == "OPTIONS":
             return await call_next(request)
 
-        # Extract token
+        # Check for API key first (programmatic access)
+        api_key_valid = await self._check_api_key(request)
+        if api_key_valid:
+            return await call_next(request)
+
+        # Extract JWT token
         token = self._extract_token(request)
 
         if not token:
@@ -215,3 +222,55 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return auth_header[7:]
 
         return None
+
+    async def _check_api_key(self, request: Request) -> bool:
+        """
+        Check for valid API key in X-API-Key header.
+
+        Returns True if valid API key found, False otherwise.
+        Stores API key info in request.state if valid.
+        """
+        api_key_header = request.headers.get("X-API-Key")
+        if not api_key_header:
+            return False
+
+        db = SessionLocal()
+        try:
+            service = get_api_key_service()
+            api_key = service.verify_key(db, api_key_header)
+
+            if api_key:
+                # Store API key in request state for downstream use
+                request.state.api_key = {
+                    "id": api_key.id,
+                    "name": api_key.name,
+                    "scopes": api_key.scopes,
+                }
+
+                # Record usage
+                client_ip = None
+                if request.client:
+                    client_ip = request.client.host
+                service.record_usage(db, api_key, ip_address=client_ip)
+
+                logger.debug(
+                    "API key authenticated",
+                    extra={
+                        "event_type": "api_key_auth_success",
+                        "api_key_id": api_key.id,
+                        "api_key_name": api_key.name,
+                    }
+                )
+                return True
+
+            logger.debug(
+                "Invalid API key",
+                extra={
+                    "event_type": "api_key_auth_failed",
+                    "path": request.url.path,
+                }
+            )
+            return False
+
+        finally:
+            db.close()
