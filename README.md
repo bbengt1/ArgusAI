@@ -2,9 +2,15 @@
 
 AI-powered event detection and monitoring for home security. Analyzes video feeds from multiple camera sources, detects motion and smart events, and uses AI to generate natural language descriptions of what's happening.
 
-## What's New (Phase 11 In Progress)
+## What's New (Phase 13 In Progress)
 
-### Phase 11 (Current)
+### Phase 13 (Current)
+- **API Key Management** - Create and manage API keys for external integrations
+- **Scoped Permissions** - Granular access control with `read:events`, `read:cameras`, `write:cameras`, `admin` scopes
+- **Per-Key Rate Limiting** - Configurable rate limits per API key with sliding window algorithm
+- **API Key Settings UI** - Full management interface for creating, listing, and revoking keys
+
+### Phase 11 (Complete)
 - **Remote Access via Cloudflare Tunnel** - Secure access from anywhere without port forwarding
 - **Tunnel Settings UI** - Configure tunnel token and monitor connection status
 - **Tunnel Documentation** - Step-by-step setup guide for remote access
@@ -132,11 +138,14 @@ AI-powered event detection and monitoring for home security. Analyzes video feed
   - Apple TV: Dashboard view, video playback, Top Shelf integration
   - macOS: Menu bar app, keyboard navigation
 
-### Security & Infrastructure (Phase 9)
+### Security & Infrastructure (Phase 9+)
 - **SSL/HTTPS Support** - Secure connections with TLS 1.2+
 - **Certificate Generation** - Self-signed or Let's Encrypt integration in install script
 - **HTTP to HTTPS Redirect** - Automatic secure redirect when SSL enabled
-- **Encrypted API Keys** - Fernet encryption for all sensitive credentials
+- **Encrypted Credentials** - Fernet encryption for all sensitive credentials
+- **API Key Authentication** (Phase 13) - Programmatic access with scoped permissions
+- **Per-Key Rate Limiting** (Phase 13) - Configurable rate limits with X-RateLimit headers
+- **Dual Authentication** (Phase 13) - Support for both JWT tokens and API keys
 
 ## Architecture
 
@@ -913,19 +922,28 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - 📋 Helm chart for configurable deployments
 - 📋 Container CI/CD pipeline
 
-**Phase 11: Native Apple Apps** (Planned)
+**Phase 11: Remote Access** (Complete)
 - ✅ SwiftUI technology decision (research complete)
 - ✅ Cloud relay architecture design (Cloudflare Tunnel)
 - ✅ Mobile API specification
-- 📋 iPhone app prototype with pairing flow
-- 📋 iPad adaptive layouts
-- 📋 Apple Watch complications
-- 📋 Apple TV dashboard
-- 📋 macOS menu bar app
+- ✅ Remote access via Cloudflare Tunnel
+- ✅ Tunnel Settings UI
+
+**Phase 13: API Key Management** (In Progress)
+- ✅ API Key database model with bcrypt hashing
+- ✅ API endpoints for key CRUD operations
+- ✅ API key authentication middleware
+- ✅ Per-key rate limiting with sliding window
+- ✅ Scoped permissions (read:events, read:cameras, write:cameras, admin)
+- ✅ Frontend settings UI for key management
+- 📋 Cloud Relay service
+- 📋 Entity reprocessing pipeline
+- 📋 Branding customization
+- 📋 n8n automation pipeline
 
 ### Future
+- 📋 Native Apple Apps (iPhone, iPad, Apple Watch, Apple TV, macOS)
 - 📋 Local LLM support (Ollama)
-- 📋 n8n automated development pipeline
 - 📋 Alexa voice assistant integration
 - 📋 Multi-user authentication and permissions
 - 📋 Android app (React Native)

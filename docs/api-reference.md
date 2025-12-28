@@ -14,6 +14,7 @@ Complete REST API documentation for ArgusAI v1.
 
 - [Authentication](#authentication)
 - [Response Format](#response-format)
+- [API Keys](#api-keys)
 - [Cameras](#cameras)
 - [Events](#events)
 - [UniFi Protect](#unifi-protect)
@@ -32,12 +33,42 @@ Complete REST API documentation for ArgusAI v1.
 
 ## Authentication
 
-ArgusAI currently uses API key authentication for external integrations. For local dashboard access, no authentication is required (Phase 1.5 auth is minimal).
+ArgusAI supports two authentication methods:
+
+### 1. API Key Authentication (Recommended for Integrations)
+
+API keys provide scoped access for external integrations and automation tools.
 
 ```bash
-# Example with API key header (when enabled)
-curl -H "X-API-Key: your-api-key" http://localhost:8000/api/v1/events
+# Using X-API-Key header
+curl -H "X-API-Key: argus_abc123..." http://localhost:8000/api/v1/events
 ```
+
+**Key Features:**
+- Scoped permissions: `read:events`, `read:cameras`, `write:cameras`, `admin`
+- Per-key rate limiting with configurable limits
+- Automatic expiration (optional)
+- Usage tracking and statistics
+
+**Rate Limit Headers:**
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1735123456
+```
+
+### 2. JWT Token Authentication (Dashboard)
+
+For browser-based dashboard access, JWT tokens are used via cookies.
+
+```bash
+# Using Authorization header (alternative to cookie)
+curl -H "Authorization: Bearer eyJ..." http://localhost:8000/api/v1/events
+```
+
+### Authentication Priority
+
+When both authentication methods are present, API keys take priority over JWT tokens.
 
 ---
 
@@ -84,6 +115,197 @@ curl -H "X-API-Key: your-api-key" http://localhost:8000/api/v1/events
   "detail": "Camera not found",
   "status_code": 404
 }
+```
+
+---
+
+## API Keys
+
+Create and manage API keys for external integrations. Requires admin access or JWT authentication.
+
+### Available Scopes
+
+| Scope | Description |
+|-------|-------------|
+| `read:events` | Read access to events and event history |
+| `read:cameras` | Read access to cameras and camera status |
+| `write:cameras` | Create, update, and delete cameras |
+| `admin` | Full access (includes all other scopes) |
+
+### List API Keys
+
+```http
+GET /api-keys
+```
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `include_revoked` | boolean | Include revoked keys (default: false) |
+
+**Response:** `200 OK`
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Home Assistant Integration",
+    "prefix": "argus_ab",
+    "scopes": ["read:events", "read:cameras"],
+    "is_active": true,
+    "expires_at": "2026-01-15T00:00:00Z",
+    "last_used_at": "2025-01-15T10:30:00Z",
+    "usage_count": 1523,
+    "rate_limit_per_minute": 100,
+    "created_at": "2025-01-01T00:00:00Z",
+    "revoked_at": null
+  }
+]
+```
+
+### Create API Key
+
+```http
+POST /api-keys
+```
+
+**Request Body:**
+```json
+{
+  "name": "Home Assistant Integration",
+  "scopes": ["read:events", "read:cameras"],
+  "expires_at": "2026-01-15T00:00:00Z",
+  "rate_limit_per_minute": 100
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Descriptive name for the key |
+| `scopes` | string[] | Yes | Array of permission scopes |
+| `expires_at` | datetime | No | Expiration date (ISO 8601), null for never |
+| `rate_limit_per_minute` | integer | No | Rate limit (default: 100, max: 10000) |
+
+**Response:** `201 Created`
+```json
+{
+  "id": "uuid",
+  "name": "Home Assistant Integration",
+  "key": "argus_abc123def456ghi789...",
+  "prefix": "argus_ab",
+  "scopes": ["read:events", "read:cameras"],
+  "expires_at": "2026-01-15T00:00:00Z",
+  "rate_limit_per_minute": 100,
+  "created_at": "2025-01-15T10:30:00Z"
+}
+```
+
+> **Important:** The `key` field contains the full API key and is only returned once at creation time. Store it securely - it cannot be retrieved again.
+
+### Get API Key
+
+```http
+GET /api-keys/{key_id}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "name": "Home Assistant Integration",
+  "prefix": "argus_ab",
+  "scopes": ["read:events", "read:cameras"],
+  "is_active": true,
+  "expires_at": "2026-01-15T00:00:00Z",
+  "last_used_at": "2025-01-15T10:30:00Z",
+  "usage_count": 1523,
+  "rate_limit_per_minute": 100,
+  "created_at": "2025-01-01T00:00:00Z",
+  "revoked_at": null
+}
+```
+
+### Revoke API Key
+
+```http
+DELETE /api-keys/{key_id}
+```
+
+Immediately revokes the API key. Any subsequent requests using this key will be rejected.
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "name": "Home Assistant Integration",
+  "revoked_at": "2025-01-15T10:30:00Z"
+}
+```
+
+### Get API Key Usage
+
+```http
+GET /api-keys/{key_id}/usage
+```
+
+**Response:** `200 OK`
+```json
+{
+  "id": "uuid",
+  "name": "Home Assistant Integration",
+  "prefix": "argus_ab",
+  "usage_count": 1523,
+  "last_used_at": "2025-01-15T10:30:00Z",
+  "last_used_ip": "192.168.1.100",
+  "rate_limit_per_minute": 100,
+  "created_at": "2025-01-01T00:00:00Z"
+}
+```
+
+### Rate Limiting
+
+API keys are rate limited based on their configured `rate_limit_per_minute` value. When rate limited, the API returns:
+
+**Response:** `429 Too Many Requests`
+```json
+{
+  "detail": "Rate limit exceeded. Limit: 100/minute. Retry after 45 seconds."
+}
+```
+
+**Headers:**
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1735123500
+Retry-After: 45
+```
+
+### Example: Creating an API Key for Home Assistant
+
+```bash
+# Create a read-only key for Home Assistant
+curl -X POST http://localhost:8000/api/v1/api-keys \
+  -H "Content-Type: application/json" \
+  -H "Cookie: argusai_access_token=your-jwt-token" \
+  -d '{
+    "name": "Home Assistant",
+    "scopes": ["read:events", "read:cameras"],
+    "rate_limit_per_minute": 60
+  }'
+
+# Response includes the full key (save this!)
+# {
+#   "id": "uuid",
+#   "key": "argus_abc123...",
+#   ...
+# }
+
+# Use the key in Home Assistant configuration
+# sensor:
+#   - platform: rest
+#     resource: http://argusai:8000/api/v1/events?limit=1
+#     headers:
+#       X-API-Key: argus_abc123...
 ```
 
 ---
@@ -1406,4 +1628,4 @@ ws://localhost:8000/api/v1/ws
 
 ---
 
-*Last updated: December 2025*
+*Last updated: December 2025 (Phase 13 - API Key Management)*
