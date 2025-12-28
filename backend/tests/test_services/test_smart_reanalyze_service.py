@@ -29,7 +29,7 @@ class TestSmartReanalyzeServiceInit:
 
         assert service.DEFAULT_TOP_K == 5
         assert service.DEFAULT_MIN_SIMILARITY == 0.2
-        assert service.DIVERSITY_THRESHOLD == 0.95
+        assert service.DIVERSITY_THRESHOLD == 0.92
 
     def test_get_smart_reanalyze_service_singleton(self):
         """Test that get_smart_reanalyze_service returns singleton."""
@@ -87,8 +87,8 @@ class TestFrameSelection:
         assert result.query_embedding_time_ms >= 0
         assert result.frame_scoring_time_ms >= 0
 
-        # Verify encode_text was called
-        mock_embedding_service.encode_text.assert_called_once_with("package delivery")
+        # Verify encode_text was called with formatted query (QuerySuggester adds "a photo of" prefix for short queries)
+        mock_embedding_service.encode_text.assert_called_once_with("a photo of package delivery")
 
     @pytest.mark.asyncio
     async def test_select_relevant_frames_sorted_by_score(self, service_with_mock, db_session):
@@ -131,17 +131,25 @@ class TestFrameSelection:
     @pytest.mark.asyncio
     async def test_select_relevant_frames_no_embeddings(self, db_session):
         """Test handling when no frame embeddings exist."""
-        mock_service = MagicMock()
-        mock_service.encode_text = AsyncMock(return_value=[0.5] * 512)
-        mock_service.get_frame_embeddings = AsyncMock(return_value=[])
+        mock_embedding_service = MagicMock()
+        mock_embedding_service.encode_text = AsyncMock(return_value=[0.5] * 512)
+        mock_embedding_service.get_frame_embeddings = AsyncMock(return_value=[])
 
-        service = SmartReanalyzeService(embedding_service=mock_service)
+        # Mock query cache to ensure no cached results interfere
+        mock_query_cache = MagicMock()
+        mock_query_cache.get = MagicMock(return_value=None)
+
+        service = SmartReanalyzeService(
+            embedding_service=mock_embedding_service,
+            query_cache=mock_query_cache
+        )
         result = await service.select_relevant_frames(
             db=db_session,
             event_id="test-event-123",
             query="package",
             top_k=5,
             min_similarity=0.2,
+            use_cache=False,  # Disable cache to test empty embeddings path
         )
 
         assert result.selected_frames == []
