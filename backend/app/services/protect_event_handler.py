@@ -1017,6 +1017,46 @@ class ProtectEventHandler:
                 # Story P11-3: Build context-enhanced prompt for AI
                 # This gathers feedback history, camera patterns, and time patterns from MCP
                 self._context_enhanced_prompt = None
+
+                # BUG-021 Fix: Generate embedding and match entity BEFORE context building
+                # This allows AI to reference known entities by name in descriptions
+                entity_result = None
+                try:
+                    from app.services.embedding_service import get_embedding_service
+                    from app.services.entity_service import get_entity_service
+
+                    embedding_service = get_embedding_service()
+                    entity_service = get_entity_service()
+
+                    # Generate embedding from snapshot for entity matching
+                    embedding_bytes = base64.b64decode(snapshot_result.image_base64)
+                    embedding_vector = await embedding_service.generate_embedding(embedding_bytes)
+
+                    if embedding_vector:
+                        # Match against known entities (read-only, doesn't create new entities)
+                        entity_result = await entity_service.match_entity_only(
+                            db=db,
+                            embedding=embedding_vector,
+                            threshold=0.75,
+                        )
+
+                        if entity_result:
+                            logger.debug(
+                                f"Entity matched for Protect context (camera '{camera.name}')",
+                                extra={
+                                    "camera_id": camera.id,
+                                    "entity_id": entity_result.entity_id,
+                                    "entity_name": entity_result.name,
+                                    "similarity_score": entity_result.similarity_score,
+                                }
+                            )
+                except Exception as entity_error:
+                    # Fail-open: entity matching failures don't block AI description
+                    logger.debug(
+                        f"Entity matching for Protect context failed (will continue without): {entity_error}",
+                        extra={"camera_id": camera.id}
+                    )
+
                 try:
                     context_service = get_context_prompt_service()
                     base_prompt = (
@@ -1034,7 +1074,7 @@ class ProtectEventHandler:
                         base_prompt=base_prompt,
                         camera_id=camera.id,
                         event_time=snapshot_result.timestamp,
-                        matched_entity=None,  # Entity matching not available in Protect flow yet
+                        matched_entity=entity_result,  # BUG-021: Now passes matched entity for context
                     )
 
                     if context_result and context_result.context_included:
@@ -1044,6 +1084,9 @@ class ProtectEventHandler:
                             extra={
                                 "event_type": "protect_context_enhanced",
                                 "camera_id": camera.id,
+                                "entity_matched": entity_result is not None,
+                                "entity_name": entity_result.name if entity_result else None,
+                                "entity_context_included": context_result.entity_context_included,
                                 "mcp_context_included": context_result.mcp_context_included,
                                 "mcp_feedback_included": context_result.mcp_feedback_included,
                                 "mcp_camera_included": context_result.mcp_camera_included,
