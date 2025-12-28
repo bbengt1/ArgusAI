@@ -569,9 +569,9 @@ class TestVideoNativeSuccessMetadata:
         # Mock AIProvider enum
         mock_provider_enum = MagicMock()
 
-        with patch('app.services.protect_event_handler.ai_service') as mock_ai_service:
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
             mock_ai_service.providers = {mock_provider_enum: mock_provider}
-            with patch('app.services.protect_event_handler.AIProvider') as mock_enum:
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
                 mock_enum.return_value = mock_provider_enum
 
                 result = await handler._try_video_native_upload(
@@ -608,12 +608,12 @@ class TestVideoNativeSuccessMetadata:
 
         mock_provider_enum = MagicMock()
 
-        with patch('app.services.protect_event_handler.ai_service') as mock_ai_service:
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
             mock_ai_service.providers = {mock_provider_enum: mock_provider}
-            with patch('app.services.protect_event_handler.AIProvider') as mock_enum:
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
                 mock_enum.return_value = mock_provider_enum
 
-                with patch('app.services.protect_event_handler.PROVIDER_CAPABILITIES', {
+                with patch('app.services.ai_service.PROVIDER_CAPABILITIES', {
                     'openai': {'video_method': 'frame_extraction', 'supports_audio_transcription': True}
                 }):
                     result = await handler._try_video_frame_extraction(
@@ -651,9 +651,9 @@ class TestVideoNativeTimeoutHandling:
 
         mock_provider_enum = MagicMock()
 
-        with patch('app.services.protect_event_handler.ai_service') as mock_ai_service:
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
             mock_ai_service.providers = {mock_provider_enum: mock_provider}
-            with patch('app.services.protect_event_handler.AIProvider') as mock_enum:
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
                 mock_enum.return_value = mock_provider_enum
 
                 result = await handler._try_video_native_upload(
@@ -683,12 +683,12 @@ class TestVideoNativeTimeoutHandling:
 
         mock_provider_enum = MagicMock()
 
-        with patch('app.services.protect_event_handler.ai_service') as mock_ai_service:
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
             mock_ai_service.providers = {mock_provider_enum: mock_provider}
-            with patch('app.services.protect_event_handler.AIProvider') as mock_enum:
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
                 mock_enum.return_value = mock_provider_enum
 
-                with patch('app.services.protect_event_handler.PROVIDER_CAPABILITIES', {
+                with patch('app.services.ai_service.PROVIDER_CAPABILITIES', {
                     'openai': {'supports_audio_transcription': False}
                 }):
                     result = await handler._try_video_frame_extraction(
@@ -805,9 +805,9 @@ class TestVideoNativeProviderFailure:
 
         mock_provider_enum = MagicMock()
 
-        with patch('app.services.protect_event_handler.ai_service') as mock_ai_service:
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
             mock_ai_service.providers = {mock_provider_enum: mock_provider}
-            with patch('app.services.protect_event_handler.AIProvider') as mock_enum:
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
                 mock_enum.return_value = mock_provider_enum
 
                 result = await handler._try_video_native_upload(
@@ -839,9 +839,9 @@ class TestVideoNativeProviderFailure:
 
         mock_provider_enum = MagicMock()
 
-        with patch('app.services.protect_event_handler.ai_service') as mock_ai_service:
+        with patch('app.services.ai_service.ai_service') as mock_ai_service:
             mock_ai_service.providers = {mock_provider_enum: mock_provider}
-            with patch('app.services.protect_event_handler.AIProvider') as mock_enum:
+            with patch('app.services.ai_service.AIProvider') as mock_enum:
                 mock_enum.return_value = mock_provider_enum
 
                 result = await handler._try_video_native_upload(
