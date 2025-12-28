@@ -758,3 +758,63 @@ development_status:
   p12-4-4-add-query-caching-and-suggestions: done
   p12-4-5-enhance-re-analyze-modal-with-relevance-scores: done
   epic-p12-4-retrospective: optional
+
+  # ============================================================================
+  # PHASE 13: Platform Maturity & External Integration
+  # ============================================================================
+  # Source: docs/epics-phase13.md
+  # PRD: docs/PRD-phase13.md
+  # Backlog: docs/backlog.md (FF-033, FF-025, FF-034, IMP-039, FF-027)
+
+  # Epic P13-1: API Key Management
+  # Priority: P2
+  # Focus: Secure programmatic access for third-party integrations
+  epic-p13-1: backlog  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P13-1.md
+  p13-1-1-create-apikey-database-model-and-migration: backlog
+  p13-1-2-implement-api-key-generation-endpoint: backlog
+  p13-1-3-implement-api-key-list-and-revoke-endpoints: backlog
+  p13-1-4-implement-api-key-authentication-middleware: backlog
+  p13-1-5-implement-api-key-rate-limiting: backlog
+  p13-1-6-create-api-keys-settings-ui: backlog
+  epic-p13-1-retrospective: optional
+
+  # Epic P13-2: Cloud Relay
+  # Priority: P3
+  # Focus: Remote access via Cloudflare Tunnel
+  epic-p13-2: backlog  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P13-2.md
+  p13-2-1-add-tunnel-configuration-to-settings: backlog
+  p13-2-2-implement-cloudflare-tunnel-service: backlog
+  p13-2-3-add-tunnel-status-endpoint: backlog
+  p13-2-4-implement-tunnel-connectivity-test: backlog
+  p13-2-5-websocket-relay-support: backlog
+  epic-p13-2-retrospective: optional
+
+  # Epic P13-3: Entity Reprocessing
+  # Priority: P3
+  # Focus: Bulk reprocessing for entity matching
+  epic-p13-3: backlog  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P13-3.md
+  p13-3-1-create-reprocessing-background-task: backlog
+  p13-3-2-implement-reprocessing-api-endpoints: backlog
+  p13-3-3-add-websocket-progress-updates: backlog
+  p13-3-4-create-reprocessing-ui: backlog
+  epic-p13-3-retrospective: optional
+
+  # Epic P13-4: Branding
+  # Priority: P3
+  # Focus: ArgusAI logo across all touchpoints
+  epic-p13-4: backlog  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P13-4.md
+  p13-4-1-export-logo-assets-in-required-sizes: backlog
+  p13-4-2-update-frontend-branding: backlog
+  p13-4-3-update-docs-site-branding: backlog
+  epic-p13-4-retrospective: optional
+
+  # Epic P13-5: n8n Development Pipeline
+  # Priority: P2
+  # Focus: AI-assisted development automation
+  epic-p13-5: backlog  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P13-5.md
+  p13-5-1-create-n8n-docker-compose-configuration: backlog
+  p13-5-2-create-github-webhook-integration-workflow: backlog
+  p13-5-3-create-bmad-workflow-integration: backlog
+  p13-5-4-create-notification-workflow: backlog
+  p13-5-5-create-pipeline-dashboard-view: backlog
+  epic-p13-5-retrospective: optional
