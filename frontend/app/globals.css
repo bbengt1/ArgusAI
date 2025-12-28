@@ -144,3 +144,13 @@
   left: auto !important;
   right: var(--offset) !important;
 }
+
+/* Shimmer animation for status indicators */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}

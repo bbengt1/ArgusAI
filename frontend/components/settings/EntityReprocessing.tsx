@@ -223,12 +223,45 @@ export function EntityReprocessing() {
   };
 
   return (
-    <Card>
+    <Card className={isRunning ? 'ring-2 ring-blue-500/50 ring-offset-2 ring-offset-background' : ''}>
+      {/* Prominent status banner when running */}
+      {isRunning && liveJob && (
+        <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-3 text-white">
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.2)_50%,transparent_100%)] animate-[shimmer_2s_infinite]" />
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <RefreshCw className="h-5 w-5 animate-spin" />
+                <span className="absolute -right-1 -top-1 flex h-3 w-3">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-white" />
+                </span>
+              </div>
+              <div>
+                <div className="font-semibold">Reprocessing in Progress</div>
+                <div className="text-sm text-blue-100">
+                  {liveJob.processed.toLocaleString()} / {liveJob.total_events.toLocaleString()} events ({Math.round(liveJob.percent_complete)}%)
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 text-sm">
+              <div className="text-center">
+                <div className="font-bold">{liveJob.matched}</div>
+                <div className="text-blue-100">Matched</div>
+              </div>
+              <div className="text-center">
+                <div className="font-bold">{liveJob.errors}</div>
+                <div className="text-blue-100">Errors</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
+              <RefreshCw className={`h-5 w-5 ${isRunning ? 'animate-spin text-blue-500' : ''}`} />
               Entity Reprocessing
             </CardTitle>
             <CardDescription>
