@@ -428,9 +428,10 @@ class TestEventProcessor:
 class TestEventProcessorIntegration:
     """Integration tests for EventProcessor with real asyncio"""
 
+    @patch('app.services.embedding_service.get_embedding_service')
     @patch('app.services.event_processor.get_cost_cap_service')
     @patch('app.services.event_processor.get_db_session')
-    async def test_full_pipeline_simulation(self, mock_get_db_session, mock_get_cost_cap):
+    async def test_full_pipeline_simulation(self, mock_get_db_session, mock_get_cost_cap, mock_get_embedding):
         """Test full pipeline with mocked services"""
         # Mock database session as context manager for event storage
         mock_db = MagicMock()
@@ -441,6 +442,11 @@ class TestEventProcessorIntegration:
         mock_cost_cap = MagicMock()
         mock_cost_cap.can_analyze.return_value = (True, None)
         mock_get_cost_cap.return_value = mock_cost_cap
+
+        # Mock embedding service to avoid loading real AI models
+        mock_embedding = MagicMock()
+        mock_embedding.generate_embedding = AsyncMock(return_value=[0.1] * 512)
+        mock_get_embedding.return_value = mock_embedding
 
         processor = EventProcessor(worker_count=2, queue_maxsize=5)
 
@@ -492,8 +498,26 @@ class TestEventProcessorIntegration:
 
         assert processor.running == False
 
-    async def test_performance_throughput(self):
+    @patch('app.services.embedding_service.get_embedding_service')
+    @patch('app.services.event_processor.get_cost_cap_service')
+    @patch('app.services.event_processor.get_db_session')
+    async def test_performance_throughput(self, mock_get_db_session, mock_get_cost_cap, mock_get_embedding):
         """Test processing throughput (10+ events/minute target)"""
+        # Mock database session as context manager
+        mock_db = MagicMock()
+        mock_get_db_session.return_value.__enter__ = MagicMock(return_value=mock_db)
+        mock_get_db_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        # Mock cost cap service to allow analysis
+        mock_cost_cap = MagicMock()
+        mock_cost_cap.can_analyze.return_value = (True, None)
+        mock_get_cost_cap.return_value = mock_cost_cap
+
+        # Mock embedding service to avoid loading real AI models
+        mock_embedding = MagicMock()
+        mock_embedding.generate_embedding = AsyncMock(return_value=[0.1] * 512)
+        mock_get_embedding.return_value = mock_embedding
+
         processor = EventProcessor(worker_count=3, queue_maxsize=50)
 
         # Mock fast services
