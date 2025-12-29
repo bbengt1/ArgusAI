@@ -1070,6 +1070,52 @@ class TestFrameSamplingStrategySetting:
         assert data["frame_sampling_strategy"] == "adaptive"
 
 
+# ============================================================================
+# Debug Endpoint Security Tests (Story P14-1.2)
+# ============================================================================
+
+
+class TestDebugEndpointSecurity:
+    """Tests for debug endpoint security (Story P14-1.2).
+
+    Note: These tests verify that debug endpoints return 404 when
+    DEBUG_ENDPOINTS_ENABLED=false (the default). The endpoints are not
+    registered at all when disabled, so they simply don't exist.
+    """
+
+    def test_debug_ai_keys_returns_404_by_default(self):
+        """Test GET /debug/ai-keys returns 404 when DEBUG_ENDPOINTS_ENABLED=false."""
+        response = client.get("/api/v1/system/debug/ai-keys")
+
+        # Should return 404 (endpoint not registered) when disabled
+        # Note: If DEBUG_ENDPOINTS_ENABLED=true in the environment,
+        # this test will fail - that's expected in development mode
+        assert response.status_code == 404
+
+    def test_debug_network_returns_404_by_default(self):
+        """Test GET /debug/network returns 404 when DEBUG_ENDPOINTS_ENABLED=false."""
+        response = client.get("/api/v1/system/debug/network")
+
+        # Should return 404 (endpoint not registered) when disabled
+        assert response.status_code == 404
+
+    def test_debug_endpoints_not_in_openapi_schema(self):
+        """Test debug endpoints are not visible in OpenAPI schema when disabled."""
+        response = client.get("/openapi.json")
+
+        assert response.status_code == 200
+        schema = response.json()
+
+        # Check that debug endpoints are not in the schema
+        paths = schema.get("paths", {})
+        debug_paths = [p for p in paths.keys() if "/debug/" in p]
+
+        # When disabled, no debug paths should exist
+        # Note: If DEBUG_ENDPOINTS_ENABLED=true, they still won't appear
+        # because we use include_in_schema=False
+        assert len(debug_paths) == 0, f"Found debug paths in schema: {debug_paths}"
+
+
 # Cleanup test database on module exit
 def teardown_module():
     """Remove test database file"""

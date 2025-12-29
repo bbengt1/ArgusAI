@@ -30,6 +30,7 @@ from app.services.backup_service import get_backup_service, BackupResult, Restor
 from app.core.database import get_db, SessionLocal
 from app.models.system_setting import SystemSetting
 from app.utils.encryption import encrypt_password, decrypt_password, mask_sensitive, is_encrypted
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,73 +51,95 @@ router = APIRouter(
 )
 
 
-@router.get("/debug/ai-keys")
-def debug_ai_keys(db: Session = Depends(get_db)):
-    """Debug endpoint to check if AI keys are saved in database"""
-    keys_to_check = [
-        'ai_api_key_openai',
-        'ai_api_key_claude',
-        'ai_api_key_gemini',
-        'settings_primary_api_key',
-        'settings_primary_model',
-    ]
+# Debug endpoints - only registered when DEBUG_ENDPOINTS_ENABLED=true (Story P14-1.2)
+# SECURITY: These endpoints expose sensitive internal information.
+# By not registering them at all when disabled (vs. auth check), we return
+# 404 instead of 401/403, avoiding confirmation that the endpoints exist.
+if settings.DEBUG_ENDPOINTS_ENABLED:
+    logger.warning(
+        "Debug endpoints enabled - this exposes sensitive information!",
+        extra={"event_type": "debug_endpoints_enabled"}
+    )
 
-    results = {}
-    for key in keys_to_check:
-        setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
-        if setting:
-            value = setting.value
-            # Show if encrypted and first/last few chars
-            if value.startswith('encrypted:'):
-                results[key] = f"encrypted (length: {len(value)})"
-            elif value.startswith('****'):
-                results[key] = f"masked: {value}"
+    @router.get("/debug/ai-keys", include_in_schema=False)
+    def debug_ai_keys(db: Session = Depends(get_db)):
+        """Debug endpoint to check if AI keys are saved in database.
+
+        WARNING: Only available when DEBUG_ENDPOINTS_ENABLED=true.
+        Exposes API key storage structure - for development use only.
+        """
+        keys_to_check = [
+            'ai_api_key_openai',
+            'ai_api_key_claude',
+            'ai_api_key_gemini',
+            'settings_primary_api_key',
+            'settings_primary_model',
+        ]
+
+        results = {}
+        for key in keys_to_check:
+            setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+            if setting:
+                value = setting.value
+                # Show if encrypted and first/last few chars
+                if value.startswith('encrypted:'):
+                    results[key] = f"encrypted (length: {len(value)})"
+                elif value.startswith('****'):
+                    results[key] = f"masked: {value}"
+                else:
+                    results[key] = f"plaintext (first 4 chars): {value[:4]}... (length: {len(value)})"
             else:
-                results[key] = f"plaintext (first 4 chars): {value[:4]}... (length: {len(value)})"
-        else:
-            results[key] = "NOT FOUND"
+                results[key] = "NOT FOUND"
 
-    return results
+        return results
 
+    @router.get("/debug/network", include_in_schema=False)
+    def debug_network_test():
+        """Debug endpoint to test network connectivity from server context.
 
-@router.get("/debug/network")
-def debug_network_test():
-    """Debug endpoint to test network connectivity from server context"""
-    import socket
-    import ssl
+        WARNING: Only available when DEBUG_ENDPOINTS_ENABLED=true.
+        Exposes internal network topology - for development use only.
+        """
+        import socket
+        import ssl
 
-    results = {}
-    host = "10.0.1.254"
-    port = 7441
+        results = {}
+        host = "10.0.1.254"
+        port = 7441
 
-    # Test 1: Raw socket
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
-        sock.connect((host, port))
-        results["tcp_connect"] = "success"
+        # Test 1: Raw socket
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            sock.connect((host, port))
+            results["tcp_connect"] = "success"
 
-        # Test 2: SSL wrap
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        ssock = context.wrap_socket(sock, server_hostname=host)
-        results["ssl_wrap"] = f"success - {ssock.cipher()[0]}"
-        ssock.close()
-    except Exception as e:
-        results["socket_error"] = f"{type(e).__name__}: {e}"
+            # Test 2: SSL wrap
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            ssock = context.wrap_socket(sock, server_hostname=host)
+            results["ssl_wrap"] = f"success - {ssock.cipher()[0]}"
+            ssock.close()
+        except Exception as e:
+            results["socket_error"] = f"{type(e).__name__}: {e}"
 
-    # Test 3: PyAV
-    try:
-        import av
-        url = "rtsps://homebridge:2003Isaac@10.0.1.254:7441/5e90Pa1x8zldOgmF?enableSrtp"
-        container = av.open(url, options={'rtsp_transport': 'tcp'}, timeout=10)
-        results["pyav_connect"] = f"success - {len(container.streams)} streams"
-        container.close()
-    except Exception as e:
-        results["pyav_error"] = f"{type(e).__name__}: {e}"
+        # Test 3: PyAV
+        try:
+            import av
+            url = "rtsps://homebridge:2003Isaac@10.0.1.254:7441/5e90Pa1x8zldOgmF?enableSrtp"
+            container = av.open(url, options={'rtsp_transport': 'tcp'}, timeout=10)
+            results["pyav_connect"] = f"success - {len(container.streams)} streams"
+            container.close()
+        except Exception as e:
+            results["pyav_error"] = f"{type(e).__name__}: {e}"
 
-    return results
+        return results
+else:
+    logger.debug(
+        "Debug endpoints disabled (default secure configuration)",
+        extra={"event_type": "debug_endpoints_disabled"}
+    )
 
 
 def get_retention_policy_from_db(db: Optional[Session] = None) -> int:

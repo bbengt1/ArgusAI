@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
+    # Debug Endpoints (Story P14-1.2)
+    # SECURITY WARNING: Only enable for development - exposes sensitive info
+    DEBUG_ENDPOINTS_ENABLED: bool = False
+
     # API
     API_V1_PREFIX: str = "/api/v1"
     # Stored as string to avoid pydantic-settings JSON parsing; use cors_origins_list property

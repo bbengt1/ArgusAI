@@ -843,7 +843,7 @@ development_status:
   # Backlog: TD-011, TD-023
   epic-p14-1: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P14-1.md
   p14-1-1-fix-asyncio-run-misuse-in-mqtt-service: done
-  p14-1-2-remove-or-secure-debug-endpoints: backlog
+  p14-1-2-remove-or-secure-debug-endpoints: done
   epic-p14-1-retrospective: optional
 
   # Epic P14-2: Backend Code Quality
