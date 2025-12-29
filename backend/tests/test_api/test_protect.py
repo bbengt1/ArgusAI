@@ -3030,9 +3030,10 @@ class TestHandleEventFullFlow:
         mock_msg.new_obj.is_motion_currently_detected = True
         mock_msg.new_obj.active_smart_detect_types = None
 
-        # Mock database to raise exception
-        with patch('app.services.protect_event_handler.SessionLocal') as mock_session:
-            mock_session.side_effect = Exception("Database error")
+        # Mock database context manager to raise exception
+        with patch('app.services.protect_event_handler.get_db_session') as mock_get_db:
+            mock_get_db.return_value.__enter__ = MagicMock(side_effect=Exception("Database error"))
+            mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
 
             result = await handler.handle_event("ctrl-1", mock_msg)
             assert result == False  # Should return False, not raise
