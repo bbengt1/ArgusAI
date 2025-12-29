@@ -81,6 +81,8 @@ class Device(Base):
         Index('idx_devices_device_id', 'device_id'),
         Index('idx_devices_platform', 'platform'),
         Index('idx_devices_last_seen', 'last_seen_at'),  # Story P12-2.1
+        # Story P14-2.3: Index for filtering active devices
+        Index('idx_devices_pairing_confirmed', 'pairing_confirmed'),
     )
 
     @property

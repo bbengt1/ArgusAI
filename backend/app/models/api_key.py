@@ -14,7 +14,7 @@ Security:
 - Prefix (first 8 chars) stored separately for identification
 - Key displayed once at creation only
 """
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON, ForeignKey, Index
 from sqlalchemy.sql import func
 from app.core.database import Base
 import uuid
@@ -73,6 +73,12 @@ class APIKey(Base):
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
     revoked_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    # Story P14-2.3: Indexes for audit queries
+    __table_args__ = (
+        Index('idx_api_keys_created_by', 'created_by'),
+        Index('idx_api_keys_revoked_by', 'revoked_by'),
+    )
 
     def is_expired(self) -> bool:
         """Check if API key has expired."""

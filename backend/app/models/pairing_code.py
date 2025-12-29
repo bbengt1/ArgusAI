@@ -42,6 +42,8 @@ class PairingCode(Base):
         Index('ix_pairing_codes_code', 'code'),
         Index('ix_pairing_codes_expires', 'expires_at'),
         Index('ix_pairing_codes_device', 'device_id'),
+        # Story P14-2.3: Compound index for cleanup queries
+        Index('idx_pairing_codes_device_expires', 'device_id', 'expires_at'),
     )
 
     @property

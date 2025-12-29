@@ -164,6 +164,8 @@ class RecognizedEntity(Base):
         Index("idx_recognized_entities_last_seen", "last_seen_at"),
         Index("idx_recognized_entities_entity_type", "entity_type"),
         Index("idx_recognized_entities_vehicle_signature", "vehicle_signature"),
+        # Story P14-2.3: Index for LIKE queries in alert rules
+        Index("idx_recognized_entities_name", "name"),
     )
 
     @property

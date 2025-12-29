@@ -133,6 +133,8 @@ class Event(Base):
         CheckConstraint('confidence >= 0 AND confidence <= 100', name='check_confidence_range'),
         Index('idx_events_timestamp_desc', 'timestamp', postgresql_ops={'timestamp': 'DESC'}),
         Index('idx_events_camera_timestamp', 'camera_id', 'timestamp'),
+        # Story P14-2.3: Compound index for source_type filtering with time range
+        Index('idx_events_source_type_timestamp', 'source_type', 'timestamp'),
     )
 
     def __repr__(self):
