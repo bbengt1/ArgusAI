@@ -166,10 +166,8 @@ class TestMockAudioClassifier:
         assert AudioEventType.GLASS_BREAK in supported
         assert AudioEventType.GUNSHOT in supported
         assert AudioEventType.SCREAM in supported
-        assert AudioEventType.DOG_BARK in supported
-        assert AudioEventType.SMOKE_ALARM in supported
-        assert AudioEventType.SIREN in supported
-        assert AudioEventType.BABY_CRY in supported
+        assert AudioEventType.DOORBELL in supported
+        assert AudioEventType.OTHER in supported
 
     def test_classifier_model_name(self):
         """Test classifier returns model name"""
@@ -257,16 +255,14 @@ class TestAudioEventDetector:
         detector = AudioEventDetector()
         thresholds = detector.get_thresholds()
         # Check that all event types have default threshold
-        assert len(thresholds) >= 7  # 7 event types
+        assert len(thresholds) >= 5  # 5 event types: GLASS_BREAK, GUNSHOT, SCREAM, DOORBELL, OTHER
 
     @pytest.mark.parametrize("event_type", [
         AudioEventType.GLASS_BREAK,
         AudioEventType.GUNSHOT,
         AudioEventType.SCREAM,
-        AudioEventType.DOG_BARK,
-        AudioEventType.SMOKE_ALARM,
-        AudioEventType.SIREN,
-        AudioEventType.BABY_CRY,
+        AudioEventType.DOORBELL,
+        AudioEventType.OTHER,
     ])
     def test_default_threshold_per_type(self, event_type):
         """AC#3: Test each event type has 70% default threshold"""
