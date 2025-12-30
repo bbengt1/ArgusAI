@@ -102,6 +102,8 @@ class Camera(Base):
         CheckConstraint("motion_cooldown >= 0 AND motion_cooldown <= 300", name='check_cooldown'),
         CheckConstraint("analysis_mode IN ('single_frame', 'multi_frame', 'video_native')", name='check_analysis_mode'),
         CheckConstraint("homekit_stream_quality IN ('low', 'medium', 'high')", name='check_homekit_stream_quality'),
+        # Story P14-5.6: Add check constraint on audio_threshold float column
+        CheckConstraint("audio_threshold IS NULL OR (audio_threshold >= 0 AND audio_threshold <= 1)", name='check_audio_threshold_range'),
     )
     
     @validates('password')
