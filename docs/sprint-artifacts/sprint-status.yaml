@@ -897,11 +897,12 @@ development_status:
   # Priority: P3
   # Focus: @singleton decorator, backoff utility, consistency fixes
   # Backlog: TD-013, TD-014, TD-017, TD-018, TD-019, TD-022, TD-025, IMP-050, IMP-051, IMP-053
-  # Status: PARTIAL 2025-12-30
+  # Status: COMPLETE 2025-12-30
   # Notes: Created @singleton decorator and retry utility (P14-5.1-5.2). Fixed backref/back_populates (P14-5.5),
   #        added Notification relationships (P14-5.9), improved JSON parse error handling (P14-5.10).
-  #        Migration stories (P14-5.3-5.4) and DB constraint stories (P14-5.6-5.8) deferred as lower priority.
-  epic-p14-5: in_progress  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P14-5.md
+  #        Migration stories (P14-5.3-5.4) done, DB constraint stories (P14-5.6-5.7) done.
+  #        API response format documented (P14-5.8).
+  epic-p14-5: done  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P14-5.md
   p14-5-1-create-singleton-decorator: done
   p14-5-2-create-exponential-backoff-utility: done
   p14-5-3-migrate-services-to-singleton-decorator: done  # PR #318 - 7 services migrated
@@ -909,7 +910,7 @@ development_status:
   p14-5-5-fix-backref-vs-back-populates-inconsistency: done
   p14-5-6-add-check-constraints-on-float-columns: done  # GH #322, PR #323
   p14-5-7-fix-timestamp-timezone-handling: done  # GH #324
-  p14-5-8-standardize-api-response-format: backlog  # Documentation task
+  p14-5-8-standardize-api-response-format: done  # Documentation task
   p14-5-9-add-notification-model-relationships: done
   p14-5-10-improve-json-parse-error-handling: done
   epic-p14-5-retrospective: optional

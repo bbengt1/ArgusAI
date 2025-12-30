@@ -15,6 +15,21 @@ Provides REST API for Protect controller configuration management:
 - POST /protect/controllers/{id}/cameras/{camera_id}/enable - Enable camera for AI (Story P2-2.2)
 - POST /protect/controllers/{id}/cameras/{camera_id}/disable - Disable camera for AI (Story P2-2.2)
 - PUT /protect/controllers/{id}/cameras/{camera_id}/filters - Update camera filters (Story P2-2.3)
+
+Response Format:
+    All Protect API endpoints return wrapped responses with metadata:
+    {
+        "data": { model or array of models },
+        "meta": {
+            "request_id": "uuid",
+            "timestamp": "ISO 8601 datetime",
+            "count": number (optional, for lists)
+        }
+    }
+
+    This differs from other ArgusAI APIs which return models directly.
+    The wrapped format provides request tracking and pagination metadata
+    for the more complex Protect integration scenarios.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session

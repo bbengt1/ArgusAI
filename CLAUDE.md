@@ -122,6 +122,53 @@ POST   /api/v1/protect/controllers/{id}/cameras/{cam}/disable  # Disable for AI
 PUT    /api/v1/protect/controllers/{id}/cameras/{cam}/filters  # Set event filters
 ```
 
+### API Response Format Standards
+
+The API uses two response patterns depending on the endpoint:
+
+**Pattern 1: Wrapped Response (Protect API)**
+
+All `/api/v1/protect/*` endpoints return wrapped responses with metadata:
+```json
+{
+  "data": { /* model or array of models */ },
+  "meta": {
+    "request_id": "uuid",
+    "timestamp": "2025-12-30T00:00:00Z",
+    "count": 5  // optional, for lists
+  }
+}
+```
+
+This pattern provides:
+- Request tracking via `request_id` for debugging
+- Timestamp for response generation time
+- Count for paginated/list responses
+
+**Pattern 2: Direct Model Response (Standard APIs)**
+
+All other endpoints return models directly:
+```json
+{ "id": "...", "name": "...", /* other model fields */ }
+// or for lists:
+[ { /* model */ }, { /* model */ } ]
+```
+
+This simpler format is used for:
+- `/api/v1/cameras/*`
+- `/api/v1/events/*`
+- `/api/v1/alert_rules/*`
+- All other endpoints
+
+**Frontend Handling:**
+- The `api-client.ts` handles both patterns automatically
+- Protect methods access `response.data` for the model
+- Standard methods use the response directly
+
+**New Endpoints:**
+- Use Pattern 2 (direct model) for simple CRUD operations
+- Use Pattern 1 (wrapped) if request tracking or pagination metadata is needed
+
 ### Frontend Structure
 - Pages: `frontend/app/` (App Router)
 - Components: `frontend/components/` (cameras/, events/, dashboard/, rules/, settings/, ui/)
