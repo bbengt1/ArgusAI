@@ -64,24 +64,66 @@ class AlertEngine:
         self.db = db
         self.http_client = http_client
 
-    def _parse_conditions(self, conditions_json: str) -> Dict[str, Any]:
-        """Parse conditions JSON string into dictionary."""
+    def _parse_conditions(self, conditions_json: str, rule_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Parse conditions JSON string into dictionary.
+
+        P14-5.10: Improved error handling with context logging.
+
+        Args:
+            conditions_json: JSON string to parse
+            rule_id: Optional rule ID for context in error messages
+
+        Returns:
+            Parsed dictionary or empty dict on error (fail-safe)
+        """
         try:
             if not conditions_json or conditions_json == '{}':
                 return {}
             return json.loads(conditions_json)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse conditions JSON: {e}")
+            # P14-5.10: Enhanced logging with rule context
+            logger.warning(
+                f"JSON parse error in rule {rule_id or 'unknown'}, field 'conditions': {e}",
+                extra={
+                    "event_type": "json_parse_error",
+                    "rule_id": rule_id,
+                    "field_name": "conditions",
+                    "error": str(e),
+                    "raw_value_preview": conditions_json[:100] if conditions_json else None
+                }
+            )
             return {}
 
-    def _parse_actions(self, actions_json: str) -> Dict[str, Any]:
-        """Parse actions JSON string into dictionary."""
+    def _parse_actions(self, actions_json: str, rule_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Parse actions JSON string into dictionary.
+
+        P14-5.10: Improved error handling with context logging.
+
+        Args:
+            actions_json: JSON string to parse
+            rule_id: Optional rule ID for context in error messages
+
+        Returns:
+            Parsed dictionary or empty dict on error (fail-safe)
+        """
         try:
             if not actions_json or actions_json == '{}':
                 return {}
             return json.loads(actions_json)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse actions JSON: {e}")
+            # P14-5.10: Enhanced logging with rule context
+            logger.warning(
+                f"JSON parse error in rule {rule_id or 'unknown'}, field 'actions': {e}",
+                extra={
+                    "event_type": "json_parse_error",
+                    "rule_id": rule_id,
+                    "field_name": "actions",
+                    "error": str(e),
+                    "raw_value_preview": actions_json[:100] if actions_json else None
+                }
+            )
             return {}
 
     def _is_in_cooldown(self, rule: AlertRule) -> bool:
@@ -581,13 +623,23 @@ class AlertEngine:
 
         details["cooldown_active"] = False
 
-        # Parse conditions
-        conditions = self._parse_conditions(rule.conditions)
+        # Parse conditions (P14-5.10: pass rule_id for error context)
+        conditions = self._parse_conditions(rule.conditions, rule_id=rule.id)
 
         # Parse event objects_detected (JSON string to list)
         try:
             event_objects = json.loads(event.objects_detected) if isinstance(event.objects_detected, str) else event.objects_detected
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            # P14-5.10: Log with event context
+            logger.warning(
+                f"JSON parse error in event {event.id}, field 'objects_detected': {e}",
+                extra={
+                    "event_type": "json_parse_error",
+                    "event_id": event.id,
+                    "field_name": "objects_detected",
+                    "error": str(e)
+                }
+            )
             event_objects = []
 
         # Check each condition (AND logic)
@@ -1113,7 +1165,8 @@ class AlertEngine:
         }
 
         for rule in matched_rules:
-            actions = self._parse_actions(rule.actions)
+            # P14-5.10: pass rule_id for error context
+            actions = self._parse_actions(rule.actions, rule_id=rule.id)
 
             # Execute dashboard notification
             if actions.get("dashboard_notification", False):

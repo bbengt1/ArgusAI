@@ -38,6 +38,10 @@ class Notification(Base):
     read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
+    # P14-5.9: Add relationships to Event and AlertRule
+    event = relationship("Event", back_populates="notifications")
+    rule = relationship("AlertRule", back_populates="notifications")
+
     __table_args__ = (
         Index('idx_notifications_read', 'read'),
         Index('idx_notifications_created', 'created_at'),
