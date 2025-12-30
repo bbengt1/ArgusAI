@@ -178,7 +178,7 @@ function NotificationItem({ notification, onClick, onDelete }: NotificationItemP
         {thumbnailUrl ? (
           <img
             src={thumbnailUrl}
-            alt=""
+            alt="Notification event thumbnail"
             className={cn(
               'h-16 w-16 rounded object-cover bg-muted',
               isDoorbellRing && 'ring-2 ring-cyan-400'

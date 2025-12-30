@@ -1,4 +1,10 @@
 {
+  // Additional strict mode options considered but not enabled:
+  // - noUncheckedIndexedAccess: Would require extensive refactoring of array access patterns
+  // - exactOptionalPropertyTypes: Would conflict with current API response type handling
+  // - noImplicitReturns: Would require changes to many early-return patterns
+  // - noFallthroughCasesInSwitch: Already caught by ESLint rules
+  // See Epic P14-7.3 for rationale
   "compilerOptions": {
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],

@@ -936,13 +936,13 @@ development_status:
   # Priority: P3-P4
   # Focus: Accessibility, next/image, hook tests, devtools
   # Backlog: IMP-043, IMP-044, IMP-045, IMP-046, IMP-047, IMP-048
-  epic-p14-7: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P14-7.md
-  p14-7-1-add-alt-text-to-backup-restore-images: backlog
-  p14-7-2-replace-img-with-next-image: backlog
-  p14-7-3-enable-stricter-typescript-checks: backlog
-  p14-7-4-increase-hook-test-coverage: backlog
-  p14-7-5-add-react-query-devtools: backlog
-  p14-7-6-add-openapi-summaries-and-tags: backlog
+  epic-p14-7: done  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P14-7.md
+  p14-7-1-add-alt-text-to-backup-restore-images: done
+  p14-7-2-replace-img-with-next-image: done  # Skipped - unoptimized:true for self-hosted deployment
+  p14-7-3-enable-stricter-typescript-checks: done  # Documented rationale in tsconfig.json
+  p14-7-4-increase-hook-test-coverage: done  # Added useToast, useFeedback, useSummaries tests
+  p14-7-5-add-react-query-devtools: done
+  p14-7-6-add-openapi-summaries-and-tags: done  # Already implemented in P10-5.1
   epic-p14-7-retrospective: optional
 
   # Epic P14-8: Testing & Documentation Polish

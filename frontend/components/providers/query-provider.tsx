@@ -1,11 +1,13 @@
 /**
  * TanStack Query provider configuration
  * Wraps the app to enable data fetching, caching, and state management
+ * Story P14-7.5: Added React Query DevTools for development debugging
  */
 
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ReactNode, useState } from 'react';
 
 export function QueryProvider({ children }: { children: ReactNode }) {
@@ -34,6 +36,10 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
+      {/* React Query DevTools - only visible in development (Story P14-7.5) */}
+      {process.env.NODE_ENV === 'development' && (
+        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />
+      )}
     </QueryClientProvider>
   );
 }

@@ -577,7 +577,7 @@ export function BackupRestore() {
                           !validation.contents.has_thumbnails ? 'opacity-50' : ''
                         }`}
                       >
-                        <Image className="h-4 w-4 text-muted-foreground" />
+                        <Image className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                         Thumbnails
                         {validation.contents.has_thumbnails ? (
                           <span className="text-xs text-muted-foreground">
