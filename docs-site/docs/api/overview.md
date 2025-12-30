@@ -85,6 +85,9 @@ For browser-based access, JWT tokens are used via cookies or Authorization heade
 | GET | `/ai/providers` | List AI providers |
 | POST | `/ai/describe` | Describe image |
 | GET | `/ai/usage` | Get usage stats |
+| GET | `/ai/capabilities` | Get provider capabilities |
+| GET | `/ai/context-metrics` | Get MCP context metrics |
+| POST | `/ai/refine-prompt` | AI-assisted prompt refinement |
 
 ### API Keys
 

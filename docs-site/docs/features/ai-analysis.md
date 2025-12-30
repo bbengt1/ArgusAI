@@ -55,6 +55,30 @@ This footage is from the Front Door camera at 7:15 AM on December 23, 2025.
 Describe what you see in these security camera frames.
 ```
 
+### MCP Context System
+
+The Model Context Provider (MCP) enriches AI descriptions with historical and entity data:
+
+- **Entity Context**: Information about recognized people and vehicles
+- **VIP/Blocked Status**: AI knows about VIP and blocked entities for personalized descriptions
+- **Recent Activity**: What the entity has done recently at this location
+- **Pattern Extraction**: Common activity patterns using TF-IDF algorithm
+- **Entity Adjustments**: Your corrections to entity names improve future descriptions
+
+### Performance Optimizations
+
+The MCP context system is optimized for speed:
+
+- **Parallel Queries**: All context data is gathered simultaneously
+- **80ms Timeout**: Fail-open behavior ensures descriptions are never delayed
+- **Smart Caching**: Recent context is cached to reduce database queries
+
+### Context Metrics
+
+Monitor context system performance via:
+- **API**: `GET /api/v1/ai/context-metrics`
+- Returns cache hit rate, timeout count, and system statistics
+
 ## Confidence Scoring
 
 Each AI description includes a confidence score (0-100):
