@@ -92,7 +92,8 @@ class FaceEmbedding(Base):
 
     # Relationships
     event = relationship("Event", back_populates="face_embeddings")
-    entity = relationship("RecognizedEntity", backref="face_embeddings")
+    # P14-5.5: Use back_populates for consistency (reverse rel on RecognizedEntity)
+    entity = relationship("RecognizedEntity", back_populates="face_embeddings")
 
     __table_args__ = (
         Index("idx_face_embeddings_event_id", "event_id"),

@@ -160,6 +160,19 @@ class RecognizedEntity(Base):
         lazy="dynamic"
     )
 
+    # P14-5.5: Bidirectional relationships with embedding tables
+    # Using back_populates instead of backref for consistency
+    face_embeddings = relationship(
+        "FaceEmbedding",
+        back_populates="entity",
+        lazy="dynamic"
+    )
+    vehicle_embeddings = relationship(
+        "VehicleEmbedding",
+        back_populates="entity",
+        lazy="dynamic"
+    )
+
     __table_args__ = (
         Index("idx_recognized_entities_last_seen", "last_seen_at"),
         Index("idx_recognized_entities_entity_type", "entity_type"),

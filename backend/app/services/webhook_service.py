@@ -247,12 +247,21 @@ class WebhookService:
         Returns:
             Dictionary payload matching the documented format
         """
-        # Parse objects_detected JSON
+        # Parse objects_detected JSON (P14-5.10: improved error logging)
         try:
             objects_detected = json.loads(event.objects_detected) if isinstance(
                 event.objects_detected, str
             ) else event.objects_detected or []
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"JSON parse error in event {event.id}, field 'objects_detected': {e}",
+                extra={
+                    "event_type": "json_parse_error",
+                    "event_id": event.id,
+                    "field_name": "objects_detected",
+                    "error": str(e)
+                }
+            )
             objects_detected = []
 
         # Build payload matching documented format
@@ -517,11 +526,19 @@ class WebhookService:
         Returns:
             WebhookResult if webhook was executed, None if no webhook configured
         """
-        # Parse rule actions
+        # Parse rule actions (P14-5.10: improved error logging)
         try:
             actions = json.loads(rule.actions) if isinstance(rule.actions, str) else rule.actions or {}
-        except json.JSONDecodeError:
-            logger.error(f"Failed to parse rule actions for rule {rule.id}")
+        except json.JSONDecodeError as e:
+            logger.warning(
+                f"JSON parse error in rule {rule.id}, field 'actions': {e}",
+                extra={
+                    "event_type": "json_parse_error",
+                    "rule_id": rule.id,
+                    "field_name": "actions",
+                    "error": str(e)
+                }
+            )
             return None
 
         webhook_config = actions.get("webhook")

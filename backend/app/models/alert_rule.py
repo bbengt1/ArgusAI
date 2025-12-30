@@ -92,6 +92,8 @@ class AlertRule(Base):
 
     # Story P14-2.2: Relationship to webhook logs for CASCADE delete
     webhook_logs = relationship("WebhookLog", back_populates="alert_rule", cascade="all, delete-orphan")
+    # Story P14-5.9: Relationship to notifications for bidirectional navigation
+    notifications = relationship("Notification", back_populates="rule", cascade="all, delete-orphan")
 
     cooldown_minutes = Column(Integer, nullable=False, default=5)
     last_triggered_at = Column(DateTime(timezone=True), nullable=True)
