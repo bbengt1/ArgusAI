@@ -845,6 +845,39 @@ Returns provider capabilities including video support.
 }
 ```
 
+### Get Context Metrics
+
+```http
+GET /ai/context-metrics
+```
+
+Returns MCP context system metrics for monitoring performance (Phase 14).
+
+**Response:** `200 OK`
+```json
+{
+  "cache_hit_rate": 0.75,
+  "total_requests": 1000,
+  "cache_hits": 750,
+  "cache_misses": 250,
+  "timeouts": 2,
+  "cache_ttl_seconds": 30,
+  "timeout_threshold_ms": 80,
+  "cache_size": 5
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `cache_hit_rate` | float | Ratio of cache hits to total requests (0-1) |
+| `total_requests` | integer | Total context gathering requests |
+| `cache_hits` | integer | Number of requests served from cache |
+| `cache_misses` | integer | Number of requests requiring database queries |
+| `timeouts` | integer | Number of context queries that exceeded 80ms timeout |
+| `cache_ttl_seconds` | integer | Cache entry time-to-live |
+| `timeout_threshold_ms` | integer | Query timeout threshold in milliseconds |
+| `cache_size` | integer | Number of entries currently in cache |
+
 ---
 
 ## Alert Rules
@@ -1628,4 +1661,4 @@ ws://localhost:8000/api/v1/ws
 
 ---
 
-*Last updated: December 2025 (Phase 13 - API Key Management)*
+*Last updated: December 2025 (Phase 14 - MCP Context Enhancement)*

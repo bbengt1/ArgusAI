@@ -2,9 +2,17 @@
 
 AI-powered event detection and monitoring for home security. Analyzes video feeds from multiple camera sources, detects motion and smart events, and uses AI to generate natural language descriptions of what's happening.
 
-## What's New (Phase 13 In Progress)
+## What's New (Phase 14 In Progress)
 
-### Phase 13 (Current)
+### Phase 14 (Current)
+- **MCP Context Enhancement** - Improved AI context with parallel queries, 80ms timeout, and fail-open behavior
+- **TF-IDF Pattern Extraction** - Smarter pattern detection with domain-specific stop words for security cameras
+- **VIP/Blocked Entity Context** - AI now knows about VIP and blocked entities for personalized descriptions
+- **Entity Adjustments** - User corrections to entity names are used to improve future descriptions
+- **Context Metrics API** - New `/api/v1/ai/context-metrics` endpoint for monitoring context system performance
+- **Cache Optimization** - Improved cache hit ratio through simplified key strategy
+
+### Phase 13 (Complete)
 - **API Key Management** - Create and manage API keys for external integrations
 - **Scoped Permissions** - Granular access control with `read:events`, `read:cameras`, `write:cameras`, `admin` scopes
 - **Per-Key Rate Limiting** - Configurable rate limits per API key with sliding window algorithm
@@ -929,13 +937,22 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - ✅ Remote access via Cloudflare Tunnel
 - ✅ Tunnel Settings UI
 
-**Phase 13: API Key Management** (In Progress)
+**Phase 13: API Key Management** (Complete)
 - ✅ API Key database model with bcrypt hashing
 - ✅ API endpoints for key CRUD operations
 - ✅ API key authentication middleware
 - ✅ Per-key rate limiting with sliding window
 - ✅ Scoped permissions (read:events, read:cameras, write:cameras, admin)
 - ✅ Frontend settings UI for key management
+
+**Phase 14: Quality & Performance** (In Progress)
+- ✅ MCP Context System Enhancement with parallel queries
+- ✅ 80ms query timeout with fail-open behavior
+- ✅ TF-IDF pattern extraction algorithm
+- ✅ VIP/Blocked entity context for AI descriptions
+- ✅ Entity adjustments context integration
+- ✅ Context metrics API endpoint
+- ✅ Cache hit ratio optimization
 - 📋 Cloud Relay service
 - 📋 Entity reprocessing pipeline
 - 📋 Branding customization
