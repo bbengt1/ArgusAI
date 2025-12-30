@@ -133,6 +133,10 @@ class Event(Base):
 
     __table_args__ = (
         CheckConstraint('confidence >= 0 AND confidence <= 100', name='check_confidence_range'),
+        # Story P14-5.6: Add check constraints on float columns to prevent invalid data
+        CheckConstraint('ai_confidence IS NULL OR (ai_confidence >= 0 AND ai_confidence <= 100)', name='check_ai_confidence_range'),
+        CheckConstraint('anomaly_score IS NULL OR (anomaly_score >= 0 AND anomaly_score <= 1)', name='check_anomaly_score_range'),
+        CheckConstraint('audio_confidence IS NULL OR (audio_confidence >= 0 AND audio_confidence <= 1)', name='check_audio_confidence_range'),
         Index('idx_events_timestamp_desc', 'timestamp', postgresql_ops={'timestamp': 'DESC'}),
         Index('idx_events_camera_timestamp', 'camera_id', 'timestamp'),
     )
