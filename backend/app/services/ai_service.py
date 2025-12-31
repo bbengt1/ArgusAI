@@ -58,6 +58,36 @@ After your description, rate your confidence in this description from 0 to 100, 
 Respond in this exact JSON format:
 {"description": "your detailed description here", "confidence": 85}"""
 
+# Story P15-5.1: Bounding box instruction for AI annotations
+# When enabled, this replaces the standard CONFIDENCE_INSTRUCTION to include bounding boxes
+BOUNDING_BOX_INSTRUCTION = """
+
+After your description, include bounding boxes for each detected object.
+
+For each person, vehicle, package, or animal visible in the frame:
+1. Draw an imaginary box around the object
+2. Estimate normalized coordinates (0.0 to 1.0) where:
+   - x = left edge position (0.0 = left side, 1.0 = right side)
+   - y = top edge position (0.0 = top, 1.0 = bottom)
+   - width = box width as fraction of image width
+   - height = box height as fraction of image height
+3. Assign entity_type: "person", "vehicle", "package", "animal", or "other"
+4. Rate confidence 0.0 to 1.0 for that specific detection
+
+Rate your overall confidence in this description from 0 to 100.
+
+Respond in this exact JSON format:
+{
+  "description": "your detailed description here",
+  "confidence": 85,
+  "bounding_boxes": [
+    {"x": 0.25, "y": 0.30, "width": 0.15, "height": 0.40, "entity_type": "person", "confidence": 0.92, "label": "Person walking toward door"},
+    {"x": 0.60, "y": 0.50, "width": 0.25, "height": 0.20, "entity_type": "vehicle", "confidence": 0.88, "label": "Silver sedan in driveway"}
+  ]
+}
+
+If no objects are clearly visible, return an empty bounding_boxes array: "bounding_boxes": []"""
+
 
 MULTI_FRAME_SYSTEM_PROMPT = """You are analyzing a sequence of {num_frames} frames from a security camera video, shown in chronological order.
 
@@ -392,8 +422,12 @@ class AIProviderBase(ABC):
         if audio_transcription and audio_transcription.strip():
             prompt += f'\n\nAudio transcription: "{audio_transcription.strip()}"'
 
-        # Story P3-6.1: Add confidence instruction to all prompts
-        prompt += CONFIDENCE_INSTRUCTION
+        # Story P3-6.1, P15-5.1: Add confidence/bounding box instruction
+        # Use bounding box instruction when annotations are enabled
+        if ai_service and ai_service.annotations_enabled:
+            prompt += BOUNDING_BOX_INSTRUCTION
+        else:
+            prompt += CONFIDENCE_INSTRUCTION
 
         return prompt
 
@@ -443,25 +477,31 @@ class AIProviderBase(ABC):
         if audio_transcription and audio_transcription.strip():
             prompt += f'\n\nAudio transcription: "{audio_transcription.strip()}"'
 
-        # Story P3-6.1: Add confidence instruction to all prompts
-        prompt += CONFIDENCE_INSTRUCTION
+        # Story P3-6.1, P15-5.1: Add confidence/bounding box instruction
+        # Use bounding box instruction when annotations are enabled
+        if ai_service and ai_service.annotations_enabled:
+            prompt += BOUNDING_BOX_INSTRUCTION
+        else:
+            prompt += CONFIDENCE_INSTRUCTION
 
         return prompt
 
-    def _parse_confidence_response(self, response_text: str) -> tuple[str, Optional[int]]:
-        """Parse AI response for description and confidence score (Story P3-6.1)
+    def _parse_confidence_response(self, response_text: str) -> tuple[str, Optional[int], Optional[List[Dict[str, Any]]]]:
+        """Parse AI response for description, confidence score, and bounding boxes (Story P3-6.1, P15-5.1)
 
-        Attempts to extract structured JSON response with description and confidence.
+        Attempts to extract structured JSON response with description, confidence, and bounding_boxes.
         Falls back to plain text parsing if JSON is not found.
 
         Args:
             response_text: Raw response text from AI provider
 
         Returns:
-            Tuple of (description, ai_confidence) where ai_confidence may be None
+            Tuple of (description, ai_confidence, bounding_boxes) where ai_confidence and bounding_boxes may be None
         """
         import json
         import re
+
+        bounding_boxes = None
 
         # Try JSON parsing first - use json.loads for proper handling of escapes
         try:
@@ -474,9 +514,38 @@ class AIProviderBase(ABC):
                 description = data.get('description', '').strip()
                 confidence = data.get('confidence')
 
+                # Story P15-5.1: Extract bounding boxes if present
+                raw_boxes = data.get('bounding_boxes')
+                if raw_boxes and isinstance(raw_boxes, list):
+                    # Validate each bounding box
+                    validated_boxes = []
+                    for box in raw_boxes:
+                        if isinstance(box, dict):
+                            # Validate required fields
+                            x = box.get('x')
+                            y = box.get('y')
+                            width = box.get('width')
+                            height = box.get('height')
+                            if all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in [x, y, width, height] if v is not None):
+                                validated_boxes.append({
+                                    'x': float(x) if x is not None else 0,
+                                    'y': float(y) if y is not None else 0,
+                                    'width': float(width) if width is not None else 0,
+                                    'height': float(height) if height is not None else 0,
+                                    'entity_type': box.get('entity_type', 'other'),
+                                    'confidence': float(box.get('confidence', 0.5)),
+                                    'label': box.get('label', ''),
+                                })
+                    if validated_boxes:
+                        bounding_boxes = validated_boxes
+                        logger.info(
+                            f"Extracted {len(validated_boxes)} bounding boxes from AI response",
+                            extra={"box_count": len(validated_boxes)}
+                        )
+
                 if isinstance(confidence, (int, float)) and 0 <= confidence <= 100:
                     if description:
-                        return description, int(confidence)
+                        return description, int(confidence), bounding_boxes
 
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             logger.debug(f"JSON parsing failed for confidence extraction: {e}")
@@ -489,7 +558,7 @@ class AIProviderBase(ABC):
             partial_desc = truncated_match.group(1).strip()
             logger.warning(f"Detected truncated JSON response, extracting partial description: {partial_desc[:50]}...")
             # Return partial description without confidence (since it was cut off)
-            return partial_desc, None
+            return partial_desc, None, None
 
         # Fallback: Try to extract confidence from plain text
         # Look for patterns like "85% confident", "confidence: 85", "confidence is 85"
@@ -506,13 +575,13 @@ class AIProviderBase(ABC):
                     confidence = int(match.group(1))
                     if 0 <= confidence <= 100:
                         logger.debug(f"Extracted confidence {confidence} from plain text")
-                        return response_text, confidence
+                        return response_text, confidence, None
                 except (ValueError, IndexError):
                     continue
 
         # No confidence found - return original text with None
         logger.debug("No confidence score found in AI response")
-        return response_text, None
+        return response_text, None, None
 
     def _extract_objects(self, description: str) -> List[str]:
         """Extract object types from description text"""
@@ -587,7 +656,7 @@ class OpenAIProvider(AIProviderBase):
             raw_response = response.choices[0].message.content.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Extract usage stats
             tokens_used = response.usage.total_tokens if response.usage else 0
@@ -646,7 +715,8 @@ class OpenAIProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -747,7 +817,7 @@ class OpenAIProvider(AIProviderBase):
             raw_response = response.choices[0].message.content.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Extract usage stats
             tokens_used = response.usage.total_tokens if response.usage else 0
@@ -789,7 +859,8 @@ class OpenAIProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -1133,7 +1204,7 @@ class ClaudeProvider(AIProviderBase):
             raw_response = response.content[0].text.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Extract usage stats
             input_tokens = response.usage.input_tokens
@@ -1163,7 +1234,8 @@ class ClaudeProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -1227,7 +1299,7 @@ class ClaudeProvider(AIProviderBase):
             raw_response = response.content[0].text.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Extract usage stats
             input_tokens = response.usage.input_tokens
@@ -1269,7 +1341,8 @@ class ClaudeProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -1347,7 +1420,7 @@ class GeminiProvider(AIProviderBase):
             raw_response = response.text.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Gemini doesn't provide detailed usage stats in all cases
             tokens_used = 150  # Estimate
@@ -1370,7 +1443,8 @@ class GeminiProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -1432,7 +1506,7 @@ class GeminiProvider(AIProviderBase):
             raw_response = response.text.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Gemini doesn't provide detailed usage stats in all cases
             # Estimate based on number of images (more images = more tokens)
@@ -1466,7 +1540,8 @@ class GeminiProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -1721,7 +1796,7 @@ class GeminiProvider(AIProviderBase):
         raw_response = response.text.strip()
 
         # Story P3-6.1: Parse response for description and AI confidence
-        description, ai_confidence = self._parse_confidence_response(raw_response)
+        description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
         # Estimate token usage: ~258 tokens/frame at 1fps
         estimated_frames = int(video_duration_seconds) if video_duration_seconds > 0 else 10
@@ -1756,7 +1831,8 @@ class GeminiProvider(AIProviderBase):
             response_time_ms=elapsed_ms,
             cost_estimate=cost,
             success=True,
-            ai_confidence=ai_confidence
+            ai_confidence=ai_confidence,
+            bounding_boxes=bounding_boxes
         )
 
     async def _describe_video_file_api(
@@ -1852,7 +1928,7 @@ class GeminiProvider(AIProviderBase):
         raw_response = response.text.strip()
 
         # Story P3-6.1: Parse response for description and AI confidence
-        description, ai_confidence = self._parse_confidence_response(raw_response)
+        description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
         # Estimate token usage
         estimated_frames = int(video_duration_seconds) if video_duration_seconds > 0 else 10
@@ -1893,7 +1969,8 @@ class GeminiProvider(AIProviderBase):
             response_time_ms=elapsed_ms,
             cost_estimate=cost,
             success=True,
-            ai_confidence=ai_confidence
+            ai_confidence=ai_confidence,
+            bounding_boxes=bounding_boxes
         )
 
     async def _get_video_duration(self, video_path: "Path") -> float:
@@ -2130,7 +2207,7 @@ class GrokProvider(AIProviderBase):
             raw_response = response.choices[0].message.content.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Extract usage stats
             tokens_used = response.usage.total_tokens if response.usage else 0
@@ -2172,7 +2249,8 @@ class GrokProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -2242,7 +2320,7 @@ class GrokProvider(AIProviderBase):
             raw_response = response.choices[0].message.content.strip()
 
             # Story P3-6.1: Parse response for description and AI confidence
-            description, ai_confidence = self._parse_confidence_response(raw_response)
+            description, ai_confidence, bounding_boxes = self._parse_confidence_response(raw_response)
 
             # Extract usage stats
             tokens_used = response.usage.total_tokens if response.usage else 0
@@ -2301,7 +2379,8 @@ class GrokProvider(AIProviderBase):
                 response_time_ms=elapsed_ms,
                 cost_estimate=cost,
                 success=True,
-                ai_confidence=ai_confidence
+                ai_confidence=ai_confidence,
+                bounding_boxes=bounding_boxes
             )
 
         except Exception as e:
@@ -2371,6 +2450,8 @@ class AIService:
         self.ab_test_enabled: bool = False  # A/B test mode flag
         self.ab_test_prompt: Optional[str] = None  # Experiment prompt for A/B testing
         self.camera_prompts: Dict[str, str] = {}  # Camera-specific prompt overrides
+        # Story P15-5.1: AI annotations (bounding boxes)
+        self.annotations_enabled: bool = False  # Enable bounding box detection
 
     def _estimate_image_tokens(self, provider: str, num_images: int, resolution: str = "default") -> int:
         """
@@ -2485,6 +2566,7 @@ class AIService:
                     'settings_description_prompt',  # Custom description prompt from AI Provider Configuration
                     'settings_ab_test_enabled',  # Story P4-5.4: A/B test toggle
                     'settings_ab_test_prompt',  # Story P4-5.4: Experiment prompt
+                    'enable_ai_annotations',  # Story P15-5.1: Enable bounding box annotations
                 ])
             ).all()
 
@@ -2506,6 +2588,13 @@ class AIService:
             if 'settings_ab_test_prompt' in keys and keys['settings_ab_test_prompt']:
                 self.ab_test_prompt = keys['settings_ab_test_prompt']
                 logger.info(f"A/B test experiment prompt loaded: '{self.ab_test_prompt[:50]}...'")
+
+            # Story P15-5.1: Load AI annotations setting
+            if 'enable_ai_annotations' in keys:
+                self.annotations_enabled = keys['enable_ai_annotations'].lower() == 'true'
+            else:
+                self.annotations_enabled = False
+            logger.info(f"AI annotations: {'enabled' if self.annotations_enabled else 'disabled'}")
 
             # Story P4-5.4: Load camera-specific prompt overrides
             from app.models.camera import Camera

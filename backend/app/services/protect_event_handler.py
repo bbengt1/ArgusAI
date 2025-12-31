@@ -2510,7 +2510,10 @@ class ProtectEventHandler:
                 ai_cost=ai_result.cost_estimate,
                 # Story P3-7.5 AC4: Store key frames for gallery display
                 key_frames_base64=key_frames_base64,
-                frame_timestamps=frame_timestamps
+                frame_timestamps=frame_timestamps,
+                # Story P15-5.1: Store bounding boxes for annotations
+                bounding_boxes=json.dumps(ai_result.bounding_boxes) if ai_result.bounding_boxes else None,
+                has_annotations=bool(ai_result.bounding_boxes)
             )
 
             # Story P3-1.4: Use pre-generated event ID if provided
@@ -2520,6 +2523,48 @@ class ProtectEventHandler:
             db.add(event)
             db.commit()
             db.refresh(event)
+
+            # Story P15-5.3: Generate annotated thumbnail if bounding boxes available
+            if ai_result.bounding_boxes and snapshot_result.thumbnail_path:
+                try:
+                    from app.services.frame_annotation_service import get_frame_annotation_service
+                    import os
+                    annotation_service = get_frame_annotation_service()
+
+                    # Get full path to thumbnail
+                    from app.core.config import settings
+                    thumbnail_dir = getattr(settings, 'THUMBNAIL_DIR', 'data/thumbnails')
+                    original_path = os.path.join(thumbnail_dir, snapshot_result.thumbnail_path)
+
+                    # Generate annotated frame
+                    annotated_path = annotation_service.annotate_frame(
+                        original_path,
+                        ai_result.bounding_boxes
+                    )
+
+                    if annotated_path:
+                        logger.info(
+                            f"Generated annotated thumbnail for event {event.id}",
+                            extra={
+                                "event_type": "annotated_thumbnail_generated",
+                                "event_id": event.id,
+                                "camera_id": camera.id,
+                                "box_count": len(ai_result.bounding_boxes),
+                                "annotated_path": annotated_path
+                            }
+                        )
+                except Exception as annotation_error:
+                    # Don't fail event creation if annotation generation fails
+                    logger.warning(
+                        f"Failed to generate annotated thumbnail for event {event.id}: {annotation_error}",
+                        extra={
+                            "event_type": "annotation_generation_error",
+                            "event_id": event.id,
+                            "camera_id": camera.id,
+                            "error_type": type(annotation_error).__name__,
+                            "error_message": str(annotation_error)
+                        }
+                    )
 
             # Story P8-2.1: Save extracted frames to filesystem after event is stored
             if extracted_frames and store_frames:
