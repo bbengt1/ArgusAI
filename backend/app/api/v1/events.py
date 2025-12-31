@@ -1960,7 +1960,9 @@ async def reanalyze_event(
             low_confidence=event.low_confidence,
             vague_reason=event.vague_reason,
             reanalyzed_at=event.reanalyzed_at,
-            reanalysis_count=event.reanalysis_count
+            reanalysis_count=event.reanalysis_count,
+            has_annotations=event.has_annotations,
+            bounding_boxes=event.bounding_boxes
         )
 
     except HTTPException:
