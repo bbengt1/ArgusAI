@@ -233,12 +233,13 @@ class ProtectEventHandler:
             is_animal = getattr(new_obj, 'is_animal_currently_detected', None)
             last_smart_event_ids = getattr(new_obj, 'last_smart_detect_event_ids', None)
             active_smart_types = getattr(new_obj, 'active_smart_detect_types', None)
-            logger.debug(
+            # DEBUG: Temporarily log at INFO level to diagnose missing events
+            logger.info(
                 f"WebSocket update for {model_type} {protect_camera_id[:8]}...: "
                 f"motion={is_motion}, smart={is_smart_detected}, "
                 f"person={is_person}, vehicle={is_vehicle}, package={is_package}, animal={is_animal}",
                 extra={
-                    "event_type": "protect_ws_update",
+                    "event_type": "protect_ws_update_debug",
                     "model_type": model_type,
                     "protect_camera_id": protect_camera_id,
                     "is_motion_currently_detected": is_motion,
@@ -255,6 +256,14 @@ class ProtectEventHandler:
             # Parse event types from the message (AC2)
             event_types = self._parse_event_types(new_obj, model_type)
             if not event_types:
+                logger.info(
+                    f"No event types parsed from {model_type} update - no motion/smart detection active",
+                    extra={
+                        "event_type": "protect_no_event_types_debug",
+                        "model_type": model_type,
+                        "protect_camera_id": protect_camera_id,
+                    }
+                )
                 return False
 
             # Look up camera in database (AC3)

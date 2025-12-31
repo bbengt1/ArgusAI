@@ -656,6 +656,27 @@ class ProtectService:
                     # Update last message time for activity tracking
                     self._last_ws_message_time[controller_id] = datetime.now(timezone.utc)
 
+                    # DEBUG: Log all incoming WebSocket messages
+                    msg_type = type(msg).__name__
+                    msg_info = {}
+                    if hasattr(msg, 'model_id'):
+                        msg_info['model_id'] = msg.model_id
+                    if hasattr(msg, 'action'):
+                        msg_info['action'] = str(msg.action)
+                    if hasattr(msg, 'new_obj'):
+                        msg_info['new_obj_type'] = type(msg.new_obj).__name__ if msg.new_obj else None
+                    if hasattr(msg, 'old_obj'):
+                        msg_info['old_obj_type'] = type(msg.old_obj).__name__ if msg.old_obj else None
+                    logger.info(
+                        f"WebSocket message received: {msg_type}",
+                        extra={
+                            "event_type": "protect_ws_message_debug",
+                            "controller_id": controller_id,
+                            "msg_type": msg_type,
+                            **msg_info
+                        }
+                    )
+
                     # Handle camera status changes (Story P2-2.4 AC6)
                     asyncio.create_task(
                         self._handle_websocket_event(controller_id, msg)
