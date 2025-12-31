@@ -1036,22 +1036,24 @@ development_status:
   # Priority: P3
   # Focus: Multiple entities per event, multi-select assignment
   # FRs Covered: FR33-FR37
-  epic-p15-4: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P15-4.md
-  p15-4-1-backend-multi-entity-support: backlog
-  p15-4-2-multi-entity-display-on-event-cards: backlog
-  p15-4-3-entity-detail-multi-event-query: backlog
-  p15-4-4-multi-select-entity-assignment-ui: backlog
-  p15-4-5-alert-rules-multi-entity-trigger: backlog
-  epic-p15-4-retrospective: optional
+  # Status: WILL NOT IMPLEMENT - Decided not to pursue this feature
+  epic-p15-4: will-not-implement
+  p15-4-1-backend-multi-entity-support: will-not-implement
+  p15-4-2-multi-entity-display-on-event-cards: will-not-implement
+  p15-4-3-entity-detail-multi-event-query: will-not-implement
+  p15-4-4-multi-select-entity-assignment-ui: will-not-implement
+  p15-4-5-alert-rules-multi-entity-trigger: will-not-implement
+  epic-p15-4-retrospective: will-not-implement
 
   # Epic P15-5: AI Visual Annotations
   # Priority: P3
   # Focus: Bounding boxes, color-coded labels, annotation toggle
   # FRs Covered: FR38-FR44
-  epic-p15-5: contexted  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P15-5.md
-  p15-5-1-ai-bounding-box-response-schema: backlog
-  p15-5-2-frame-annotation-service: backlog
-  p15-5-3-store-annotated-frames: backlog
-  p15-5-4-annotation-toggle-in-event-detail: backlog
-  p15-5-5-annotation-legend-and-styling: backlog
+  # Status: COMPLETE 2025-12-31
+  epic-p15-5: done  # Tech spec: docs/sprint-artifacts/tech-spec-epic-P15-5.md
+  p15-5-1-ai-bounding-box-response-schema: done
+  p15-5-2-frame-annotation-service: done
+  p15-5-3-store-annotated-frames: done
+  p15-5-4-annotation-toggle-in-event-detail: done
+  p15-5-5-annotation-legend-and-styling: done
   epic-p15-5-retrospective: optional
