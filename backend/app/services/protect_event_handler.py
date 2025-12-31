@@ -50,6 +50,8 @@ import numpy as np
 from PIL import Image
 from sqlalchemy.orm import Session
 
+from uiprotect.data.types import EventType as ProtectEventType
+
 from app.core.database import get_db_session
 from app.models.camera import Camera
 from app.models.event import Event
@@ -214,29 +216,15 @@ class ProtectEventHandler:
             if not new_obj:
                 return False
 
-            # Only process Camera or Doorbell events
+            # Process Camera, Doorbell, or native Event objects
             model_type = type(new_obj).__name__
+
+            # Handle native Event objects from uiprotect (motion, smart detection, ring)
+            if model_type == 'Event':
+                return await self._handle_native_event(controller_id, new_obj)
+
+            # Only process Camera or Doorbell state updates (legacy path)
             if model_type not in ('Camera', 'Doorbell'):
-                # DEBUG: Log Event type objects to understand their structure
-                if model_type == 'Event':
-                    event_type = getattr(new_obj, 'type', None)
-                    event_camera = getattr(new_obj, 'camera', None)
-                    event_camera_id = getattr(new_obj, 'camera_id', None)
-                    event_smart = getattr(new_obj, 'smart_detect_types', None)
-                    event_start = getattr(new_obj, 'start', None)
-                    event_end = getattr(new_obj, 'end', None)
-                    logger.info(
-                        f"Protect Event object received: type={event_type}, smart_types={event_smart}",
-                        extra={
-                            "event_type": "protect_native_event_debug",
-                            "model_type": model_type,
-                            "protect_event_type": str(event_type) if event_type else None,
-                            "camera_id": str(event_camera_id) if event_camera_id else None,
-                            "smart_detect_types": str(event_smart) if event_smart else None,
-                            "start": str(event_start) if event_start else None,
-                            "end": str(event_end) if event_end else None,
-                        }
-                    )
                 return False
 
             # Extract protect_camera_id
@@ -614,6 +602,174 @@ class ProtectEventHandler:
                 event_types.append("ring")
 
         return event_types
+
+    async def _handle_native_event(self, controller_id: str, event_obj: Any) -> bool:
+        """
+        Handle native uiprotect Event objects.
+
+        These are direct event notifications from Protect (MOTION, SMART_DETECT, RING)
+        rather than Camera state updates.
+
+        Args:
+            controller_id: Controller UUID
+            event_obj: Native Event object from uiprotect
+
+        Returns:
+            True if event was processed, False if filtered/skipped
+        """
+        try:
+            # Get event properties
+            event_type = getattr(event_obj, 'type', None)
+            protect_camera_id = getattr(event_obj, 'camera_id', None)
+            smart_detect_types = getattr(event_obj, 'smart_detect_types', []) or []
+            event_start = getattr(event_obj, 'start', None)
+            protect_event_id = getattr(event_obj, 'id', None)
+
+            # Only process motion, smart detection, and ring events
+            if event_type not in (ProtectEventType.MOTION, ProtectEventType.SMART_DETECT, ProtectEventType.RING):
+                return False
+
+            if not protect_camera_id:
+                logger.debug(
+                    f"Native event has no camera_id - skipping",
+                    extra={
+                        "event_type": "protect_native_event_no_camera",
+                        "protect_event_type": str(event_type),
+                        "protect_event_id": str(protect_event_id) if protect_event_id else None,
+                    }
+                )
+                return False
+
+            # Convert to our event type format
+            event_types = []
+            if event_type == ProtectEventType.MOTION:
+                event_types.append("motion")
+            elif event_type == ProtectEventType.RING:
+                event_types.append("ring")
+            elif event_type == ProtectEventType.SMART_DETECT:
+                # Convert smart_detect_types to our format
+                for smart_type in smart_detect_types:
+                    smart_value = getattr(smart_type, 'value', str(smart_type)).lower()
+                    event_key = f"smart_detect_{smart_value}"
+                    if event_key in VALID_EVENT_TYPES:
+                        event_types.append(event_key)
+                # If no specific smart type found, fall back to motion
+                if not event_types:
+                    event_types.append("motion")
+
+            logger.info(
+                f"Native Protect event received: {event_type.value}, types={event_types}",
+                extra={
+                    "event_type": "protect_native_event_received",
+                    "controller_id": controller_id,
+                    "protect_camera_id": protect_camera_id,
+                    "protect_event_type": event_type.value,
+                    "detected_types": event_types,
+                    "smart_detect_types": [str(t) for t in smart_detect_types],
+                    "protect_event_id": str(protect_event_id) if protect_event_id else None,
+                }
+            )
+
+            # Look up camera and process
+            with get_db_session() as db:
+                camera = self._get_camera_by_protect_id(db, protect_camera_id)
+
+                if not camera:
+                    logger.debug(
+                        f"Native event from unregistered camera - discarding",
+                        extra={
+                            "event_type": "protect_native_event_unknown_camera",
+                            "controller_id": controller_id,
+                            "protect_camera_id": protect_camera_id
+                        }
+                    )
+                    return False
+
+                if not camera.is_enabled or camera.source_type != 'protect':
+                    logger.debug(
+                        f"Native event from disabled camera '{camera.name}' - discarding",
+                        extra={
+                            "event_type": "protect_native_event_disabled_camera",
+                            "camera_id": camera.id,
+                            "camera_name": camera.name,
+                        }
+                    )
+                    return False
+
+                # Filter based on camera's smart_detection_types configuration
+                allowed_types = camera.smart_detection_types or []
+                matching_types = self._filter_event_types(event_types, allowed_types)
+
+                if not matching_types:
+                    logger.debug(
+                        f"Native event types {event_types} not in camera filter {allowed_types} - discarding",
+                        extra={
+                            "event_type": "protect_native_event_filtered",
+                            "camera_id": camera.id,
+                            "camera_name": camera.name,
+                            "detected_types": event_types,
+                            "allowed_types": allowed_types,
+                        }
+                    )
+                    return False
+
+                # Check deduplication cooldown
+                primary_type = matching_types[0] if matching_types else "unknown"
+                if self._is_duplicate(camera.id, primary_type, camera.motion_cooldown):
+                    logger.debug(
+                        f"Native event deduplicated for camera '{camera.name}' ({primary_type})",
+                        extra={
+                            "event_type": "protect_native_event_deduplicated",
+                            "camera_id": camera.id,
+                            "camera_name": camera.name,
+                            "event_subtype": primary_type,
+                        }
+                    )
+                    return False
+
+                # Determine if this is a doorbell ring
+                is_doorbell_ring = event_type == ProtectEventType.RING
+
+                # Get timestamp
+                event_timestamp = event_start or datetime.now(timezone.utc)
+
+                logger.info(
+                    f"Processing native event from camera '{camera.name}': {matching_types}",
+                    extra={
+                        "event_type": "protect_native_event_processing",
+                        "controller_id": controller_id,
+                        "camera_id": camera.id,
+                        "camera_name": camera.name,
+                        "detected_types": matching_types,
+                        "is_doorbell_ring": is_doorbell_ring,
+                        "protect_event_id": str(protect_event_id) if protect_event_id else None,
+                    }
+                )
+
+                # Process the event (get snapshot, AI analysis, save to DB)
+                await self._process_event(
+                    controller_id=controller_id,
+                    db=db,
+                    camera=camera,
+                    event_types=matching_types,
+                    is_doorbell_ring=is_doorbell_ring,
+                    event_timestamp=event_timestamp,
+                    protect_event_id=str(protect_event_id) if protect_event_id else None,
+                )
+
+                return True
+
+        except Exception as e:
+            logger.error(
+                f"Error handling native Protect event: {e}",
+                extra={
+                    "event_type": "protect_native_event_error",
+                    "controller_id": controller_id,
+                    "error": str(e),
+                },
+                exc_info=True
+            )
+            return False
 
     def _get_camera_by_protect_id(
         self,
