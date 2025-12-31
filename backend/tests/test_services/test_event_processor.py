@@ -468,6 +468,7 @@ class TestEventProcessorIntegration:
         mock_ai_result.provider = "openai"
         mock_ai_result.response_time_ms = 2341
         mock_ai_result.cost_estimate = 0.001
+        mock_ai_result.bounding_boxes = None  # Story P15-5.1: No bounding boxes in this test
         processor.ai_service.generate_description = AsyncMock(return_value=mock_ai_result)
 
         # Start processor (without database initialization)
@@ -538,6 +539,7 @@ class TestEventProcessorIntegration:
         mock_ai_result.provider = "openai"
         mock_ai_result.response_time_ms = 100
         mock_ai_result.cost_estimate = 0.001  # Add cost estimate
+        mock_ai_result.bounding_boxes = None  # Story P15-5.1: No bounding boxes in this test
         processor.ai_service.generate_description = AsyncMock(return_value=mock_ai_result)
 
         # Start processor
