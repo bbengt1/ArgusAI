@@ -604,6 +604,10 @@ def list_events(
                 # Story P9-4.4: Entity association for assignment UI
                 "entity_id": entity_map.get(event.id, {}).get("entity_id"),
                 "entity_name": entity_map.get(event.id, {}).get("entity_name"),
+                # Story P15-5.1: AI Visual Annotations
+                "has_annotations": getattr(event, 'has_annotations', False),
+                "bounding_boxes": getattr(event, 'bounding_boxes', None),
+                "annotated_thumbnail_path": _get_annotated_thumbnail_path(event),
             }
             # BUG-004: Include feedback if exists so UI can show persisted state
             if event.feedback:
