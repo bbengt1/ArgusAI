@@ -61,13 +61,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def validate_password_strength(password: str) -> tuple[bool, str]:
     """
-    Validate password meets security requirements
+    Validate password meets security requirements (Story P15-2.4)
 
-    Requirements:
-    - At least 8 characters
+    Requirements (per tech spec):
+    - Minimum 8 characters
     - At least 1 uppercase letter
+    - At least 1 lowercase letter
     - At least 1 number
-    - At least 1 special character
+    - At least 1 special character (!@#$%^&*()_+-=[]{}|;:,.<>?)
 
     Args:
         password: Password to validate
@@ -87,10 +88,13 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     if not re.search(r'[A-Z]', password):
         return False, "Password must contain at least one uppercase letter"
 
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter"
+
     if not re.search(r'[0-9]', password):
         return False, "Password must contain at least one number"
 
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;\'`~]', password):
+    if not re.search(r'[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]', password):
         return False, "Password must contain at least one special character"
 
     return True, ""

@@ -70,6 +70,12 @@ import type {
   IChangePasswordRequest,
   IMessageResponse,
   ISetupStatusResponse,
+  IUserCreate,
+  IUserCreateResponse,
+  IUserUpdate,
+  IPasswordResetResponse,
+  ISession,
+  ISessionRevokeResponse,
 } from '@/types/auth';
 import type {
   IBackupResponse,
@@ -1091,6 +1097,102 @@ export const apiClient = {
       return apiFetch('/auth/setup', {
         method: 'POST',
         body: JSON.stringify(request),
+      });
+    },
+
+    // Session Management (Story P15-2.7)
+
+    /**
+     * List all active sessions for current user
+     * @returns List of sessions with current session marked
+     */
+    listSessions: async (): Promise<ISession[]> => {
+      return apiFetch('/auth/sessions');
+    },
+
+    /**
+     * Revoke a specific session
+     * @param sessionId Session ID to revoke
+     */
+    revokeSession: async (sessionId: string): Promise<void> => {
+      return apiFetch(`/auth/sessions/${sessionId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
+     * Revoke all sessions except current
+     * @returns Number of sessions revoked
+     */
+    revokeAllSessions: async (): Promise<ISessionRevokeResponse> => {
+      return apiFetch('/auth/sessions', {
+        method: 'DELETE',
+      });
+    },
+  },
+
+  // User Management (Story P15-2.3)
+  users: {
+    /**
+     * Create a new user (admin only)
+     * @param request User creation request
+     * @returns Created user with temporary password
+     */
+    create: async (request: IUserCreate): Promise<IUserCreateResponse> => {
+      return apiFetch('/users', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+    },
+
+    /**
+     * List all users (admin only)
+     * @returns List of all users
+     */
+    list: async (): Promise<IUser[]> => {
+      return apiFetch('/users');
+    },
+
+    /**
+     * Get a specific user by ID (admin only)
+     * @param userId User ID
+     * @returns User details
+     */
+    get: async (userId: string): Promise<IUser> => {
+      return apiFetch(`/users/${userId}`);
+    },
+
+    /**
+     * Update a user (admin only)
+     * @param userId User ID
+     * @param request Update request
+     * @returns Updated user
+     */
+    update: async (userId: string, request: IUserUpdate): Promise<IUser> => {
+      return apiFetch(`/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(request),
+      });
+    },
+
+    /**
+     * Delete a user (admin only)
+     * @param userId User ID
+     */
+    delete: async (userId: string): Promise<void> => {
+      return apiFetch(`/users/${userId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    /**
+     * Reset a user's password (admin only)
+     * @param userId User ID
+     * @returns New temporary password and expiry
+     */
+    resetPassword: async (userId: string): Promise<IPasswordResetResponse> => {
+      return apiFetch(`/users/${userId}/reset`, {
+        method: 'POST',
       });
     },
   },

@@ -48,6 +48,7 @@ from app.api.v1.audio import router as audio_router  # Story P6-3.2: Audio Event
 from app.api.v1.devices import router as devices_router  # Story P11-2.4: Device Registration
 from app.api.v1.mobile_auth import router as mobile_auth_router  # Story P12-3: Mobile Auth
 from app.api.v1.api_keys import router as api_keys_router  # Story P13-1: API Key Management
+from app.api.v1.users import router as users_router  # Story P15-2.3: User Management
 from app.services.event_processor import initialize_event_processor, shutdown_event_processor
 from app.services.cleanup_service import get_cleanup_service
 from app.services.protect_service import get_protect_service  # Story P2-1.4: Protect WebSocket
@@ -189,6 +190,35 @@ async def scheduled_pattern_calculation_job():
         logger.error(f"Scheduled pattern calculation failed: {e}", exc_info=True)
 
 
+async def scheduled_session_cleanup_job():
+    """
+    Scheduled session cleanup job that runs hourly (Story P15-2.8)
+
+    Removes expired sessions from the database to keep session table clean
+    and ensure expired sessions don't accumulate.
+    """
+    try:
+        logger.info("Starting scheduled session cleanup")
+
+        from app.core.database import get_db_session
+        from app.services.session_service import SessionService
+
+        with get_db_session() as db:
+            session_service = SessionService(db)
+            count = session_service.cleanup_expired_sessions()
+
+            logger.info(
+                f"Scheduled session cleanup complete: {count} expired sessions removed",
+                extra={
+                    "event_type": "scheduled_session_cleanup_complete",
+                    "expired_count": count
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"Scheduled session cleanup failed: {e}", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -293,12 +323,21 @@ async def lifespan(app: FastAPI):
         replace_existing=True
     )
 
+    # Add session cleanup job (Story P15-2.8) - Hourly
+    scheduler.add_job(
+        scheduled_session_cleanup_job,
+        trigger=CronTrigger(minute=30),  # Every hour at :30
+        id="hourly_session_cleanup",
+        name="Hourly session cleanup",
+        replace_existing=True
+    )
+
     scheduler.start()
     logger.info(
         "Scheduler started",
         extra={
             "event_type": "scheduler_init",
-            "jobs": ["daily_cleanup", "system_metrics_update", "daily_backup", "hourly_pattern_calculation"]
+            "jobs": ["daily_cleanup", "system_metrics_update", "daily_backup", "hourly_pattern_calculation", "hourly_session_cleanup"]
         }
     )
 
@@ -967,6 +1006,7 @@ app.include_router(audio_router, prefix=settings.API_V1_PREFIX)  # Story P6-3.2 
 app.include_router(devices_router, prefix=settings.API_V1_PREFIX)  # Story P11-2.4 - Device Registration
 app.include_router(mobile_auth_router, prefix=settings.API_V1_PREFIX)  # Story P12-3 - Mobile Auth
 app.include_router(api_keys_router, prefix=settings.API_V1_PREFIX)  # Story P13-1 - API Key Management
+app.include_router(users_router, prefix=settings.API_V1_PREFIX)  # Story P15-2.3 - User Management
 
 # Thumbnail serving endpoint (with CORS support)
 from fastapi.responses import FileResponse, Response as FastAPIResponse

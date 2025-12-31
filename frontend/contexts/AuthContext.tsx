@@ -1,22 +1,27 @@
 /**
- * Authentication context for managing user auth state (Story 6.3, AC: #9)
+ * Authentication context for managing user auth state (Story 6.3, P15-2)
  *
  * Features:
  * - Real API authentication with backend
  * - User session management via localStorage token + HTTP-only cookies
  * - Auto-check authentication on mount
  * - Login/logout functionality
+ * - Role-based access control (Story P15-2.9)
  */
 
 'use client';
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { apiClient, ApiError, setAuthToken, clearAuthToken } from '@/lib/api-client';
+import type { UserRole } from '@/types/auth';
 
 export interface User {
   id: string;
   username: string;
+  email: string | null;
+  role: UserRole;
   is_active: boolean;
+  must_change_password: boolean;
   created_at: string;
   last_login: string | null;
 }
@@ -25,6 +30,10 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isAdmin: boolean;
+  isOperator: boolean;
+  isViewer: boolean;
+  canManageUsers: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -92,12 +101,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Role checks (Story P15-2.9)
+  const isAdmin = user?.role === 'admin';
+  const isOperator = user?.role === 'operator';
+  const isViewer = user?.role === 'viewer';
+  const canManageUsers = isAdmin;
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: !!user,
         isLoading,
+        isAdmin,
+        isOperator,
+        isViewer,
+        canManageUsers,
         login,
         logout,
         checkAuth,

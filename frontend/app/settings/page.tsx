@@ -28,6 +28,7 @@ import {
   Network,
   BarChart3,
   Sparkles,
+  Users,
 } from 'lucide-react';
 
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -36,6 +37,7 @@ import { ConnectionErrorBanner, getConnectionErrorType } from '@/components/prot
 import { apiClient } from '@/lib/api-client';
 import { completeSettingsSchema } from '@/lib/settings-validation';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useAuth } from '@/contexts/AuthContext';
 import type { SystemSettings, StorageStats } from '@/types/settings';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -67,6 +69,8 @@ import { FrameSamplingStrategySelector, type FrameSamplingStrategy } from '@/com
 import { PasswordChangeForm } from '@/components/settings/PasswordChangeForm';
 import { DeviceManager } from '@/components/settings/DeviceManager';
 import { APIKeySettings } from '@/components/settings/APIKeySettings';
+import { UserManagement } from '@/components/settings/UserManagement';
+import { SessionManagement } from '@/components/settings/SessionManagement';
 import { EntityReprocessing } from '@/components/settings/EntityReprocessing';
 import { PairingConfirmation } from '@/components/settings/PairingConfirmation';
 import { ControllerForm, type ControllerData, DeleteControllerDialog, DiscoveredCameraList } from '@/components/protect';
@@ -78,6 +82,7 @@ export default function SettingsPage() {
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'general';
   const { refreshSystemName } = useSettings(); // BUG-003: Refresh system name after save
+  const { user, canManageUsers } = useAuth();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -335,6 +340,12 @@ export default function SettingsPage() {
                   <Shield className="h-4 w-4" />
                   <span className="hidden sm:inline">Security</span>
                 </TabsTrigger>
+                {canManageUsers && (
+                  <TabsTrigger value="users" className="flex items-center gap-2 px-3">
+                    <Users className="h-4 w-4" />
+                    <span className="hidden sm:inline">Users</span>
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
@@ -1322,14 +1333,26 @@ Keep the summary concise (2-3 paragraphs).`}
               </ErrorBoundary>
             </TabsContent>
 
-            {/* Security Tab - Story P10-1.1, P13-1.6 */}
+            {/* Security Tab - Story P10-1.1, P13-1.6, P15-2.7 */}
             <TabsContent value="security" className="space-y-4">
               <PasswordChangeForm />
+              <ErrorBoundary context="Session Management">
+                <SessionManagement />
+              </ErrorBoundary>
               <ErrorBoundary context="API Keys">
                 <APIKeySettings />
               </ErrorBoundary>
               <DeviceManager />
             </TabsContent>
+
+            {/* Users Tab - Story P15-2.10 (Admin only) */}
+            {canManageUsers && (
+              <TabsContent value="users" className="space-y-4">
+                <ErrorBoundary context="User Management">
+                  <UserManagement currentUserId={user?.id || ''} />
+                </ErrorBoundary>
+              </TabsContent>
+            )}
           </Tabs>
 
           {/* Footer Actions */}
