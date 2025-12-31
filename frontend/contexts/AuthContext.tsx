@@ -26,6 +26,10 @@ export interface User {
   last_login: string | null;
 }
 
+interface LoginResult {
+  mustChangePassword: boolean;
+}
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
@@ -34,7 +38,7 @@ interface AuthContextType {
   isOperator: boolean;
   isViewer: boolean;
   canManageUsers: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -67,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkAuth();
   }, [checkAuth]);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string): Promise<LoginResult> => {
     setIsLoading(true);
     try {
       const response = await apiClient.auth.login({ username, password });
@@ -76,6 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthToken(response.access_token);
       }
       setUser(response.user);
+      return {
+        mustChangePassword: response.must_change_password || response.user.must_change_password,
+      };
     } catch (error) {
       console.error('Login failed:', error);
       throw error;

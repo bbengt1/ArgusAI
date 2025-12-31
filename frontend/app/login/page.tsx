@@ -72,8 +72,13 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(data.username, data.password);
-      router.push(returnUrl);
+      const result = await login(data.username, data.password);
+      // Check if user needs to change password (P15-2.6)
+      if (result.mustChangePassword) {
+        router.push('/change-password');
+      } else {
+        router.push(returnUrl);
+      }
     } catch (err) {
       console.error('Login failed:', err);
       if (err instanceof Error) {
