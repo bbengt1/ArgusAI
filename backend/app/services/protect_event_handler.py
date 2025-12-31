@@ -2673,7 +2673,7 @@ class ProtectEventHandler:
             try:
                 from app.models.system_setting import SystemSetting
                 store_videos_setting = db.query(SystemSetting).filter(
-                    SystemSetting.key == 'store_motion_videos'
+                    SystemSetting.key == 'settings_store_motion_videos'
                 ).first()
                 store_videos = store_videos_setting and store_videos_setting.value.lower() == 'true'
 
