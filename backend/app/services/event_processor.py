@@ -811,6 +811,21 @@ class EventProcessor:
                     extra={"camera_id": event.camera_id, "error": str(carrier_error)}
                 )
 
+            # Story P15-5.3: Prepare bounding box annotation data
+            has_annotations = False
+            bounding_boxes_json = None
+            if ai_result.bounding_boxes:
+                import json
+                has_annotations = True
+                bounding_boxes_json = json.dumps(ai_result.bounding_boxes)
+                logger.info(
+                    f"Event has {len(ai_result.bounding_boxes)} bounding box annotations",
+                    extra={
+                        "camera_id": event.camera_id,
+                        "box_count": len(ai_result.bounding_boxes)
+                    }
+                )
+
             # Step 3: Store event in database
             event_data = {
                 "camera_id": event.camera_id,
@@ -824,6 +839,9 @@ class EventProcessor:
                 "description_retry_needed": False,  # Successfully processed
                 "ai_cost": ai_result.cost_estimate,  # Story P3-7.1: Track AI cost
                 "delivery_carrier": delivery_carrier,  # Story P7-2.1: Carrier detection
+                # Story P15-5.1: AI Visual Annotations
+                "has_annotations": has_annotations,
+                "bounding_boxes": bounding_boxes_json,
             }
 
             logger.info(f"Storing event for camera {event.camera_name}: {ai_result.description[:50]}...")
@@ -1436,6 +1454,31 @@ class EventProcessor:
                     if isinstance(objects_detected, list):
                         objects_detected = json.dumps(objects_detected)
 
+                    # Story P15-5.3: Generate annotated thumbnail if bounding boxes available
+                    has_annotations = event_data.get("has_annotations", False)
+                    bounding_boxes_json = event_data.get("bounding_boxes")
+                    # thumbnail_full_path is defined above when thumbnail_base64 is provided
+                    if has_annotations and bounding_boxes_json and 'thumbnail_full_path' in locals() and thumbnail_full_path:
+                        try:
+                            from app.services.frame_annotation_service import get_frame_annotation_service
+                            annotation_service = get_frame_annotation_service()
+                            parsed_boxes = json.loads(bounding_boxes_json)
+                            annotated_path = annotation_service.annotate_frame(
+                                thumbnail_full_path,
+                                parsed_boxes
+                            )
+                            if annotated_path:
+                                logger.debug(
+                                    f"Annotated thumbnail generated: {annotated_path}",
+                                    extra={"event_id": event_id}
+                                )
+                        except Exception as annotation_error:
+                            # Annotation failures should not block event storage
+                            logger.warning(
+                                f"Failed to generate annotated thumbnail: {annotation_error}",
+                                extra={"event_id": event_id, "error": str(annotation_error)}
+                            )
+
                     event = Event(
                         id=event_id,
                         camera_id=event_data["camera_id"],
@@ -1449,6 +1492,9 @@ class EventProcessor:
                         description_retry_needed=event_data.get("description_retry_needed", False),  # Story P2-6.3 AC13
                         ai_cost=event_data.get("ai_cost"),  # Story P3-7.1: AI cost tracking
                         delivery_carrier=event_data.get("delivery_carrier"),  # Story P7-2.1: Carrier detection
+                        # Story P15-5.1: AI Visual Annotations
+                        has_annotations=has_annotations,
+                        bounding_boxes=bounding_boxes_json,
                     )
 
                     db.add(event)

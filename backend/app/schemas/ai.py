@@ -1,6 +1,6 @@
 """Pydantic schemas for AI service endpoints"""
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -142,6 +142,86 @@ class PromptRefinementRequest(BaseModel):
                 "max_feedback_samples": 50
             }
         }
+
+
+# Story P15-5.1: AI Bounding Box Response Schema
+class BoundingBox(BaseModel):
+    """
+    Bounding box for detected objects in AI-analyzed frames (Story P15-5.1)
+
+    Uses normalized coordinates (0-1) for resolution independence.
+    Coordinates represent: x,y = top-left corner, width/height = box dimensions.
+    """
+    x: float = Field(..., ge=0, le=1, description="Normalized x-coordinate of top-left corner (0-1)")
+    y: float = Field(..., ge=0, le=1, description="Normalized y-coordinate of top-left corner (0-1)")
+    width: float = Field(..., ge=0, le=1, description="Normalized width (0-1)")
+    height: float = Field(..., ge=0, le=1, description="Normalized height (0-1)")
+    entity_type: Literal["person", "vehicle", "package", "animal", "other"] = Field(
+        ..., description="Type of detected entity"
+    )
+    confidence: float = Field(..., ge=0, le=1, description="Detection confidence score (0-1)")
+    label: str = Field(..., max_length=200, description="Brief description of the detected object")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "x": 0.25,
+                    "y": 0.30,
+                    "width": 0.15,
+                    "height": 0.40,
+                    "entity_type": "person",
+                    "confidence": 0.92,
+                    "label": "Person walking toward door"
+                }
+            ]
+        }
+    }
+
+
+class AIAnalysisResponse(BaseModel):
+    """
+    Extended AI analysis response including bounding boxes (Story P15-5.1)
+
+    Providers that support bounding boxes (GPT-4o, Gemini) return box coordinates.
+    Other providers (Claude, Grok) return bounding_boxes=None.
+    """
+    description: str = Field(..., description="AI-generated description")
+    confidence: Optional[float] = Field(None, ge=0, le=100, description="AI confidence score (0-100)")
+    bounding_boxes: Optional[List[BoundingBox]] = Field(
+        None, description="Detected object bounding boxes (None for providers without support)"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Person walking toward front door carrying a package",
+                    "confidence": 85,
+                    "bounding_boxes": [
+                        {
+                            "x": 0.25,
+                            "y": 0.20,
+                            "width": 0.20,
+                            "height": 0.60,
+                            "entity_type": "person",
+                            "confidence": 0.92,
+                            "label": "Person in gray jacket"
+                        },
+                        {
+                            "x": 0.40,
+                            "y": 0.55,
+                            "width": 0.10,
+                            "height": 0.15,
+                            "entity_type": "package",
+                            "confidence": 0.85,
+                            "label": "Cardboard box"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
 
 
 class PromptRefinementResponse(BaseModel):

@@ -112,6 +112,9 @@ class Event(Base):
     delivery_carrier = Column(String(32), nullable=True)  # 'fedex', 'ups', 'usps', 'amazon', 'dhl' (null = not detected)
     # Story P8-3.2: Full motion video storage
     video_path = Column(String(500), nullable=True)  # Path to stored video file (null = no video stored)
+    # Story P15-5.1: AI Visual Annotations - bounding boxes for detected objects
+    has_annotations = Column(Boolean, nullable=False, default=False)  # True if bounding boxes are available
+    bounding_boxes = Column(Text, nullable=True)  # JSON array of bounding box objects (null = no annotations)
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

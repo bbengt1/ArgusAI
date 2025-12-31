@@ -68,6 +68,36 @@ def _normalize_thumbnail_path(thumbnail_path: str) -> str:
     return thumbnail_path
 
 
+def _get_annotated_thumbnail_path(event) -> Optional[str]:
+    """
+    Get annotated thumbnail path for an event (Story P15-5.1).
+
+    Returns path to _annotated version of thumbnail if:
+    1. Event has has_annotations=True
+    2. Original thumbnail_path exists
+
+    Returns None if no annotation available.
+    """
+    if not getattr(event, 'has_annotations', False):
+        return None
+
+    thumbnail_path = getattr(event, 'thumbnail_path', None)
+    if not thumbnail_path:
+        return None
+
+    # Generate annotated path from original (frame.jpg -> frame_annotated.jpg)
+    import os
+    base, ext = os.path.splitext(thumbnail_path)
+    annotated_path = f"{base}_annotated{ext}"
+
+    # Check if annotated file exists
+    full_path = os.path.join(THUMBNAIL_DIR, annotated_path)
+    if os.path.exists(full_path):
+        return annotated_path
+
+    return None
+
+
 def _save_thumbnail_to_filesystem(thumbnail_base64: str, event_id: str) -> str:
     """
     Save base64-encoded thumbnail to filesystem
@@ -1541,6 +1571,10 @@ async def get_event(
             "reanalysis_count": event.reanalysis_count or 0,
             # Story P7-2.1: Delivery carrier detection
             "delivery_carrier": getattr(event, 'delivery_carrier', None),
+            # Story P15-5.1: AI Visual Annotations
+            "has_annotations": getattr(event, 'has_annotations', False),
+            "bounding_boxes": getattr(event, 'bounding_boxes', None),
+            "annotated_thumbnail_path": _get_annotated_thumbnail_path(event),
         }
 
         # Story P4-3.3: Add matched entity if available (AC12)

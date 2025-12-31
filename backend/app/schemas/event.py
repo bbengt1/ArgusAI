@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
 from typing import List, Optional, Literal
 from app.schemas.feedback import FeedbackResponse
+from app.schemas.ai import BoundingBox
 
 # Story P7-2.1: Human-readable display names for carriers
 CARRIER_DISPLAY_NAMES = {
@@ -169,6 +170,10 @@ class EventResponse(BaseModel):
     delivery_carrier_display: Optional[str] = Field(None, description="Human-readable carrier name (FedEx/UPS/USPS/Amazon/DHL)")
     # Story P8-3.2: Full motion video storage
     video_path: Optional[str] = Field(None, description="Path to stored full motion video file")
+    # Story P15-5.1: AI Visual Annotations
+    has_annotations: bool = Field(default=False, description="Whether bounding box annotations are available")
+    bounding_boxes: Optional[List[BoundingBox]] = Field(None, description="Bounding boxes for detected objects")
+    annotated_thumbnail_path: Optional[str] = Field(None, description="Path to annotated thumbnail with bounding boxes drawn")
 
     @field_validator('objects_detected', mode='before')
     @classmethod
@@ -192,6 +197,15 @@ class EventResponse(BaseModel):
     @classmethod
     def parse_frame_timestamps(cls, v):
         """Parse JSON string into list if needed (Story P3-7.5)"""
+        if isinstance(v, str):
+            import json
+            return json.loads(v)
+        return v
+
+    @field_validator('bounding_boxes', mode='before')
+    @classmethod
+    def parse_bounding_boxes(cls, v):
+        """Parse JSON string into list of BoundingBox if needed (Story P15-5.1)"""
         if isinstance(v, str):
             import json
             return json.loads(v)

@@ -22,6 +22,19 @@ export type SmartDetectionType = 'person' | 'vehicle' | 'package' | 'animal' | '
 export type AnalysisMode = 'single_frame' | 'multi_frame' | 'video_native';
 
 /**
+ * Story P15-5.1: AI Visual Annotations - Bounding box for detected objects
+ */
+export interface IBoundingBox {
+  x: number;             // Normalized x-coordinate of top-left corner (0-1)
+  y: number;             // Normalized y-coordinate of top-left corner (0-1)
+  width: number;         // Normalized width (0-1)
+  height: number;        // Normalized height (0-1)
+  entity_type: 'person' | 'vehicle' | 'package' | 'animal' | 'other';
+  confidence: number;    // Detection confidence score (0-1)
+  label: string;         // Brief description of the detected object
+}
+
+/**
  * Story P2-4.4: Correlated event info for multi-camera event display
  */
 export interface ICorrelatedEvent {
@@ -149,6 +162,10 @@ export interface IEvent {
   anomaly_score?: number | null;        // Anomaly score 0.0-1.0 (null = not scored)
   // Story P8-3.2: Full motion video storage
   video_path?: string | null;           // Path to stored video file (null = no video stored)
+  // Story P15-5.1: AI Visual Annotations
+  has_annotations?: boolean;            // True if bounding box annotations are available
+  bounding_boxes?: IBoundingBox[] | null;  // Bounding boxes for detected objects
+  annotated_thumbnail_path?: string | null;  // Path to annotated thumbnail with bounding boxes drawn
 }
 
 /**

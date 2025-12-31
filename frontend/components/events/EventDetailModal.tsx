@@ -24,6 +24,9 @@ import {
   MessageCircle,
   Sparkle,
   Activity,
+  Box,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { IEvent } from '@/types/event';
 import { getConfidenceColor, getConfidenceLevel } from '@/types/event';
@@ -49,6 +52,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { AnnotationLegend } from './AnnotationLegend';
 
 // Parse timestamp as UTC (backend stores UTC without timezone indicator)
 function parseUTCTimestamp(timestamp: string): Date {
@@ -84,6 +89,7 @@ export function EventDetailModal({
 }: EventDetailModalProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(true); // Story P15-5.4: Default to showing annotations
   const deleteEvent = useDeleteEvent();
 
   // Navigation
@@ -158,11 +164,30 @@ export function EventDetailModal({
   // Determine image source
   // thumbnail_path from DB is already full API path like "/api/v1/thumbnails/2025-11-25/uuid.jpg"
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
-  const imageSrc = event.thumbnail_base64
-    ? `data:image/jpeg;base64,${event.thumbnail_base64}`
-    : event.thumbnail_path
-    ? `${apiUrl}${event.thumbnail_path}`
-    : null;
+
+  // Story P15-5.4: Support toggling between original and annotated thumbnails
+  const hasAnnotations = event.has_annotations && event.annotated_thumbnail_path;
+
+  // Choose which image to display based on toggle state
+  const getImageSrc = () => {
+    if (event.thumbnail_base64) {
+      return `data:image/jpeg;base64,${event.thumbnail_base64}`;
+    }
+
+    // If showing annotations and annotated version exists, use it
+    if (showAnnotations && hasAnnotations && event.annotated_thumbnail_path) {
+      return `${apiUrl}${event.annotated_thumbnail_path}`;
+    }
+
+    // Otherwise use original thumbnail
+    if (event.thumbnail_path) {
+      return `${apiUrl}${event.thumbnail_path}`;
+    }
+
+    return null;
+  };
+
+  const imageSrc = getImageSrc();
 
   return (
     <>
@@ -228,6 +253,42 @@ export function EventDetailModal({
               <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
                 <Video className="w-16 h-16 text-gray-400" />
                 <span className="sr-only">No image available</span>
+              </div>
+            )}
+
+            {/* Story P15-5.4: Annotation Toggle Button */}
+            {hasAnnotations && (
+              <div className="absolute top-3 right-3 z-10">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAnnotations(!showAnnotations)}
+                      className={`bg-white/90 hover:bg-white shadow-md ${
+                        showAnnotations ? 'bg-blue-100 border-blue-300' : ''
+                      }`}
+                      aria-label={showAnnotations ? 'Hide annotations' : 'Show annotations'}
+                    >
+                      {showAnnotations ? (
+                        <Eye className="h-4 w-4 text-blue-600" />
+                      ) : (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      )}
+                      <Box className="h-4 w-4 ml-1" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {showAnnotations ? 'Hide bounding boxes' : 'Show bounding boxes'}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
+
+            {/* Story P15-5.5: Annotation Legend (when annotations are shown) */}
+            {hasAnnotations && showAnnotations && event.bounding_boxes && event.bounding_boxes.length > 0 && (
+              <div className="absolute bottom-3 left-3 z-10">
+                <AnnotationLegend boundingBoxes={event.bounding_boxes} />
               </div>
             )}
           </div>

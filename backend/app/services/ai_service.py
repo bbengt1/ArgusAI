@@ -274,6 +274,8 @@ class AIResult:
     ai_confidence: Optional[int] = None  # 0-100 (from AI response, None if not provided)
     # Story P4-5.4: A/B test variant tracking
     prompt_variant: Optional[str] = None  # 'control', 'experiment', or None
+    # Story P15-5.1: AI Visual Annotations - bounding boxes for detected objects
+    bounding_boxes: Optional[List[Dict[str, Any]]] = None  # List of normalized bounding box dicts
 
 
 class AIProviderBase(ABC):

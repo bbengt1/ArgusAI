@@ -445,6 +445,44 @@ def _parse_refinement_response(response_text: str) -> dict:
     }
 
 
+@router.get("/annotation-colors")
+async def get_annotation_colors():
+    """
+    Get entity type colors for annotation legend (Story P15-5.5).
+
+    Returns the color palette used for bounding box annotations,
+    allowing the frontend to display a consistent legend.
+
+    Example:
+        GET /api/v1/ai/annotation-colors
+
+    Response:
+        {
+            "person": {"hex": "#3B82F6", "rgb": [59, 130, 246]},
+            "vehicle": {"hex": "#22C55E", "rgb": [34, 197, 94]},
+            ...
+        }
+    """
+    from app.services.frame_annotation_service import get_frame_annotation_service
+
+    try:
+        annotation_service = get_frame_annotation_service()
+        colors = annotation_service.get_entity_colors()
+
+        logger.debug(
+            "Annotation colors requested",
+            extra={"entity_types": list(colors.keys())}
+        )
+
+        return colors
+    except Exception as e:
+        logger.error(f"Failed to get annotation colors: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve annotation colors: {str(e)}"
+        )
+
+
 @router.get("/context-metrics")
 async def get_context_metrics():
     """

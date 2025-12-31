@@ -134,25 +134,29 @@ export function useSettingsForm<T extends object>({
 }: UseSettingsFormOptions<T>): UseSettingsFormReturn<T> {
   const queryClient = useQueryClient();
 
-  // Store deep clone of initial data for comparison
-  const initialRef = useRef<T>(deepClone(initialData));
+  // Store deep clone of initial data for comparison (using state to avoid ref access during render)
+  const [initialSnapshot, setInitialSnapshot] = useState<T>(() => deepClone(initialData));
+  // Keep ref for reset/save operations
+  const initialRef = useRef<T>(initialSnapshot);
 
   // Form state
   const [formData, setFormData] = useState<T>(() => deepClone(initialData));
   const [error, setError] = useState<Error | null>(null);
 
-  // Update initial ref and form data when initialData changes (e.g., from query)
+  // Update initial snapshot and form data when initialData changes (e.g., from query)
   useEffect(() => {
     if (!isLoading) {
-      initialRef.current = deepClone(initialData);
+      const cloned = deepClone(initialData);
+      initialRef.current = cloned;
+      setInitialSnapshot(cloned);
       setFormData(deepClone(initialData));
     }
   }, [initialData, isLoading]);
 
-  // Compute isDirty with deep comparison
+  // Compute isDirty with deep comparison (using state, not ref)
   const isDirty = useMemo(
-    () => !deepEqual(formData, initialRef.current),
-    [formData]
+    () => !deepEqual(formData, initialSnapshot),
+    [formData, initialSnapshot]
   );
 
   // Update a single field
