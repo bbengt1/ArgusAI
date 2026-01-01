@@ -19,7 +19,7 @@ class LoginResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """User information response (Story P15-2.1)"""
+    """User information response (Story P15-2.1, P16-1.1)"""
     id: str = Field(..., description="User UUID")
     username: str = Field(..., description="Username")
     email: Optional[str] = Field(None, description="Email address")
@@ -28,6 +28,9 @@ class UserResponse(BaseModel):
     must_change_password: bool = Field(default=False, description="Force password change on next login")
     created_at: datetime = Field(..., description="Account creation timestamp")
     last_login: Optional[datetime] = Field(None, description="Last login timestamp")
+    # Story P16-1.1: Invitation tracking fields
+    invited_by: Optional[str] = Field(None, description="User ID who created this account")
+    invited_at: Optional[datetime] = Field(None, description="Timestamp when user was invited")
 
     class Config:
         from_attributes = True
@@ -54,7 +57,7 @@ class UserCreate(BaseModel):
 
 
 class UserCreateResponse(BaseModel):
-    """Create user response with temporary password"""
+    """Create user response with temporary password (Story P15-2.3, P16-1.1)"""
     id: str = Field(..., description="User UUID")
     username: str = Field(..., description="Username")
     email: Optional[str] = Field(None, description="Email address")
@@ -62,6 +65,9 @@ class UserCreateResponse(BaseModel):
     temporary_password: Optional[str] = Field(None, description="Temporary password (if not sent via email)")
     password_expires_at: Optional[datetime] = Field(None, description="Temporary password expiration")
     created_at: datetime = Field(..., description="Account creation timestamp")
+    # Story P16-1.1: Invitation tracking fields
+    invited_by: Optional[str] = Field(None, description="User ID who created this account")
+    invited_at: Optional[datetime] = Field(None, description="Timestamp when user was invited")
 
     class Config:
         from_attributes = True

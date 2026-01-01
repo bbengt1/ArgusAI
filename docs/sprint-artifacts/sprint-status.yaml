@@ -1104,8 +1104,8 @@ development_status:
   # Focus: Multi-user support with roles and email invitations
   # GitHub: #308
   # FRs Covered: FR1-FR9
-  epic-p16-1: backlog
-  p16-1-1-extend-user-model-for-multi-user-support: backlog
+  epic-p16-1: in-progress
+  p16-1-1-extend-user-model-for-multi-user-support: done
   p16-1-2-create-user-management-api-endpoints: backlog
   p16-1-3-implement-role-based-authorization-middleware: backlog
   p16-1-4-create-user-management-ui-page: backlog
