@@ -43,6 +43,7 @@ SENSITIVE_SETTING_KEYS = [
     "ai_api_key_gemini",
     "ai_api_key_grok",  # Story P2-5.2: xAI Grok API key
     "settings_tunnel_token",  # Story P11-1.1: Cloudflare Tunnel token
+    "smtp_password",  # Story P16-1.7: SMTP password for email invitations
 ]
 
 router = APIRouter(
@@ -2428,4 +2429,239 @@ async def stop_tunnel(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to stop tunnel: {str(e)}"
+        )
+
+
+# Story P16-1.7: SMTP Email Settings Endpoints
+
+
+class SMTPSettingsResponse(BaseModel):
+    """Response schema for SMTP settings."""
+    enabled: bool = Field(default=False, description="Whether SMTP is enabled")
+    host: str = Field(default="", description="SMTP server hostname")
+    port: int = Field(default=587, description="SMTP server port")
+    username: str = Field(default="", description="SMTP username")
+    password_configured: bool = Field(default=False, description="Whether password is configured (not returned)")
+    from_email: str = Field(default="", description="From email address")
+    from_name: str = Field(default="ArgusAI", description="From display name")
+    use_tls: bool = Field(default=False, description="Use TLS (port 465)")
+    use_starttls: bool = Field(default=True, description="Use STARTTLS (port 587)")
+
+
+class SMTPSettingsUpdate(BaseModel):
+    """Request schema for updating SMTP settings."""
+    enabled: Optional[bool] = Field(None, description="Enable/disable SMTP")
+    host: Optional[str] = Field(None, description="SMTP server hostname")
+    port: Optional[int] = Field(None, ge=1, le=65535, description="SMTP server port")
+    username: Optional[str] = Field(None, description="SMTP username")
+    password: Optional[str] = Field(None, description="SMTP password (will be encrypted)")
+    from_email: Optional[str] = Field(None, description="From email address")
+    from_name: Optional[str] = Field(None, description="From display name")
+    use_tls: Optional[bool] = Field(None, description="Use TLS (port 465)")
+    use_starttls: Optional[bool] = Field(None, description="Use STARTTLS (port 587)")
+
+
+class SMTPTestRequest(BaseModel):
+    """Request schema for SMTP test."""
+    test_email: str = Field(..., description="Email address to send test to")
+
+
+class SMTPTestResponse(BaseModel):
+    """Response schema for SMTP test."""
+    success: bool = Field(..., description="Whether test succeeded")
+    message: str = Field(..., description="Test result message")
+
+
+@router.get("/smtp/settings", response_model=SMTPSettingsResponse)
+async def get_smtp_settings(db: Session = Depends(get_db)):
+    """
+    Get SMTP configuration settings (Story P16-1.7)
+
+    Returns current SMTP settings. Password is never returned,
+    only whether it is configured.
+
+    **Response:**
+    ```json
+    {
+        "enabled": true,
+        "host": "smtp.example.com",
+        "port": 587,
+        "username": "user@example.com",
+        "password_configured": true,
+        "from_email": "noreply@example.com",
+        "from_name": "ArgusAI",
+        "use_tls": false,
+        "use_starttls": true
+    }
+    ```
+    """
+    prefix = SETTINGS_PREFIX
+
+    # Get settings from database
+    enabled = _get_setting_from_db(db, f"{prefix}smtp_enabled", "false")
+    host = _get_setting_from_db(db, f"{prefix}smtp_host", "")
+    port_str = _get_setting_from_db(db, f"{prefix}smtp_port", "587")
+    username = _get_setting_from_db(db, f"{prefix}smtp_username", "")
+    password = _get_setting_from_db(db, f"{prefix}smtp_password", "")
+    from_email = _get_setting_from_db(db, f"{prefix}smtp_from_email", "")
+    from_name = _get_setting_from_db(db, f"{prefix}smtp_from_name", "ArgusAI")
+    use_tls = _get_setting_from_db(db, f"{prefix}smtp_use_tls", "false")
+    use_starttls = _get_setting_from_db(db, f"{prefix}smtp_use_starttls", "true")
+
+    return SMTPSettingsResponse(
+        enabled=enabled.lower() in ('true', '1', 'yes'),
+        host=host,
+        port=int(port_str) if port_str else 587,
+        username=username,
+        password_configured=bool(password),
+        from_email=from_email,
+        from_name=from_name,
+        use_tls=use_tls.lower() in ('true', '1', 'yes'),
+        use_starttls=use_starttls.lower() in ('true', '1', 'yes'),
+    )
+
+
+@router.put("/smtp/settings", response_model=SMTPSettingsResponse)
+async def update_smtp_settings(
+    settings_update: SMTPSettingsUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update SMTP configuration settings (Story P16-1.7)
+
+    Updates SMTP settings. Password will be encrypted before storage.
+
+    **Request Body:**
+    ```json
+    {
+        "enabled": true,
+        "host": "smtp.example.com",
+        "port": 587,
+        "username": "user@example.com",
+        "password": "secret",
+        "from_email": "noreply@example.com",
+        "from_name": "ArgusAI",
+        "use_tls": false,
+        "use_starttls": true
+    }
+    ```
+    """
+    prefix = SETTINGS_PREFIX
+
+    # Update each provided setting
+    if settings_update.enabled is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_enabled", "true" if settings_update.enabled else "false")
+
+    if settings_update.host is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_host", settings_update.host)
+
+    if settings_update.port is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_port", str(settings_update.port))
+
+    if settings_update.username is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_username", settings_update.username)
+
+    if settings_update.password is not None:
+        # Password will be encrypted by _set_setting_in_db since it's in SENSITIVE_SETTING_KEYS
+        _set_setting_in_db(db, f"{prefix}smtp_password", settings_update.password)
+
+    if settings_update.from_email is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_from_email", settings_update.from_email)
+
+    if settings_update.from_name is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_from_name", settings_update.from_name)
+
+    if settings_update.use_tls is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_use_tls", "true" if settings_update.use_tls else "false")
+
+    if settings_update.use_starttls is not None:
+        _set_setting_in_db(db, f"{prefix}smtp_use_starttls", "true" if settings_update.use_starttls else "false")
+
+    db.commit()
+
+    logger.info(
+        "SMTP settings updated",
+        extra={"event_type": "smtp_settings_updated"}
+    )
+
+    return await get_smtp_settings(db)
+
+
+@router.post("/smtp/test", response_model=SMTPTestResponse)
+async def test_smtp_connection(
+    request: SMTPTestRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Test SMTP connection (Story P16-1.7)
+
+    Tests SMTP connection by sending a test email.
+
+    **Request Body:**
+    ```json
+    {
+        "test_email": "test@example.com"
+    }
+    ```
+
+    **Response:**
+    ```json
+    {
+        "success": true,
+        "message": "Test email sent successfully"
+    }
+    ```
+    """
+    from app.services.email_service import EmailService
+
+    email_service = EmailService(db)
+
+    if not email_service.is_configured():
+        return SMTPTestResponse(
+            success=False,
+            message="SMTP is not configured. Please configure SMTP settings first."
+        )
+
+    # Send test email
+    test_subject = "ArgusAI SMTP Test"
+    test_html = """
+    <html>
+    <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2 style="color: #2563eb;">ArgusAI SMTP Test</h2>
+        <p>This is a test email from ArgusAI to verify your SMTP configuration.</p>
+        <p>If you received this email, your SMTP settings are working correctly!</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+        <p style="color: #6b7280; font-size: 12px;">
+            This email was sent automatically by ArgusAI.
+        </p>
+    </body>
+    </html>
+    """
+    test_text = """
+ArgusAI SMTP Test
+
+This is a test email from ArgusAI to verify your SMTP configuration.
+
+If you received this email, your SMTP settings are working correctly!
+
+---
+This email was sent automatically by ArgusAI.
+    """
+
+    success = await email_service.send_email(
+        to_email=request.test_email,
+        subject=test_subject,
+        html_content=test_html,
+        text_content=test_text,
+    )
+
+    if success:
+        return SMTPTestResponse(
+            success=True,
+            message=f"Test email sent successfully to {request.test_email}"
+        )
+    else:
+        return SMTPTestResponse(
+            success=False,
+            message="Failed to send test email. Check server logs for details."
         )

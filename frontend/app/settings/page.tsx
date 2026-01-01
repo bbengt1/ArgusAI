@@ -73,6 +73,7 @@ import { UserManagement } from '@/components/settings/UserManagement';
 import { SessionManagement } from '@/components/settings/SessionManagement';
 import { EntityReprocessing } from '@/components/settings/EntityReprocessing';
 import { PairingConfirmation } from '@/components/settings/PairingConfirmation';
+import { SMTPSettings } from '@/components/settings/SMTPSettings';
 import { ControllerForm, type ControllerData, DeleteControllerDialog, DiscoveredCameraList } from '@/components/protect';
 import { useQuery } from '@tanstack/react-query';
 import type { AIProvider } from '@/types/settings';
@@ -1319,9 +1320,13 @@ Keep the summary concise (2-3 paragraphs).`}
               </ErrorBoundary>
             </TabsContent>
 
-            {/* Notifications Tab - Story P4-1.2, P12-2.3 */}
+            {/* Notifications Tab - Story P4-1.2, P12-2.3, P16-1.7 */}
             <TabsContent value="notifications" className="space-y-4">
               <PushNotificationSettings />
+              {/* Story P16-1.7: SMTP Email Settings */}
+              <ErrorBoundary context="SMTP Settings">
+                <SMTPSettings />
+              </ErrorBoundary>
               {/* Story P12-2.3: Device Manager */}
               <ErrorBoundary context="Device Manager">
                 <DeviceManager />

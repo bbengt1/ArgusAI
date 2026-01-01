@@ -1,7 +1,8 @@
-"""User management service (Story P15-2.3, P15-2.5, P16-1.2, P16-1.6)
+"""User management service (Story P15-2.3, P15-2.5, P16-1.2, P16-1.6, P16-1.7)
 
 Provides user CRUD operations, invitation flow, and password reset functionality.
 Includes audit logging for all user management actions (P16-1.6).
+Includes email invitation flow (P16-1.7).
 """
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Tuple
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.exc import IntegrityError
 import secrets
 import logging
+import asyncio
 
 from app.models.user import User, UserRole
 from app.utils.auth import hash_password
@@ -25,7 +27,7 @@ GENERATED_PASSWORD_LENGTH = 16
 
 class UserService:
     """
-    Service for managing users (Story P15-2.3, P15-2.5, P16-1.6)
+    Service for managing users (Story P15-2.3, P15-2.5, P16-1.6, P16-1.7)
 
     Responsibilities:
     - Create users with temporary passwords (invitation flow)
@@ -34,6 +36,7 @@ class UserService:
     - Enable/disable accounts
     - Delete users
     - Log all actions to audit trail (P16-1.6)
+    - Send invitation emails (P16-1.7)
     """
 
     def __init__(self, db: DBSession):
@@ -47,9 +50,11 @@ class UserService:
         email: Optional[str] = None,
         send_email: bool = False,
         invited_by: Optional[str] = None,
+        login_url: Optional[str] = None,
+        inviter_name: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
-    ) -> Tuple[User, str]:
+    ) -> Tuple[User, str, bool]:
         """
         Create a new user with temporary password.
 
@@ -57,13 +62,15 @@ class UserService:
             username: Unique username
             role: User role (admin, operator, viewer)
             email: Optional email address
-            send_email: Whether to send invitation email (future feature)
+            send_email: Whether to send invitation email (Story P16-1.7)
             invited_by: User ID of the admin who created this user (Story P16-1.2)
+            login_url: URL for the login page (for invitation email)
+            inviter_name: Name of the admin who invited this user
             ip_address: Request IP address for audit logging (P16-1.6)
             user_agent: Request User-Agent for audit logging (P16-1.6)
 
         Returns:
-            Tuple of (User, temporary_password)
+            Tuple of (User, temporary_password, email_sent)
 
         Raises:
             ValueError: If username already exists
@@ -123,10 +130,71 @@ class UserService:
             user_agent=user_agent,
         )
 
-        # TODO: If send_email and email is configured, send invitation email
-        # For now, we just return the password for display
+        # Story P16-1.7: Send invitation email if requested
+        email_sent = False
+        if send_email and email:
+            email_sent = self._send_invitation_email(
+                to_email=email,
+                username=username,
+                temporary_password=temp_password,
+                login_url=login_url or "https://localhost:3000/login",
+                invited_by=inviter_name,
+            )
 
-        return user, temp_password
+        return user, temp_password, email_sent
+
+    def _send_invitation_email(
+        self,
+        to_email: str,
+        username: str,
+        temporary_password: str,
+        login_url: str,
+        invited_by: Optional[str] = None,
+    ) -> bool:
+        """
+        Send invitation email to new user (Story P16-1.7).
+
+        Uses asyncio to run the async email service from sync context.
+
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        try:
+            from app.services.email_service import EmailService
+
+            email_service = EmailService(self.db)
+            if not email_service.is_configured():
+                logger.warning("SMTP not configured, skipping invitation email")
+                return False
+
+            # Run async email send in sync context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    email_service.send_invitation_email(
+                        to_email=to_email,
+                        username=username,
+                        temporary_password=temporary_password,
+                        login_url=login_url,
+                        invited_by=invited_by,
+                    )
+                )
+                return result
+            finally:
+                loop.close()
+
+        except Exception as e:
+            logger.error(
+                f"Failed to send invitation email: {e}",
+                extra={
+                    "event_type": "invitation_email_failed",
+                    "to_email": to_email,
+                    "username": username,
+                    "error": str(e),
+                }
+            )
+            return False
 
     def get_user(self, user_id: str) -> Optional[User]:
         """Get user by ID"""
@@ -146,7 +214,7 @@ class UserService:
         email: Optional[str] = None,
         role: Optional[str] = None,
         is_active: Optional[bool] = None,
-        actor_id: Optional[str] = None,
+        updated_by: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> Optional[User]:
@@ -158,7 +226,7 @@ class UserService:
             email: New email address
             role: New role (admin, operator, viewer)
             is_active: New active status
-            actor_id: ID of user performing the update (P16-1.6)
+            updated_by: ID of user performing the update (P16-1.6)
             ip_address: Request IP address for audit logging (P16-1.6)
             user_agent: Request User-Agent for audit logging (P16-1.6)
 
@@ -214,7 +282,7 @@ class UserService:
             changes["new_role"] = role
             # Also log as separate change_role action for role changes
             self.audit_service.log_change_role(
-                actor_id=actor_id,
+                actor_id=updated_by,
                 target_user_id=user_id,
                 old_role=old_role,
                 new_role=role,
@@ -224,14 +292,14 @@ class UserService:
         if is_active is not None and is_active != old_is_active:
             if is_active:
                 self.audit_service.log_enable_user(
-                    actor_id=actor_id,
+                    actor_id=updated_by,
                     target_user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
                 )
             else:
                 self.audit_service.log_disable_user(
-                    actor_id=actor_id,
+                    actor_id=updated_by,
                     target_user_id=user_id,
                     ip_address=ip_address,
                     user_agent=user_agent,
@@ -240,7 +308,7 @@ class UserService:
         # Log general update if there are non-role, non-active changes
         if changes:
             self.audit_service.log_update_user(
-                actor_id=actor_id,
+                actor_id=updated_by,
                 target_user_id=user_id,
                 changes=changes,
                 ip_address=ip_address,
@@ -252,7 +320,7 @@ class UserService:
     def delete_user(
         self,
         user_id: str,
-        actor_id: Optional[str] = None,
+        deleted_by: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> bool:
@@ -263,7 +331,7 @@ class UserService:
 
         Args:
             user_id: User ID to delete
-            actor_id: ID of user performing the deletion (P16-1.6)
+            deleted_by: ID of user performing the deletion (P16-1.6)
             ip_address: Request IP address for audit logging (P16-1.6)
             user_agent: Request User-Agent for audit logging (P16-1.6)
 
@@ -279,7 +347,7 @@ class UserService:
         # Story P16-1.6: Log deletion before actually deleting
         # (so we have the user info still available)
         self.audit_service.log_delete_user(
-            actor_id=actor_id,
+            actor_id=deleted_by,
             target_user_id=user_id,
             username=username,
             ip_address=ip_address,
@@ -303,7 +371,7 @@ class UserService:
     def reset_password(
         self,
         user_id: str,
-        actor_id: Optional[str] = None,
+        reset_by: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> Tuple[Optional[str], Optional[datetime]]:
@@ -312,7 +380,7 @@ class UserService:
 
         Args:
             user_id: User ID
-            actor_id: ID of admin performing the reset (P16-1.6)
+            reset_by: ID of admin performing the reset (P16-1.6)
             ip_address: Request IP address for audit logging (P16-1.6)
             user_agent: Request User-Agent for audit logging (P16-1.6)
 
@@ -352,7 +420,7 @@ class UserService:
 
         # Story P16-1.6: Log password reset to audit trail
         self.audit_service.log_reset_password(
-            actor_id=actor_id,
+            actor_id=reset_by,
             target_user_id=user_id,
             ip_address=ip_address,
             user_agent=user_agent,
@@ -432,8 +500,8 @@ class UserService:
         if existing_users > 0:
             return False, ""
 
-        # Create default admin
-        user, password = self.create_user(
+        # Create default admin (no email, no invitation)
+        user, password, _ = self.create_user(
             username="admin",
             role="admin",
             email=None,

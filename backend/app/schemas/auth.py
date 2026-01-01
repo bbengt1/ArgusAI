@@ -57,7 +57,7 @@ class UserCreate(BaseModel):
 
 
 class UserCreateResponse(BaseModel):
-    """Create user response with temporary password (Story P15-2.3, P16-1.1)"""
+    """Create user response with temporary password (Story P15-2.3, P16-1.1, P16-1.7)"""
     id: str = Field(..., description="User UUID")
     username: str = Field(..., description="Username")
     email: Optional[str] = Field(None, description="Email address")
@@ -68,6 +68,8 @@ class UserCreateResponse(BaseModel):
     # Story P16-1.1: Invitation tracking fields
     invited_by: Optional[str] = Field(None, description="User ID who created this account")
     invited_at: Optional[datetime] = Field(None, description="Timestamp when user was invited")
+    # Story P16-1.7: Email sent indicator
+    email_sent: bool = Field(default=False, description="Whether invitation email was sent")
 
     class Config:
         from_attributes = True

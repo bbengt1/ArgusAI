@@ -37,6 +37,9 @@ import type {
   MQTTTestResponse,
   MQTTPublishDiscoveryResponse,
   MQTTTestMessageResponse,
+  SMTPSettingsResponse,
+  SMTPSettingsUpdate,
+  SMTPTestResponse,
 } from '@/types/settings';
 import type {
   IAlertRule,
@@ -1805,6 +1808,41 @@ export const apiClient = {
      */
     sendTestMessage: async (): Promise<MQTTTestMessageResponse> => {
       return apiFetch('/integrations/mqtt/test-message', {
+        method: 'POST',
+      });
+    },
+  },
+
+  // ============================================================================
+  // SMTP Email Settings (Story P16-1.7)
+  // ============================================================================
+  smtp: {
+    /**
+     * Get SMTP configuration
+     * @returns Current SMTP settings
+     */
+    getSettings: async (): Promise<SMTPSettingsResponse> => {
+      return apiFetch('/system/smtp/settings');
+    },
+
+    /**
+     * Update SMTP configuration
+     * @param settings SMTP settings to update
+     * @returns Updated SMTP settings
+     */
+    updateSettings: async (settings: SMTPSettingsUpdate): Promise<SMTPSettingsResponse> => {
+      return apiFetch('/system/smtp/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings),
+      });
+    },
+
+    /**
+     * Test SMTP connection
+     * @returns Test result with success/failure message
+     */
+    testConnection: async (): Promise<SMTPTestResponse> => {
+      return apiFetch('/system/smtp/test', {
         method: 'POST',
       });
     },

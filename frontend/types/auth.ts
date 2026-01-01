@@ -57,6 +57,7 @@ export interface IUserCreateResponse {
   temporary_password: string | null;
   password_expires_at: string | null;
   created_at: string;
+  email_sent?: boolean;  // Story P16-1.7: Whether invitation email was sent
 }
 
 export interface IUserUpdate {

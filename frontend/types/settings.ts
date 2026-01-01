@@ -276,3 +276,37 @@ export interface MQTTTestMessageResponse {
   message: string;
   topic?: string;
 }
+
+/**
+ * SMTP Configuration Types for Email Invitations
+ * Story P16-1.7: Email Invitation Flow
+ */
+
+export interface SMTPSettingsResponse {
+  enabled: boolean;
+  host: string;
+  port: number;
+  username: string;
+  from_email: string;
+  from_name: string;
+  use_tls: boolean;
+  use_starttls: boolean;
+  has_password: boolean;
+}
+
+export interface SMTPSettingsUpdate {
+  enabled?: boolean;
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  from_email?: string;
+  from_name?: string;
+  use_tls?: boolean;
+  use_starttls?: boolean;
+}
+
+export interface SMTPTestResponse {
+  success: boolean;
+  message: string;
+}

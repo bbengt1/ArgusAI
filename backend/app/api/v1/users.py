@@ -1,4 +1,4 @@
-"""User management API endpoints (Story P15-2.3, P16-1.2, P16-1.6)
+"""User management API endpoints (Story P15-2.3, P16-1.2, P16-1.6, P16-1.7)
 
 Admin-only endpoints for managing user accounts.
 
@@ -8,6 +8,7 @@ Permission Matrix:
 
 Story P16-1.2: Added invited_by/invited_at tracking for user creation.
 Story P16-1.6: Added audit logging for all user management actions.
+Story P16-1.7: Added email invitation flow.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -25,6 +26,7 @@ from app.schemas.auth import (
     PasswordResetResponse,
 )
 from app.services.user_service import UserService
+from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,8 @@ router = APIRouter(prefix="/users", tags=["User Management"])
     status_code=status.HTTP_201_CREATED,
     summary="Create new user",
     description="Create a new user account with temporary password. Admin only. "
-                "Returns temporary password that must be changed on first login.",
+                "Returns temporary password that must be changed on first login. "
+                "Optionally sends invitation email with credentials (Story P16-1.7).",
     responses={
         400: {"description": "Username or email already exists"},
         403: {"description": "Not authorized - admin role required"},
@@ -70,18 +73,26 @@ async def create_user(
     - Sets must_change_password flag
     - Password expires in 72 hours if not changed
     - Logs creation to audit trail (P16-1.6)
+    - Optionally sends invitation email (Story P16-1.7)
     """
     service = UserService(db)
+
+    # Get login URL from frontend origin or settings
+    origin = request.headers.get("Origin", "")
+    login_url = f"{origin}/login" if origin else "https://localhost:3000/login"
 
     try:
         # Story P16-1.2: Track who created this user
         # Story P16-1.6: Pass request info for audit logging
-        user, temp_password = service.create_user(
+        # Story P16-1.7: Send invitation email if requested
+        user, temp_password, email_sent = service.create_user(
             username=user_data.username,
             role=user_data.role,
             email=user_data.email,
             send_email=user_data.send_email,
             invited_by=current_user.id,
+            login_url=login_url,
+            inviter_name=current_user.username,
             ip_address=get_client_ip(request),
             user_agent=get_user_agent(request),
         )
@@ -96,11 +107,12 @@ async def create_user(
         username=user.username,
         email=user.email,
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
-        temporary_password=temp_password if not user_data.send_email else None,
+        temporary_password=temp_password if not email_sent else None,
         password_expires_at=user.password_expires_at,
         created_at=user.created_at,
         invited_by=user.invited_by,
         invited_at=user.invited_at,
+        email_sent=email_sent,
     )
 
 
@@ -195,17 +207,16 @@ async def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    """Update user details (Admin only) - Logs to audit trail (P16-1.6)"""
+    """Update user details (Admin only)"""
     service = UserService(db)
 
     try:
-        # Story P16-1.6: Pass request info for audit logging
         user = service.update_user(
             user_id=user_id,
             email=user_data.email,
             role=user_data.role,
             is_active=user_data.is_active,
-            actor_id=current_user.id,
+            updated_by=current_user.id,
             ip_address=get_client_ip(request),
             user_agent=get_user_agent(request),
         )
@@ -252,7 +263,7 @@ async def delete_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    """Delete user (Admin only) - Logs to audit trail (P16-1.6)"""
+    """Delete user (Admin only)"""
     # Prevent self-deletion
     if user_id == current_user.id:
         raise HTTPException(
@@ -261,10 +272,9 @@ async def delete_user(
         )
 
     service = UserService(db)
-    # Story P16-1.6: Pass request info for audit logging
     if not service.delete_user(
-        user_id=user_id,
-        actor_id=current_user.id,
+        user_id,
+        deleted_by=current_user.id,
         ip_address=get_client_ip(request),
         user_agent=get_user_agent(request),
     ):
@@ -293,12 +303,11 @@ async def reset_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    """Reset user password (Admin only) - Logs to audit trail (P16-1.6)"""
+    """Reset user password (Admin only)"""
     service = UserService(db)
-    # Story P16-1.6: Pass request info for audit logging
     temp_password, expires_at = service.reset_password(
-        user_id=user_id,
-        actor_id=current_user.id,
+        user_id,
+        reset_by=current_user.id,
         ip_address=get_client_ip(request),
         user_agent=get_user_agent(request),
     )
