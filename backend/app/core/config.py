@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     MAX_CAMERAS: int = 1  # MVP limitation
     DEFAULT_FRAME_RATE: int = 5
 
+    # Live Streaming Settings (Story P16-2.2)
+    STREAM_MAX_CONCURRENT: int = 10  # Max concurrent streams server-wide
+    STREAM_DEFAULT_QUALITY: str = "medium"  # Default quality: low, medium, high
+    STREAM_FRAME_BUFFER_SIZE: int = 5  # Frames to buffer for new clients
+    STREAM_CONNECTION_TIMEOUT: int = 30  # Seconds before idle stream disconnects
+
     # HomeKit Integration (Story P4-6.1, P4-6.2)
     HOMEKIT_ENABLED: bool = False
     HOMEKIT_PORT: int = 51826

@@ -9,13 +9,15 @@ Provides REST API for camera configuration management:
 - DELETE /cameras/{id} - Delete camera
 - POST /cameras/{id}/test - Test connection
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
 import cv2
 import base64
 import numpy as np
+import asyncio
+import json
 
 try:
     import av
@@ -28,7 +30,10 @@ from app.core.validators import CameraUUID
 from app.models.camera import Camera
 from app.schemas.camera import (
     CameraCreate, CameraUpdate, CameraResponse, CameraTestResponse,
-    CameraTestRequest, CameraTestDetailedResponse
+    CameraTestRequest, CameraTestDetailedResponse,
+    # Live Streaming schemas (P16-2.2)
+    StreamInfoResponse, StreamSnapshotResponse, StreamMetricsResponse,
+    StreamQualityOption, StreamWebSocketMessage, StreamWebSocketResponse
 )
 from app.schemas.motion import (
     MotionConfigUpdate, MotionConfigResponse, MotionTestRequest, MotionTestResponse,
@@ -40,6 +45,7 @@ from app.services.detection_zone_manager import detection_zone_manager
 from app.services.event_processor import get_event_processor, ProcessingEvent
 from app.services.protect_service import get_protect_service
 from app.services.mqtt_discovery_service import on_camera_deleted, on_camera_disabled  # Story P4-2.2
+from app.services.stream_proxy_service import get_stream_proxy_service, StreamQuality  # Story P16-2.2
 
 logger = logging.getLogger(__name__)
 
@@ -2135,3 +2141,355 @@ def test_camera_audio(
             "codec_description": None,
             "message": "No audio stream detected in RTSP feed"
         }
+
+
+# ============================================================================
+# Live Streaming Endpoints (Story P16-2.2)
+# ============================================================================
+
+@router.get("/stream/metrics", response_model=StreamMetricsResponse)
+async def get_stream_metrics():
+    """
+    Get server-wide streaming metrics
+
+    Returns:
+        Streaming metrics including active streams, total clients, and error counts
+
+    Note:
+        This endpoint is placed before /{camera_id}/stream/info to avoid
+        route conflicts with FastAPI path matching
+    """
+    stream_service = get_stream_proxy_service()
+    metrics = stream_service.get_metrics()
+
+    return StreamMetricsResponse(
+        active_streams=metrics["active_streams"],
+        total_clients=metrics["total_clients"],
+        max_concurrent=metrics["max_concurrent"],
+        streams_started_total=metrics["streams_started_total"],
+        streams_stopped_total=metrics["streams_stopped_total"],
+        connection_errors_total=metrics["connection_errors_total"]
+    )
+
+
+@router.get("/{camera_id}/stream/info", response_model=StreamInfoResponse)
+async def get_stream_info(
+    camera_id: CameraUUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Get stream connection information for a camera
+
+    Args:
+        camera_id: UUID of camera
+        db: Database session
+
+    Returns:
+        Stream information including WebSocket URL, available quality options,
+        and current client count
+
+    Raises:
+        404: Camera not found
+    """
+    camera_id_str = str(camera_id)
+
+    camera = db.query(Camera).filter(Camera.id == camera_id_str).first()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera {camera_id} not found"
+        )
+
+    stream_service = get_stream_proxy_service()
+    stream_info = stream_service.get_stream_info(camera_id_str)
+
+    # Build quality options list
+    quality_options = [
+        StreamQualityOption(
+            id=q["id"],
+            label=q["label"],
+            resolution=q["resolution"],
+            fps=q["fps"]
+        )
+        for q in stream_info["quality_options"]
+    ]
+
+    return StreamInfoResponse(
+        camera_id=camera_id_str,
+        type="websocket",
+        websocket_path=f"/api/v1/cameras/{camera_id_str}/stream",
+        snapshot_path=f"/api/v1/cameras/{camera_id_str}/stream/snapshot",
+        quality_options=quality_options,
+        default_quality=stream_info["default_quality"],
+        current_clients=stream_info["current_clients"],
+        max_clients_available=stream_info["max_clients_available"],
+        is_available=stream_info["is_available"]
+    )
+
+
+def _build_rtsp_url_for_stream(camera: Camera) -> str:
+    """Build RTSP URL with credentials for streaming"""
+    rtsp_url = camera.rtsp_url
+    if not rtsp_url:
+        return ""
+
+    if camera.username:
+        password = camera.get_decrypted_password() if camera.password else ""
+        if "://" in rtsp_url:
+            protocol, rest = rtsp_url.split("://", 1)
+            creds = camera.username
+            if password:
+                creds += f":{password}"
+            rtsp_url = f"{protocol}://{creds}@{rest}"
+
+    return rtsp_url
+
+
+@router.get("/{camera_id}/stream/snapshot", response_model=StreamSnapshotResponse)
+async def get_stream_snapshot(
+    camera_id: CameraUUID,
+    quality: str = "medium",
+    db: Session = Depends(get_db)
+):
+    """
+    Get current snapshot from camera stream
+
+    Args:
+        camera_id: UUID of camera
+        quality: Quality level (low, medium, high)
+        db: Database session
+
+    Returns:
+        Snapshot response with base64-encoded JPEG image
+
+    Raises:
+        404: Camera not found
+        503: Camera not available for streaming
+    """
+    from datetime import datetime
+
+    camera_id_str = str(camera_id)
+
+    camera = db.query(Camera).filter(Camera.id == camera_id_str).first()
+    if not camera:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Camera {camera_id} not found"
+        )
+
+    # Validate quality
+    try:
+        quality_enum = StreamQuality(quality.lower())
+    except ValueError:
+        quality_enum = StreamQuality.MEDIUM
+
+    stream_service = get_stream_proxy_service()
+
+    # Build RTSP URL
+    rtsp_url = _build_rtsp_url_for_stream(camera)
+    if not rtsp_url:
+        return StreamSnapshotResponse(
+            success=False,
+            timestamp=datetime.utcnow(),
+            quality=quality,
+            error="Camera does not have an RTSP URL configured"
+        )
+
+    # Get snapshot (uses active stream if available, otherwise captures directly)
+    image_bytes = await stream_service.get_snapshot_from_rtsp(camera_id_str, rtsp_url, quality_enum)
+
+    if image_bytes:
+        image_base64 = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+        return StreamSnapshotResponse(
+            success=True,
+            timestamp=datetime.utcnow(),
+            quality=quality,
+            image_base64=image_base64
+        )
+    else:
+        return StreamSnapshotResponse(
+            success=False,
+            timestamp=datetime.utcnow(),
+            quality=quality,
+            error="Failed to capture snapshot from camera"
+        )
+
+
+@router.websocket("/{camera_id}/stream")
+async def stream_camera(
+    websocket: WebSocket,
+    camera_id: str,
+    quality: str = "medium"
+):
+    """
+    WebSocket endpoint for live camera streaming
+
+    Streams MJPEG frames as binary WebSocket messages.
+    Supports quality change and ping/pong for connection health.
+
+    Args:
+        websocket: WebSocket connection
+        camera_id: UUID of camera
+        quality: Initial quality level (low, medium, high)
+
+    Protocol:
+        - Server sends binary JPEG frames
+        - Client can send JSON control messages:
+          - {"type": "quality_change", "quality": "high"}
+          - {"type": "ping"}
+        - Server responds with JSON control messages:
+          - {"type": "quality_changed", "quality": "high"}
+          - {"type": "pong"}
+          - {"type": "error", "message": "..."}
+    """
+    from app.core.database import SessionLocal
+
+    # Get camera from database
+    db = SessionLocal()
+    try:
+        camera = db.query(Camera).filter(Camera.id == camera_id).first()
+        if not camera:
+            await websocket.close(code=4004, reason="Camera not found")
+            return
+
+        # Build RTSP URL
+        rtsp_url = _build_rtsp_url_for_stream(camera)
+        if not rtsp_url:
+            await websocket.close(code=4400, reason="Camera has no RTSP URL")
+            return
+    finally:
+        db.close()
+
+    # Accept WebSocket connection
+    await websocket.accept()
+
+    # Validate initial quality
+    try:
+        quality_enum = StreamQuality(quality.lower())
+    except ValueError:
+        quality_enum = StreamQuality.MEDIUM
+
+    stream_service = get_stream_proxy_service()
+
+    # Try to add client
+    client_id = await stream_service.add_client(camera_id, rtsp_url, quality_enum)
+    if not client_id:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Maximum concurrent streams reached or camera unavailable"
+        })
+        await websocket.close(code=4503, reason="Stream unavailable")
+        return
+
+    # Send initial info
+    await websocket.send_json({
+        "type": "info",
+        "message": f"Connected to stream with quality: {quality_enum.value}",
+        "quality": quality_enum.value
+    })
+
+    logger.info(
+        f"WebSocket client {client_id} connected to camera {camera_id}",
+        extra={
+            "event_type": "stream_client_connected",
+            "camera_id": camera_id,
+            "client_id": client_id,
+            "quality": quality_enum.value
+        }
+    )
+
+    try:
+        # Frame sending task
+        async def send_frames():
+            """Background task to send frames to client"""
+            last_frame_time = 0
+            while True:
+                try:
+                    # Get latest frame for this client
+                    frame_data = stream_service.get_client_frame(camera_id, client_id)
+                    if frame_data and frame_data["timestamp"] > last_frame_time:
+                        await websocket.send_bytes(frame_data["data"])
+                        last_frame_time = frame_data["timestamp"]
+
+                    # Small delay to prevent busy loop
+                    await asyncio.sleep(0.01)
+                except WebSocketDisconnect:
+                    break
+                except Exception as e:
+                    logger.debug(f"Frame send error: {e}")
+                    break
+
+        # Message receiving task
+        async def receive_messages():
+            """Background task to receive control messages from client"""
+            while True:
+                try:
+                    data = await websocket.receive_text()
+                    message = json.loads(data)
+
+                    if message.get("type") == "ping":
+                        await websocket.send_json({
+                            "type": "pong",
+                            "timestamp": asyncio.get_event_loop().time()
+                        })
+
+                    elif message.get("type") == "quality_change":
+                        new_quality = message.get("quality", "medium")
+                        try:
+                            new_quality_enum = StreamQuality(new_quality.lower())
+                            stream_service.change_quality(camera_id, client_id, new_quality_enum)
+                            await websocket.send_json({
+                                "type": "quality_changed",
+                                "quality": new_quality_enum.value
+                            })
+                            logger.info(f"Client {client_id} changed quality to {new_quality_enum.value}")
+                        except ValueError:
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": f"Invalid quality level: {new_quality}"
+                            })
+
+                except WebSocketDisconnect:
+                    break
+                except json.JSONDecodeError:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": "Invalid JSON message"
+                    })
+                except Exception as e:
+                    logger.debug(f"Message receive error: {e}")
+                    break
+
+        # Run both tasks concurrently
+        send_task = asyncio.create_task(send_frames())
+        receive_task = asyncio.create_task(receive_messages())
+
+        # Wait for either task to complete (connection closed or error)
+        done, pending = await asyncio.wait(
+            [send_task, receive_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+
+        # Cancel pending tasks
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket client {client_id} disconnected from camera {camera_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for client {client_id}: {e}", exc_info=True)
+    finally:
+        # Remove client from stream
+        stream_service.remove_client(camera_id, client_id)
+        logger.info(
+            f"WebSocket client {client_id} removed from camera {camera_id}",
+            extra={
+                "event_type": "stream_client_disconnected",
+                "camera_id": camera_id,
+                "client_id": client_id
+            }
+        )

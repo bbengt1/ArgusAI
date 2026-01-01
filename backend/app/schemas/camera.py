@@ -349,3 +349,155 @@ class CameraTestDetailedResponse(BaseModel):
             ]
         }
     }
+
+
+# ============================================================================
+# Live Streaming Schemas (Story P16-2.2)
+# ============================================================================
+
+class StreamQualityOption(BaseModel):
+    """Schema for a single stream quality option"""
+
+    id: str = Field(..., description="Quality level identifier: low, medium, high")
+    label: str = Field(..., description="Human-readable label (e.g., '720p @ 10fps')")
+    resolution: str = Field(..., description="Resolution string (e.g., '1280x720')")
+    fps: int = Field(..., description="Frames per second for this quality level")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": "medium",
+                    "label": "720p @ 10fps",
+                    "resolution": "1280x720",
+                    "fps": 10
+                }
+            ]
+        }
+    }
+
+
+class StreamInfoResponse(BaseModel):
+    """Schema for stream information response (GET /cameras/{id}/stream/info)"""
+
+    camera_id: str = Field(..., description="Camera UUID")
+    type: str = Field(default="websocket", description="Stream type: websocket")
+    websocket_path: str = Field(..., description="WebSocket path for stream connection")
+    snapshot_path: str = Field(..., description="Path to get current snapshot")
+    quality_options: List[StreamQualityOption] = Field(..., description="Available quality levels")
+    default_quality: str = Field(..., description="Default quality level")
+    current_clients: int = Field(..., description="Number of currently connected clients")
+    max_clients_available: int = Field(..., description="Remaining client slots available")
+    is_available: bool = Field(..., description="Whether streaming is available for this camera")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "camera_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "type": "websocket",
+                    "websocket_path": "/api/v1/cameras/550e8400-e29b-41d4-a716-446655440000/stream",
+                    "snapshot_path": "/api/v1/cameras/550e8400-e29b-41d4-a716-446655440000/stream/snapshot",
+                    "quality_options": [
+                        {"id": "low", "label": "360p @ 5fps", "resolution": "640x360", "fps": 5},
+                        {"id": "medium", "label": "720p @ 10fps", "resolution": "1280x720", "fps": 10},
+                        {"id": "high", "label": "1080p @ 15fps", "resolution": "1920x1080", "fps": 15}
+                    ],
+                    "default_quality": "medium",
+                    "current_clients": 2,
+                    "max_clients_available": 8,
+                    "is_available": True
+                }
+            ]
+        }
+    }
+
+
+class StreamSnapshotResponse(BaseModel):
+    """Schema for stream snapshot response (GET /cameras/{id}/stream/snapshot)"""
+
+    success: bool = Field(..., description="Whether snapshot capture succeeded")
+    timestamp: datetime = Field(..., description="Timestamp of snapshot capture")
+    quality: str = Field(..., description="Quality level used for snapshot")
+    image_base64: Optional[str] = Field(None, description="Base64-encoded JPEG image data")
+    error: Optional[str] = Field(None, description="Error message if capture failed")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "success": True,
+                    "timestamp": "2026-01-01T12:00:00Z",
+                    "quality": "medium",
+                    "image_base64": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+                },
+                {
+                    "success": False,
+                    "timestamp": "2026-01-01T12:00:00Z",
+                    "quality": "medium",
+                    "error": "Camera not connected"
+                }
+            ]
+        }
+    }
+
+
+class StreamMetricsResponse(BaseModel):
+    """Schema for stream metrics response (GET /cameras/stream/metrics)"""
+
+    active_streams: int = Field(..., description="Number of active camera streams")
+    total_clients: int = Field(..., description="Total connected WebSocket clients")
+    max_concurrent: int = Field(..., description="Maximum concurrent streams allowed")
+    streams_started_total: int = Field(..., description="Total streams started since server start")
+    streams_stopped_total: int = Field(..., description="Total streams stopped since server start")
+    connection_errors_total: int = Field(..., description="Total connection errors since server start")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "active_streams": 3,
+                    "total_clients": 5,
+                    "max_concurrent": 10,
+                    "streams_started_total": 42,
+                    "streams_stopped_total": 39,
+                    "connection_errors_total": 2
+                }
+            ]
+        }
+    }
+
+
+class StreamWebSocketMessage(BaseModel):
+    """Schema for WebSocket control messages (sent by client)"""
+
+    type: Literal["quality_change", "ping"] = Field(..., description="Message type")
+    quality: Optional[str] = Field(None, description="New quality level (for quality_change)")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"type": "quality_change", "quality": "high"},
+                {"type": "ping"}
+            ]
+        }
+    }
+
+
+class StreamWebSocketResponse(BaseModel):
+    """Schema for WebSocket control responses (sent by server)"""
+
+    type: Literal["quality_changed", "pong", "error", "info"] = Field(..., description="Response type")
+    quality: Optional[str] = Field(None, description="Current quality level")
+    message: Optional[str] = Field(None, description="Info or error message")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"type": "quality_changed", "quality": "high", "timestamp": "2026-01-01T12:00:00Z"},
+                {"type": "pong", "timestamp": "2026-01-01T12:00:00Z"},
+                {"type": "error", "message": "Invalid quality level", "timestamp": "2026-01-01T12:00:00Z"}
+            ]
+        }
+    }
