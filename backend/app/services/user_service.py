@@ -1,4 +1,4 @@
-"""User management service (Story P15-2.3, P15-2.5, P16-1.2)
+"""User management service (Story P15-2.3, P15-2.5, P16-1.2, P16-1.7)
 
 Provides user CRUD operations, invitation flow, and password reset functionality.
 """
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.exc import IntegrityError
 import secrets
 import logging
+import asyncio
 
 from app.models.user import User, UserRole
 from app.utils.auth import hash_password
@@ -43,7 +44,9 @@ class UserService:
         email: Optional[str] = None,
         send_email: bool = False,
         invited_by: Optional[str] = None,
-    ) -> Tuple[User, str]:
+        login_url: Optional[str] = None,
+        inviter_name: Optional[str] = None,
+    ) -> Tuple[User, str, bool]:
         """
         Create a new user with temporary password.
 
@@ -51,11 +54,13 @@ class UserService:
             username: Unique username
             role: User role (admin, operator, viewer)
             email: Optional email address
-            send_email: Whether to send invitation email (future feature)
+            send_email: Whether to send invitation email (Story P16-1.7)
             invited_by: User ID of the admin who created this user (Story P16-1.2)
+            login_url: URL for the login page (for invitation email)
+            inviter_name: Name of the admin who invited this user
 
         Returns:
-            Tuple of (User, temporary_password)
+            Tuple of (User, temporary_password, email_sent)
 
         Raises:
             ValueError: If username already exists
@@ -104,10 +109,71 @@ class UserService:
             }
         )
 
-        # TODO: If send_email and email is configured, send invitation email
-        # For now, we just return the password for display
+        # Story P16-1.7: Send invitation email if requested
+        email_sent = False
+        if send_email and email:
+            email_sent = self._send_invitation_email(
+                to_email=email,
+                username=username,
+                temporary_password=temp_password,
+                login_url=login_url or "https://localhost:3000/login",
+                invited_by=inviter_name,
+            )
 
-        return user, temp_password
+        return user, temp_password, email_sent
+
+    def _send_invitation_email(
+        self,
+        to_email: str,
+        username: str,
+        temporary_password: str,
+        login_url: str,
+        invited_by: Optional[str] = None,
+    ) -> bool:
+        """
+        Send invitation email to new user (Story P16-1.7).
+
+        Uses asyncio to run the async email service from sync context.
+
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        try:
+            from app.services.email_service import EmailService
+
+            email_service = EmailService(self.db)
+            if not email_service.is_configured():
+                logger.warning("SMTP not configured, skipping invitation email")
+                return False
+
+            # Run async email send in sync context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    email_service.send_invitation_email(
+                        to_email=to_email,
+                        username=username,
+                        temporary_password=temporary_password,
+                        login_url=login_url,
+                        invited_by=invited_by,
+                    )
+                )
+                return result
+            finally:
+                loop.close()
+
+        except Exception as e:
+            logger.error(
+                f"Failed to send invitation email: {e}",
+                extra={
+                    "event_type": "invitation_email_failed",
+                    "to_email": to_email,
+                    "username": username,
+                    "error": str(e),
+                }
+            )
+            return False
 
     def get_user(self, user_id: str) -> Optional[User]:
         """Get user by ID"""
@@ -313,8 +379,8 @@ class UserService:
         if existing_users > 0:
             return False, ""
 
-        # Create default admin
-        user, password = self.create_user(
+        # Create default admin (no email, no invitation)
+        user, password, _ = self.create_user(
             username="admin",
             role="admin",
             email=None,

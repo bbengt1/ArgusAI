@@ -1,4 +1,4 @@
-"""User management API endpoints (Story P15-2.3, P16-1.2)
+"""User management API endpoints (Story P15-2.3, P16-1.2, P16-1.7)
 
 Admin-only endpoints for managing user accounts.
 
@@ -7,8 +7,9 @@ Permission Matrix:
 - Regular users can only manage their own profile via /auth endpoints
 
 Story P16-1.2: Added invited_by/invited_at tracking for user creation.
+Story P16-1.7: Added email invitation flow.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
 import logging
@@ -24,6 +25,7 @@ from app.schemas.auth import (
     PasswordResetResponse,
 )
 from app.services.user_service import UserService
+from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +38,8 @@ router = APIRouter(prefix="/users", tags=["User Management"])
     status_code=status.HTTP_201_CREATED,
     summary="Create new user",
     description="Create a new user account with temporary password. Admin only. "
-                "Returns temporary password that must be changed on first login.",
+                "Returns temporary password that must be changed on first login. "
+                "Optionally sends invitation email with credentials (Story P16-1.7).",
     responses={
         400: {"description": "Username or email already exists"},
         403: {"description": "Not authorized - admin role required"},
@@ -44,6 +47,7 @@ router = APIRouter(prefix="/users", tags=["User Management"])
 )
 async def create_user(
     user_data: UserCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
@@ -53,17 +57,25 @@ async def create_user(
     - Generates secure temporary password
     - Sets must_change_password flag
     - Password expires in 72 hours if not changed
+    - Optionally sends invitation email (Story P16-1.7)
     """
     service = UserService(db)
 
+    # Get login URL from frontend origin or settings
+    origin = request.headers.get("Origin", "")
+    login_url = f"{origin}/login" if origin else "https://localhost:3000/login"
+
     try:
         # Story P16-1.2: Track who created this user
-        user, temp_password = service.create_user(
+        # Story P16-1.7: Send invitation email if requested
+        user, temp_password, email_sent = service.create_user(
             username=user_data.username,
             role=user_data.role,
             email=user_data.email,
             send_email=user_data.send_email,
             invited_by=current_user.id,
+            login_url=login_url,
+            inviter_name=current_user.username,
         )
     except ValueError as e:
         raise HTTPException(
@@ -76,11 +88,12 @@ async def create_user(
         username=user.username,
         email=user.email,
         role=user.role.value if hasattr(user.role, 'value') else str(user.role),
-        temporary_password=temp_password if not user_data.send_email else None,
+        temporary_password=temp_password if not email_sent else None,
         password_expires_at=user.password_expires_at,
         created_at=user.created_at,
         invited_by=user.invited_by,
         invited_at=user.invited_at,
+        email_sent=email_sent,
     )
 
 

@@ -27,6 +27,7 @@ import {
   Eye,
   UserCog,
   Loader2,
+  Mail,
 } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
@@ -108,6 +109,13 @@ export function UserManagement({ currentUserId }: UserManagementProps) {
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('viewer');
+  const [sendEmail, setSendEmail] = useState(false);
+
+  // Check if SMTP is configured for enabling email option
+  const { data: smtpSettings } = useQuery({
+    queryKey: ['smtp-config'],
+    queryFn: () => apiClient.smtp.getSettings(),
+  });
 
   // Form state for editing user
   const [editEmail, setEditEmail] = useState('');
@@ -125,11 +133,19 @@ export function UserManagement({ currentUserId }: UserManagementProps) {
     mutationFn: (data: IUserCreate) => apiClient.users.create(data),
     onSuccess: (response: IUserCreateResponse) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      setTemporaryPassword(response.temporary_password);
+      // Only show password if email wasn't sent
+      if (!sendEmail || !response.email_sent) {
+        setTemporaryPassword(response.temporary_password);
+      }
       setNewUsername('');
       setNewEmail('');
       setNewRole('viewer');
-      toast.success(`User "${response.username}" created successfully`);
+      setSendEmail(false);
+      if (response.email_sent) {
+        toast.success(`User "${response.username}" created and invitation email sent`);
+      } else {
+        toast.success(`User "${response.username}" created successfully`);
+      }
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to create user');
@@ -182,10 +198,15 @@ export function UserManagement({ currentUserId }: UserManagementProps) {
       toast.error('Username is required');
       return;
     }
+    if (sendEmail && !newEmail.trim()) {
+      toast.error('Email is required to send invitation');
+      return;
+    }
     createUserMutation.mutate({
       username: newUsername.trim(),
       email: newEmail.trim() || undefined,
       role: newRole,
+      send_email: sendEmail && !!newEmail.trim(),
     });
   };
 
@@ -350,6 +371,28 @@ export function UserManagement({ currentUserId }: UserManagementProps) {
                       {roleDescriptions[newRole]}
                     </p>
                   </div>
+                  {/* Story P16-1.7: Send invitation email option */}
+                  {smtpSettings?.enabled && (
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <div className="space-y-0.5">
+                          <Label htmlFor="send-email" className="cursor-pointer">
+                            Send Invitation Email
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Email credentials to the user (requires email)
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        id="send-email"
+                        checked={sendEmail}
+                        onCheckedChange={setSendEmail}
+                        disabled={!newEmail.trim()}
+                      />
+                    </div>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
