@@ -41,7 +41,13 @@ workflow_status:
   # Phase 3: Implementation
   sprint-planning: docs/sprint-artifacts/sprint-status.yaml  # agent: sm
 
-# Phase 14 Artifacts (in progress)
+# Phase 16 Artifacts (in progress)
+phase16_artifacts:
+  prd: docs/PRD-phase16.md
+  architecture: docs/architecture-phase16.md
+  # epics: docs/epics-phase16.md  # To be created
+
+# Phase 14 Artifacts (completed)
 phase14_artifacts:
   prd: docs/PRD-phase14.md
   epics: docs/epics-phase14.md  # 53 stories across 8 epics
