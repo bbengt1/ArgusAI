@@ -1,6 +1,6 @@
 # Sprint Status
-# Auto-generated from epics.md through epics-phase15.md
-# Last updated: 2025-12-30
+# Auto-generated from epics.md through epics-phase16.md
+# Last updated: 2026-01-01
 
 # STATUS DEFINITIONS:
 # ==================
@@ -27,7 +27,7 @@
 # - SM typically drafts next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', SM reviews, then Dev moves to 'done'
 
-generated: 2025-12-13
+generated: 2026-01-01
 project: ArgusAI
 project_key: argusai
 tracking_system: file-system
@@ -1072,3 +1072,105 @@ development_status:
   p15-5-4-annotation-toggle-in-event-detail: done
   p15-5-5-annotation-legend-and-styling: done
   epic-p15-5-retrospective: optional
+
+  # ============================================================================
+  # PHASE 16: User Experience & Access Management
+  # ============================================================================
+  # Source: docs/epics-phase16.md
+  # PRD: docs/PRD-phase16.md
+  # Architecture: docs/architecture-phase16.md
+  # Focus: Multi-user support, live streaming, entity editing, session management
+  # Total: 28 stories across 6 epics
+  # MVP: P16-1 through P16-4 (19 stories)
+  # Growth: P16-5 and P16-6 (9 stories)
+  #
+  # GITHUB ISSUE MAPPING (MANDATORY):
+  # =================================
+  # All Phase 16 work MUST be tied to these GitHub issues for tracking:
+  # - Epic P16-1: GH #308 (FF-036: User Management with Email Invitations)
+  # - Epic P16-2: GH #336 (FF-039: Live Camera Feeds via Protect API)
+  # - Epic P16-3: GH #338 (IMP-071: Edit Entity Metadata)
+  # - Epic P16-4: GH #337 (IMP-070: Entity Assignment Re-classification Warning)
+  # - Epic P16-5: GH #342 (FF-037: Active User Sessions List)
+  # - Epic P16-6: GH #302 (IMP-069: Multi-Entity Event Assignment)
+  #
+  # When creating PRs:
+  # 1. Reference the GitHub issue in PR title/body (e.g., "Closes #308")
+  # 2. Link to the GitHub issue when marking stories as done
+  # 3. Close the GitHub issue only when ALL stories in the epic are complete
+
+  # Epic P16-1: User Management & Invitations
+  # Priority: P2 (MVP)
+  # Focus: Multi-user support with roles and email invitations
+  # GitHub: #308
+  # FRs Covered: FR1-FR9
+  epic-p16-1: backlog
+  p16-1-1-extend-user-model-for-multi-user-support: backlog
+  p16-1-2-create-user-management-api-endpoints: backlog
+  p16-1-3-implement-role-based-authorization-middleware: backlog
+  p16-1-4-create-user-management-ui-page: backlog
+  p16-1-5-force-password-change-on-first-login: backlog
+  p16-1-6-user-audit-logging: backlog
+  p16-1-7-email-invitation-flow: backlog
+  epic-p16-1-retrospective: optional
+
+  # Epic P16-2: Live Camera Streaming
+  # Priority: P2 (MVP)
+  # Focus: Live video feeds from UniFi Protect cameras
+  # GitHub: #336
+  # FRs Covered: FR16-FR22
+  epic-p16-2: backlog
+  p16-2-1-research-and-design-streaming-approach: backlog
+  p16-2-2-implement-backend-stream-proxy-service: backlog
+  p16-2-3-create-livestreamplayer-frontend-component: backlog
+  p16-2-4-add-live-view-button-to-camera-cards: backlog
+  p16-2-5-implement-concurrent-stream-limiting: backlog
+  epic-p16-2-retrospective: optional
+
+  # Epic P16-3: Entity Metadata Editing
+  # Priority: P2 (MVP)
+  # Focus: Edit entity properties after automatic creation
+  # GitHub: #338
+  # FRs Covered: FR23-FR29
+  epic-p16-3: backlog
+  p16-3-1-create-entity-update-api-endpoint: backlog
+  p16-3-2-create-entityeditmodal-component: backlog
+  p16-3-3-add-edit-button-to-entity-card: backlog
+  p16-3-4-add-edit-button-to-entity-detail-modal: backlog
+  epic-p16-3-retrospective: optional
+
+  # Epic P16-4: Entity Assignment UX
+  # Priority: P2 (MVP)
+  # Focus: Confirmation dialog for entity assignment re-classification
+  # GitHub: #337
+  # FRs Covered: FR30-FR35
+  epic-p16-4: backlog
+  p16-4-1-create-entity-assignment-confirmation-dialog: backlog
+  p16-4-2-add-dont-show-again-preference: backlog
+  p16-4-3-display-re-classification-status: backlog
+  epic-p16-4-retrospective: optional
+
+  # Epic P16-5: Active Sessions Management
+  # Priority: P3 (Growth)
+  # Focus: View and manage active login sessions
+  # GitHub: #342
+  # FRs Covered: FR10-FR15
+  epic-p16-5: backlog
+  p16-5-1-create-session-model-and-tracking: backlog
+  p16-5-2-create-session-api-endpoints: backlog
+  p16-5-3-create-active-sessions-ui: backlog
+  p16-5-4-enforce-maximum-concurrent-sessions: backlog
+  p16-5-5-invalidate-sessions-on-password-change: backlog
+  epic-p16-5-retrospective: optional
+
+  # Epic P16-6: Multi-Entity Events
+  # Priority: P3 (Growth)
+  # Focus: Events associated with multiple entities
+  # GitHub: #302
+  # FRs Covered: FR36-FR40
+  epic-p16-6: backlog
+  p16-6-1-research-multi-entity-data-model: backlog
+  p16-6-2-update-backend-for-multi-entity-support: backlog
+  p16-6-3-update-event-cards-for-multiple-entities: backlog
+  p16-6-4-update-entity-assignment-for-multi-select: backlog
+  epic-p16-6-retrospective: optional
