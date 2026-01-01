@@ -1,4 +1,4 @@
-"""Role-based access control permissions (Story P15-2.9)
+"""Role-based access control permissions (Story P15-2.9, P16-1.3)
 
 Provides FastAPI dependencies for enforcing role-based permissions on API endpoints.
 
@@ -18,6 +18,8 @@ Permission Matrix:
 | POST/PUT/DELETE /cameras/*| Yes   | Yes      | No     |
 | GET /entities/*           | Yes   | Yes      | Yes    |
 | POST/PUT/DELETE /entities/*| Yes  | Yes      | No     |
+
+Story P16-1.3: Added error_code to permission denied responses.
 """
 from functools import wraps
 from typing import List, Callable
@@ -32,12 +34,18 @@ logger = logging.getLogger(__name__)
 
 
 class PermissionDenied(HTTPException):
-    """Exception raised when user lacks required permissions"""
+    """Exception raised when user lacks required permissions (Story P16-1.3)
 
-    def __init__(self, detail: str = "Not authorized for this action"):
+    Returns 403 with body: {"detail": "...", "error_code": "INSUFFICIENT_PERMISSIONS"}
+    """
+
+    def __init__(self, detail: str = "Insufficient permissions"):
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=detail
+            detail={
+                "detail": detail,
+                "error_code": "INSUFFICIENT_PERMISSIONS"
+            }
         )
 
 
@@ -85,7 +93,7 @@ def require_role(*allowed_roles: UserRole):
             )
             raise PermissionDenied(
                 detail=f"Role '{current_user.role.value if hasattr(current_user.role, 'value') else current_user.role}' "
-                       f"is not authorized for this action"
+                       f"is not authorized for this action. Required: {', '.join(r.value for r in allowed_roles)}"
             )
 
         return current_user
