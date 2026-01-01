@@ -1,5 +1,5 @@
 """User SQLAlchemy ORM model for authentication (Story P15-2.1)"""
-from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum, Index
+from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum, Index, ForeignKey
 from sqlalchemy.orm import validates, relationship
 from app.core.database import Base
 import uuid
@@ -20,12 +20,12 @@ class UserRole(str, Enum):
 
 class User(Base):
     """
-    User model for multi-user authentication (Story P15-2.1)
+    User model for multi-user authentication (Story P15-2.1, P16-1.1)
 
     Attributes:
         id: UUID primary key
         username: Unique login username (3-50 chars, alphanumeric + underscore)
-        email: Unique email address for login (optional, for future email invites)
+        email: Unique email address for login (optional, for email invites)
         password_hash: bcrypt hash (cost factor 12)
         role: User role for RBAC (admin, operator, viewer)
         is_active: Whether account is enabled
@@ -34,6 +34,8 @@ class User(Base):
         created_at: Record creation timestamp (UTC)
         updated_at: Last modification timestamp (UTC)
         last_login: Last successful login timestamp (UTC)
+        invited_by: FK to users.id who created this user (Story P16-1.1)
+        invited_at: Timestamp when user was invited (Story P16-1.1)
 
     ADR-P15-002: Uses bcrypt with cost factor 12 (~250ms hash time)
     ADR-P15-003: Three-role RBAC (admin, operator, viewer)
@@ -64,8 +66,15 @@ class User(Base):
     )
     last_login = Column(DateTime(timezone=True), nullable=True)
 
+    # Story P16-1.1: Invitation tracking fields
+    invited_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    invited_at = Column(DateTime(timezone=True), nullable=True)
+
     # Relationship to Device (Story P11-2.4)
     devices = relationship("Device", back_populates="user", cascade="all, delete-orphan")
+
+    # Self-referential relationship for inviter (Story P16-1.1)
+    inviter = relationship("User", remote_side="User.id", foreign_keys=[invited_by])
 
     # Relationship to Session (Story P15-2.2)
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
