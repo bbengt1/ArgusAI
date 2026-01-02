@@ -21,7 +21,7 @@ const { createServer } = require('https');
 const { parse } = require('url');
 const next = require('next');
 const fs = require('fs');
-const { createProxyServer } = require('http-proxy');
+const http = require('http');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || '0.0.0.0';
@@ -58,20 +58,10 @@ const httpsOptions = {
   key: fs.readFileSync(keyFile),
 };
 
-// Create WebSocket proxy for backend streaming endpoints (Story P16-2)
-const wsProxy = createProxyServer({
-  target: backendUrl,
-  ws: true,
-  changeOrigin: true,
-});
-
-wsProxy.on('error', (err, req, res) => {
-  console.error('WebSocket proxy error:', err.message);
-  if (res && res.writeHead) {
-    res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end('WebSocket proxy error');
-  }
-});
+// Parse backend URL for WebSocket proxying
+const backendUrlParsed = new URL(backendUrl);
+const backendHost = backendUrlParsed.hostname;
+const backendPort = backendUrlParsed.port || (backendUrlParsed.protocol === 'https:' ? 443 : 80);
 
 // Initialize Next.js app
 const app = next({ dev, hostname, port });
@@ -90,14 +80,60 @@ app.prepare().then(() => {
   });
 
   // Handle WebSocket upgrade requests for streaming endpoints (Story P16-2)
+  // Uses raw socket piping to avoid http-proxy frame corruption issues
   server.on('upgrade', (req, socket, head) => {
     const { pathname } = parse(req.url, true);
 
     // Proxy WebSocket connections for camera streams and other WS endpoints
     if ((pathname.startsWith('/api/v1/cameras/') && pathname.endsWith('/stream')) ||
         pathname === '/ws' || pathname.startsWith('/ws/')) {
-      console.log(`WebSocket upgrade: ${pathname} -> ${backendUrl}${pathname}`);
-      wsProxy.ws(req, socket, head);
+      console.log(`WebSocket upgrade: ${pathname} -> ${backendHost}:${backendPort}${pathname}`);
+
+      // Create connection to backend
+      const proxyReq = http.request({
+        hostname: backendHost,
+        port: backendPort,
+        path: req.url,
+        method: 'GET',
+        headers: {
+          ...req.headers,
+          host: `${backendHost}:${backendPort}`,
+        },
+      });
+
+      proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+        // Send the upgrade response back to client
+        socket.write('HTTP/1.1 101 Switching Protocols\r\n');
+        for (const [key, value] of Object.entries(proxyRes.headers)) {
+          socket.write(`${key}: ${value}\r\n`);
+        }
+        socket.write('\r\n');
+
+        // Write any buffered data
+        if (proxyHead.length > 0) {
+          socket.write(proxyHead);
+        }
+        if (head.length > 0) {
+          proxySocket.write(head);
+        }
+
+        // Pipe data between sockets (raw, no frame manipulation)
+        proxySocket.pipe(socket);
+        socket.pipe(proxySocket);
+
+        // Handle cleanup
+        socket.on('close', () => proxySocket.destroy());
+        proxySocket.on('close', () => socket.destroy());
+        socket.on('error', () => proxySocket.destroy());
+        proxySocket.on('error', () => socket.destroy());
+      });
+
+      proxyReq.on('error', (err) => {
+        console.error('WebSocket proxy error:', err.message);
+        socket.destroy();
+      });
+
+      proxyReq.end();
     } else {
       // Let Next.js handle other WebSocket connections (e.g., HMR in dev mode)
       socket.destroy();
