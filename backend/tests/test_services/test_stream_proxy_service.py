@@ -163,6 +163,8 @@ class TestStreamProxyService:
             "client-2", StreamQuality.HIGH, datetime.now(timezone.utc)
         )
         service._streams["test-cam-456"] = stream
+        # Also update the total client count
+        service._total_clients = 2
 
         info = service.get_stream_info("test-cam-456")
 
