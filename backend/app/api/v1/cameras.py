@@ -2371,12 +2371,25 @@ async def stream_camera(
 
     stream_service = get_stream_proxy_service()
 
+    # Check if stream limit is reached before trying to add client (Story P16-2.5)
+    stream_info = stream_service.get_stream_info(camera_id)
+    if not stream_info["is_available"]:
+        await websocket.send_json({
+            "type": "error",
+            "code": "STREAM_LIMIT_REACHED",
+            "message": "Maximum concurrent streams reached. Please close another stream first."
+        })
+        await websocket.close(code=4429, reason="Stream limit reached")
+        return
+
     # Try to add client
     client_id = await stream_service.add_client(camera_id, rtsp_url, quality_enum)
     if not client_id:
+        # This shouldn't happen if is_available was true, but handle race condition
         await websocket.send_json({
             "type": "error",
-            "message": "Maximum concurrent streams reached or camera unavailable"
+            "code": "STREAM_UNAVAILABLE",
+            "message": "Stream temporarily unavailable. Please try again."
         })
         await websocket.close(code=4503, reason="Stream unavailable")
         return
