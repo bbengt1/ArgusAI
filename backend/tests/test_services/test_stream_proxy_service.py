@@ -131,7 +131,7 @@ class TestStreamProxyService:
         svc = StreamProxyService()
         yield svc
         # Cleanup
-        svc.shutdown()
+        svc.stop_all()
 
     def test_singleton_pattern(self):
         """Test that get_stream_proxy_service returns singleton"""
@@ -194,9 +194,10 @@ class TestStreamProxyService:
 
         service._streams["cam-1"] = stream1
         service._streams["cam-2"] = stream2
-        service._stats["streams_started"] = 5
-        service._stats["streams_stopped"] = 2
-        service._stats["connection_errors"] = 1
+        service._total_clients = 3
+        service._streams_started = 5
+        service._streams_stopped = 2
+        service._connection_errors = 1
 
         metrics = service.get_metrics()
 
@@ -215,6 +216,8 @@ class TestStreamProxyService:
                 f"client-{i}", StreamQuality.MEDIUM, datetime.now(timezone.utc)
             )
             service._streams[f"cam-{i}"] = stream
+        # Also update the total client count
+        service._total_clients = settings.STREAM_MAX_CONCURRENT
 
         info = service.get_stream_info("new-camera")
         assert info["max_clients_available"] == 0
@@ -261,24 +264,27 @@ class TestStreamProxyService:
         # This should not raise an exception
         service.change_quality("nonexistent-cam", "nonexistent-client", StreamQuality.HIGH)
 
-    def test_get_client_frame_no_stream(self, service):
-        """Test getting frame when stream doesn't exist"""
-        result = service.get_client_frame("nonexistent-cam", "nonexistent-client")
+    def test_get_snapshot_no_stream(self, service):
+        """Test getting snapshot when stream doesn't exist returns None for sync path"""
+        # Sync path returns None when no active stream and no RTSP URL provided
+        result = service.get_snapshot("nonexistent-cam")
         assert result is None
 
-    def test_get_client_frame_no_current_frame(self, service):
-        """Test getting frame when no current frame available"""
+    def test_get_snapshot_with_active_stream(self, service):
+        """Test getting snapshot from active stream with current frame"""
         camera_id = "test-cam"
-        client_id = "client-1"
+
+        # Create a test frame
+        test_frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
         stream = CameraStream(camera_id=camera_id, rtsp_url="rtsp://test/stream")
-        stream.clients[client_id] = StreamClient(
-            client_id, StreamQuality.MEDIUM, datetime.now(timezone.utc)
-        )
+        stream.last_frame = test_frame
         service._streams[camera_id] = stream
 
-        result = service.get_client_frame(camera_id, client_id)
-        assert result is None
+        result = service.get_snapshot(camera_id)
+        # Should return encoded JPEG bytes
+        assert result is not None
+        assert isinstance(result, bytes)
 
 
 class TestStreamProxyServiceAsync:
@@ -289,7 +295,7 @@ class TestStreamProxyServiceAsync:
         """Create a fresh StreamProxyService instance"""
         svc = StreamProxyService()
         yield svc
-        svc.shutdown()
+        svc.stop_all()
 
     @pytest.mark.asyncio
     async def test_add_client_starts_stream(self, service):
@@ -300,7 +306,7 @@ class TestStreamProxyServiceAsync:
         mock_camera.username = None
         mock_camera.password = None
 
-        with patch.object(service, '_start_capture_thread'):
+        with patch.object(service, '_start_capture'):
             client_id = await service.add_client("test-cam", mock_camera, StreamQuality.MEDIUM)
 
             assert client_id is not None
@@ -317,6 +323,8 @@ class TestStreamProxyServiceAsync:
                 f"client-{i}", StreamQuality.MEDIUM, datetime.now(timezone.utc)
             )
             service._streams[f"cam-{i}"] = stream
+        # Set total clients counter
+        service._total_clients = settings.STREAM_MAX_CONCURRENT
 
         mock_camera = Mock()
         mock_camera.type = "rtsp"
@@ -326,29 +334,28 @@ class TestStreamProxyServiceAsync:
         assert client_id is None
 
     @pytest.mark.asyncio
-    async def test_get_snapshot_no_stream(self, service):
-        """Test getting snapshot when no stream is active"""
-        mock_camera = Mock()
-        mock_camera.type = "rtsp"
-        mock_camera.rtsp_url = "rtsp://test/stream"
-        mock_camera.username = None
-        mock_camera.password = None
+    async def test_get_snapshot_from_rtsp_no_stream(self, service):
+        """Test getting snapshot from RTSP when no stream is active"""
+        rtsp_url = "rtsp://test/stream"
 
         # Mock the _capture_single_frame method
         test_frame = np.zeros((480, 640, 3), dtype=np.uint8)
         with patch.object(service, '_capture_single_frame', return_value=test_frame):
-            result = await service.get_snapshot("test-cam", mock_camera, StreamQuality.MEDIUM)
+            result = await service.get_snapshot_from_rtsp("test-cam", rtsp_url, StreamQuality.MEDIUM)
 
-            assert result["success"] is True
-            assert "image_base64" in result
+            assert result is not None
+            assert isinstance(result, bytes)
+            # JPEG files start with FF D8
+            assert result[:2] == b'\xff\xd8'
 
     @pytest.mark.asyncio
-    async def test_get_snapshot_from_active_stream(self, service):
-        """Test getting snapshot from active stream uses buffered frame"""
+    async def test_get_snapshot_from_rtsp_uses_active_stream(self, service):
+        """Test getting snapshot from RTSP uses buffered frame from active stream"""
         camera_id = "test-cam"
+        rtsp_url = "rtsp://test/stream"
 
         # Setup: Create a stream with a current frame
-        stream = CameraStream(camera_id=camera_id, rtsp_url="rtsp://test/stream")
+        stream = CameraStream(camera_id=camera_id, rtsp_url=rtsp_url)
         stream.is_running = True
 
         # Create a test frame
@@ -359,29 +366,22 @@ class TestStreamProxyServiceAsync:
         stream.last_frame_time = datetime.now(timezone.utc)
         service._streams[camera_id] = stream
 
-        mock_camera = Mock()
-        mock_camera.type = "rtsp"
+        result = await service.get_snapshot_from_rtsp(camera_id, rtsp_url, StreamQuality.MEDIUM)
 
-        result = await service.get_snapshot(camera_id, mock_camera, StreamQuality.MEDIUM)
-
-        assert result["success"] is True
-        assert "image_base64" in result
-        assert result["image_base64"].startswith("data:image/jpeg;base64,")
+        assert result is not None
+        assert isinstance(result, bytes)
+        # JPEG files start with FF D8
+        assert result[:2] == b'\xff\xd8'
 
     @pytest.mark.asyncio
-    async def test_get_snapshot_error_handling(self, service):
-        """Test snapshot error handling"""
-        mock_camera = Mock()
-        mock_camera.type = "rtsp"
-        mock_camera.rtsp_url = "rtsp://invalid/stream"
-        mock_camera.username = None
-        mock_camera.password = None
+    async def test_get_snapshot_from_rtsp_error_handling(self, service):
+        """Test snapshot error handling when capture fails"""
+        rtsp_url = "rtsp://invalid/stream"
 
         with patch.object(service, '_capture_single_frame', return_value=None):
-            result = await service.get_snapshot("test-cam", mock_camera, StreamQuality.MEDIUM)
+            result = await service.get_snapshot_from_rtsp("test-cam", rtsp_url, StreamQuality.MEDIUM)
 
-            assert result["success"] is False
-            assert "error" in result
+            assert result is None
 
 
 class TestFrameEncoding:
@@ -392,7 +392,7 @@ class TestFrameEncoding:
         """Create a fresh StreamProxyService instance"""
         svc = StreamProxyService()
         yield svc
-        svc.shutdown()
+        svc.stop_all()
 
     def test_encode_frame_basic(self, service):
         """Test basic frame encoding"""
@@ -400,8 +400,7 @@ class TestFrameEncoding:
         frame = np.zeros((720, 1280, 3), dtype=np.uint8)
         frame[100:200, 100:200] = [0, 255, 0]  # Green square
 
-        config = QUALITY_CONFIGS[StreamQuality.MEDIUM]
-        encoded = service._encode_frame(frame, config)
+        encoded = service._encode_frame(frame, StreamQuality.MEDIUM)
 
         assert encoded is not None
         assert isinstance(encoded, bytes)
@@ -414,8 +413,7 @@ class TestFrameEncoding:
         frame = np.zeros((2160, 3840, 3), dtype=np.uint8)
 
         # Encode at low quality (640x360)
-        config = QUALITY_CONFIGS[StreamQuality.LOW]
-        encoded = service._encode_frame(frame, config)
+        encoded = service._encode_frame(frame, StreamQuality.LOW)
 
         assert encoded is not None
         # The encoded frame should be smaller than unresized
@@ -425,24 +423,20 @@ class TestFrameEncoding:
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         frame[200:400, 200:400] = [128, 128, 128]  # Gray square for non-trivial encoding
 
-        low_config = QUALITY_CONFIGS[StreamQuality.LOW]
-        medium_config = QUALITY_CONFIGS[StreamQuality.MEDIUM]
-        high_config = QUALITY_CONFIGS[StreamQuality.HIGH]
-
-        low_encoded = service._encode_frame(frame, low_config)
-        medium_encoded = service._encode_frame(frame, medium_config)
-        high_encoded = service._encode_frame(frame, high_config)
+        low_encoded = service._encode_frame(frame, StreamQuality.LOW)
+        medium_encoded = service._encode_frame(frame, StreamQuality.MEDIUM)
+        high_encoded = service._encode_frame(frame, StreamQuality.HIGH)
 
         # Higher quality should generally produce larger files
         # (though this isn't strictly guaranteed due to JPEG compression)
         assert all(e is not None for e in [low_encoded, medium_encoded, high_encoded])
 
 
-class TestShutdown:
-    """Test service shutdown functionality"""
+class TestStopAll:
+    """Test service stop_all functionality"""
 
-    def test_shutdown_stops_all_streams(self):
-        """Test that shutdown stops all active streams"""
+    def test_stop_all_stops_all_streams(self):
+        """Test that stop_all stops all active streams"""
         service = StreamProxyService()
 
         # Create some streams
@@ -454,8 +448,8 @@ class TestShutdown:
             )
             service._streams[f"cam-{i}"] = stream
 
-        # Shutdown
-        service.shutdown()
+        # Stop all streams
+        service.stop_all()
 
         # All streams should be stopped
         for stream in service._streams.values():
