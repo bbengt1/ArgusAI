@@ -4,18 +4,25 @@
  * Story P7-4.2: Add "Add Alert" button (AC3, AC4)
  * Story P7-4.3: Open EntityAlertModal when "Add Alert" clicked (AC1)
  * Story P9-4.5: Add checkbox for multi-select merge functionality
+ * Story P16-3.3: Add Edit button to open EntityEditModal
  */
 
 'use client';
 
 import { memo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { User, Car, HelpCircle, Bell, Check } from 'lucide-react';
+import { User, Car, HelpCircle, Bell, Check, Pencil } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { EntityAlertModal } from './EntityAlertModal';
+import { EntityEditModal, type EntityEditData } from './EntityEditModal';
 import type { IEntity } from '@/types/entity';
 
 interface EntityCardProps {
@@ -31,6 +38,8 @@ interface EntityCardProps {
   onSelect?: () => void;
   /** Story P9-4.5: Whether selection is disabled (max 2 selected) */
   selectionDisabled?: boolean;
+  /** Story P16-3.3: Callback when entity is updated via edit modal */
+  onEntityUpdated?: () => void;
 }
 
 /**
@@ -77,16 +86,26 @@ export const EntityCard = memo(function EntityCard({
   isSelected = false,
   onSelect,
   selectionDisabled = false,
+  onEntityUpdated,
 }: EntityCardProps) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
 
   // Story P7-4.3: Modal state for EntityAlertModal (AC1)
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
 
+  // Story P16-3.3: Modal state for EntityEditModal
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
   // Story P7-4.3 AC1: "Add Alert" button opens modal
   const handleAddAlert = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click from triggering
     setIsAlertModalOpen(true);
+  };
+
+  // Story P16-3.3 AC2, AC3: Edit button opens EntityEditModal
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click from triggering (AC3)
+    setIsEditModalOpen(true);
   };
 
   // Story P9-4.5: Handle checkbox click
@@ -198,12 +217,31 @@ export const EntityCard = memo(function EntityCard({
           <p>First seen: {firstSeenDate.toLocaleDateString()}</p>
         </div>
 
-        {/* Story P7-4.3 AC1: Add Alert button opens modal */}
-        <div className="pt-2">
+        {/* Story P7-4.3 AC1 & P16-3.3: Action buttons */}
+        <div className="pt-2 flex gap-2">
+          {/* Story P16-3.3: Edit button with tooltip (AC1, AC4) */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleEdit}
+                aria-label={`Edit ${displayName}`}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Edit entity</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Story P7-4.3 AC1: Add Alert button */}
           <Button
             variant="outline"
             size="sm"
-            className="w-full gap-2"
+            className="flex-1 gap-2"
             onClick={handleAddAlert}
             aria-label={`Add alert for ${displayName}`}
           >
@@ -218,6 +256,19 @@ export const EntityCard = memo(function EntityCard({
         isOpen={isAlertModalOpen}
         onClose={() => setIsAlertModalOpen(false)}
         entity={entity}
+      />
+
+      {/* Story P16-3.3: Entity Edit Modal */}
+      <EntityEditModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        entity={{
+          id: entity.id,
+          entity_type: entity.entity_type,
+          name: entity.name,
+          thumbnail_path: entity.thumbnail_path,
+        } as EntityEditData}
+        onUpdated={onEntityUpdated}
       />
     </Card>
   );
