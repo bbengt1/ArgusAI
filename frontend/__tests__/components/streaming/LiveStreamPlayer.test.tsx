@@ -339,4 +339,100 @@ describe('LiveStreamPlayer', () => {
       expect(typeof LiveStreamPlayer).toBe('object');
     });
   });
+
+  describe('Concurrent Stream Limiting (Story P16-2.5)', () => {
+    it('shows error when stream limit is reached (close code 4429)', async () => {
+      render(
+        <LiveStreamPlayer cameraId="camera-1" cameraName="Front Door" />
+      );
+
+      // Wait for WebSocket to be created
+      await waitFor(() => {
+        expect(mockWsInstance).not.toBeNull();
+      });
+
+      // Simulate limit reached close event
+      const closeEvent = new CloseEvent('close', {
+        code: 4429,
+        reason: 'Stream limit reached',
+      });
+      mockWsInstance?.onclose?.(closeEvent);
+
+      // Should show error message
+      await waitFor(() => {
+        expect(screen.getByText('Stream unavailable')).toBeInTheDocument();
+        expect(screen.getByText(/Maximum concurrent streams reached/)).toBeInTheDocument();
+      });
+    });
+
+    it('shows error when camera not found (close code 4004)', async () => {
+      render(
+        <LiveStreamPlayer cameraId="camera-1" cameraName="Front Door" />
+      );
+
+      // Wait for WebSocket to be created
+      await waitFor(() => {
+        expect(mockWsInstance).not.toBeNull();
+      });
+
+      // Simulate camera not found close event
+      const closeEvent = new CloseEvent('close', {
+        code: 4004,
+        reason: 'Camera not found',
+      });
+      mockWsInstance?.onclose?.(closeEvent);
+
+      // Should show error message
+      await waitFor(() => {
+        expect(screen.getByText('Stream unavailable')).toBeInTheDocument();
+        expect(screen.getByText('Camera not found')).toBeInTheDocument();
+      });
+    });
+
+    it('falls back to snapshots when stream unavailable (close code 4503)', async () => {
+      render(
+        <LiveStreamPlayer cameraId="camera-1" cameraName="Front Door" />
+      );
+
+      // Wait for WebSocket to be created
+      await waitFor(() => {
+        expect(mockWsInstance).not.toBeNull();
+      });
+
+      // Simulate stream unavailable close event
+      const closeEvent = new CloseEvent('close', {
+        code: 4503,
+        reason: 'Stream unavailable',
+      });
+      mockWsInstance?.onclose?.(closeEvent);
+
+      // Should fall back to snapshot mode and fetch snapshot
+      await waitFor(() => {
+        expect(apiClient.cameras.getStreamSnapshot).toHaveBeenCalled();
+      });
+    });
+
+    it('shows retry button on error', async () => {
+      render(
+        <LiveStreamPlayer cameraId="camera-1" cameraName="Front Door" />
+      );
+
+      // Wait for WebSocket to be created
+      await waitFor(() => {
+        expect(mockWsInstance).not.toBeNull();
+      });
+
+      // Simulate limit reached close event
+      const closeEvent = new CloseEvent('close', {
+        code: 4429,
+        reason: 'Stream limit reached',
+      });
+      mockWsInstance?.onclose?.(closeEvent);
+
+      // Should show retry button
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument();
+      });
+    });
+  });
 });

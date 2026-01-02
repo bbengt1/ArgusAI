@@ -32,12 +32,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { StreamQualitySelector } from './StreamQualitySelector';
 import { apiClient } from '@/lib/api-client';
+import { useToast } from '@/hooks/useToast';
 import type {
   StreamQuality,
   IStreamInfo,
   IStreamWebSocketResponse,
 } from '@/types/camera';
 import { cn } from '@/lib/utils';
+
+// WebSocket close codes (Story P16-2.5)
+const WS_CLOSE_CAMERA_NOT_FOUND = 4004;
+const WS_CLOSE_NO_RTSP_URL = 4400;
+const WS_CLOSE_STREAM_LIMIT = 4429; // Like HTTP 429 - too many streams
+const WS_CLOSE_STREAM_UNAVAILABLE = 4503;
 
 interface LiveStreamPlayerProps {
   /**
@@ -82,6 +89,9 @@ export const LiveStreamPlayer = memo(function LiveStreamPlayer({
   aspectRatio = 'aspect-video',
   showControls = true,
 }: LiveStreamPlayerProps) {
+  // Hooks
+  const { showWarning, showError } = useToast();
+
   // State
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
   const [streamInfo, setStreamInfo] = useState<IStreamInfo | null>(null);
@@ -237,6 +247,29 @@ export const LiveStreamPlayer = memo(function LiveStreamPlayer({
 
     ws.onclose = (event) => {
       console.log('WebSocket closed:', event.code, event.reason);
+
+      // Handle specific close codes (Story P16-2.5)
+      switch (event.code) {
+        case WS_CLOSE_STREAM_LIMIT:
+          // Concurrent stream limit reached
+          setConnectionState('error');
+          setErrorMessage('Maximum concurrent streams reached. Please close another stream first.');
+          showWarning('Maximum concurrent streams reached. Please close another stream first.');
+          return;
+        case WS_CLOSE_CAMERA_NOT_FOUND:
+          setConnectionState('error');
+          setErrorMessage('Camera not found');
+          showError('Camera not found');
+          return;
+        case WS_CLOSE_NO_RTSP_URL:
+          setConnectionState('error');
+          setErrorMessage('Camera does not have a stream URL configured');
+          return;
+        case WS_CLOSE_STREAM_UNAVAILABLE:
+          // Fall through to snapshot fallback
+          break;
+      }
+
       if (connectionState === 'connecting') {
         // Connection failed, switch to fallback
         startSnapshotFallback();
@@ -254,6 +287,8 @@ export const LiveStreamPlayer = memo(function LiveStreamPlayer({
     cleanupSnapshotInterval,
     cleanupBlobUrl,
     startSnapshotFallback,
+    showWarning,
+    showError,
   ]);
 
   /**

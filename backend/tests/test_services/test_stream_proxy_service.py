@@ -434,6 +434,111 @@ class TestFrameEncoding:
         assert all(e is not None for e in [low_encoded, medium_encoded, high_encoded])
 
 
+class TestConcurrentStreamLimiting:
+    """Test concurrent stream limiting (Story P16-2.5)"""
+
+    @pytest.fixture
+    def service(self):
+        """Create a fresh StreamProxyService instance"""
+        svc = StreamProxyService()
+        yield svc
+        svc.stop_all()
+
+    def test_is_available_true_when_under_limit(self, service):
+        """Test is_available is True when under concurrent limit"""
+        # No streams yet
+        info = service.get_stream_info("test-cam")
+        assert info["is_available"] is True
+        assert info["max_clients_available"] == settings.STREAM_MAX_CONCURRENT
+
+    def test_is_available_false_when_at_limit(self, service):
+        """Test is_available is False when at concurrent limit (Story P16-2.5 AC1)"""
+        # Fill up to max clients
+        for i in range(settings.STREAM_MAX_CONCURRENT):
+            stream = CameraStream(camera_id=f"cam-{i}", rtsp_url=f"rtsp://test{i}/stream")
+            stream.clients[f"client-{i}"] = StreamClient(
+                f"client-{i}", StreamQuality.MEDIUM, datetime.now(timezone.utc)
+            )
+            service._streams[f"cam-{i}"] = stream
+        service._total_clients = settings.STREAM_MAX_CONCURRENT
+
+        # Should not be available
+        info = service.get_stream_info("new-cam")
+        assert info["is_available"] is False
+        assert info["max_clients_available"] == 0
+
+    def test_is_available_after_client_removed(self, service):
+        """Test is_available becomes True after client removed (Story P16-2.5 AC2)"""
+        # Fill up to max clients
+        for i in range(settings.STREAM_MAX_CONCURRENT):
+            stream = CameraStream(camera_id=f"cam-{i}", rtsp_url=f"rtsp://test{i}/stream")
+            stream.is_running = True
+            stream.clients[f"client-{i}"] = StreamClient(
+                f"client-{i}", StreamQuality.MEDIUM, datetime.now(timezone.utc)
+            )
+            service._streams[f"cam-{i}"] = stream
+        service._total_clients = settings.STREAM_MAX_CONCURRENT
+
+        # Verify at limit
+        info = service.get_stream_info("new-cam")
+        assert info["is_available"] is False
+
+        # Remove one client - this will clean up the stream if last client
+        service.remove_client("cam-0", "client-0")
+
+        # Should now be available
+        info = service.get_stream_info("new-cam")
+        assert info["is_available"] is True
+        assert info["max_clients_available"] == 1
+
+    def test_stream_info_includes_limit_details(self, service):
+        """Test stream info includes limit details for UI display"""
+        # Add a few streams
+        for i in range(3):
+            stream = CameraStream(camera_id=f"cam-{i}", rtsp_url=f"rtsp://test{i}/stream")
+            stream.clients[f"client-{i}"] = StreamClient(
+                f"client-{i}", StreamQuality.MEDIUM, datetime.now(timezone.utc)
+            )
+            service._streams[f"cam-{i}"] = stream
+        service._total_clients = 3
+
+        info = service.get_stream_info("new-cam")
+        assert "current_clients" in info
+        assert "max_clients_available" in info
+        assert "is_available" in info
+        assert info["max_clients_available"] == settings.STREAM_MAX_CONCURRENT - 3
+
+    @pytest.mark.asyncio
+    async def test_add_client_respects_limit(self, service):
+        """Test add_client returns None when limit reached (Story P16-2.5 AC3)"""
+        # Use lower limit for test
+        original_limit = settings.STREAM_MAX_CONCURRENT
+
+        try:
+            # Set up to be at limit
+            for i in range(settings.STREAM_MAX_CONCURRENT):
+                stream = CameraStream(camera_id=f"cam-{i}", rtsp_url=f"rtsp://test{i}/stream")
+                stream.clients[f"client-{i}"] = StreamClient(
+                    f"client-{i}", StreamQuality.MEDIUM, datetime.now(timezone.utc)
+                )
+                service._streams[f"cam-{i}"] = stream
+            service._total_clients = settings.STREAM_MAX_CONCURRENT
+
+            # Try to add another client
+            mock_camera = Mock()
+            mock_camera.type = "rtsp"
+            mock_camera.rtsp_url = "rtsp://new/stream"
+
+            result = await service.add_client("new-cam", mock_camera, StreamQuality.MEDIUM)
+
+            # Should return None indicating limit reached
+            assert result is None
+
+        finally:
+            # Restore original limit
+            pass  # settings.STREAM_MAX_CONCURRENT is a constant, no need to restore
+
+
 class TestStopAll:
     """Test service stop_all functionality"""
 
