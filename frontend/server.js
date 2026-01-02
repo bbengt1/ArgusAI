@@ -146,6 +146,10 @@ server.on('upgrade', (req, socket, head) => {
     }
     httpRequest += '\r\n';
 
+    // Log the HTTP request for debugging
+    console.log('HTTP request being sent:');
+    console.log(httpRequest.replace(/\r\n/g, '\\r\\n\n'));
+
     // Send the upgrade request to backend
     backendSocket.write(httpRequest);
 
@@ -163,6 +167,11 @@ server.on('upgrade', (req, socket, head) => {
     if (pendingWrites.length > 0) {
       console.log(`Discarded ${pendingWrites.length} queued writes from Next.js`);
     }
+
+    // Log first data from backend
+    backendSocket.once('data', (data) => {
+      console.log('First data from backend:', data.toString().substring(0, 200));
+    });
 
     // Pipe data between sockets bidirectionally
     backendSocket.pipe(socket);
