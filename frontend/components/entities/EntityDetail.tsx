@@ -1,5 +1,5 @@
 /**
- * EntityDetail component - modal/dialog showing entity info and events (Story P4-3.6, P9-4.2, P15-1)
+ * EntityDetail component - modal/dialog showing entity info and events (Story P4-3.6, P9-4.2, P15-1, P16-3.4)
  * AC6: Click entity opens detail view
  * AC7: Shows occurrence history with thumbnails and timestamps
  * AC14: Shows thumbnail from most recent event
@@ -7,14 +7,21 @@
  * P15-1.1: Modal scrolling fix for long event lists
  * P15-1.3: Event click opens event detail modal
  * P15-1.4: Back navigation preserves entity modal state
+ * P16-3.4: Edit button in header opens EntityEditModal
  */
 
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { User, Car, HelpCircle, Trash2 } from 'lucide-react';
+import { User, Car, HelpCircle, Trash2, Pencil } from 'lucide-react';
 import { EventDetailModal } from '@/components/events/EventDetailModal';
+import { EntityEditModal, type EntityEditData } from './EntityEditModal';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { IEvent } from '@/types/event';
 import {
   Dialog,
@@ -81,6 +88,9 @@ export function EntityDetail({
   const [selectedEvent, setSelectedEvent] = useState<IEvent | null>(null);
   const [isEventDetailOpen, setIsEventDetailOpen] = useState(false);
 
+  // P16-3.4: State for entity edit modal
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
   // P15-1.4: Preserve scroll position when navigating back
   const scrollPositionRef = useRef<number>(0);
 
@@ -137,6 +147,25 @@ export function EntityDetail({
                 {displayName}
               </span>
             </DialogTitle>
+            {/* P16-3.4: Edit button in header (AC1, AC4) */}
+            {entityDetail && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setIsEditModalOpen(true)}
+                    aria-label={`Edit ${displayName}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Edit entity</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         </DialogHeader>
 
@@ -262,6 +291,23 @@ export function EntityDetail({
         open={isEventDetailOpen}
         onClose={handleEventDetailClose}
       />
+
+      {/* P16-3.4: Entity Edit Modal (AC2, AC3) */}
+      {entityDetail && (
+        <EntityEditModal
+          open={isEditModalOpen}
+          onOpenChange={setIsEditModalOpen}
+          entity={{
+            id: entityDetail.id,
+            entity_type: entityDetail.entity_type,
+            name: entityDetail.name,
+            notes: entityDetail.notes,
+            is_vip: entityDetail.is_vip,
+            is_blocked: entityDetail.is_blocked,
+            thumbnail_path: entityDetail.thumbnail_path,
+          } as EntityEditData}
+        />
+      )}
     </Dialog>
   );
 }
