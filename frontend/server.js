@@ -88,9 +88,11 @@ app.prepare().then(() => {
     if ((pathname.startsWith('/api/v1/cameras/') && pathname.endsWith('/stream')) ||
         pathname === '/ws' || pathname.startsWith('/ws/')) {
       console.log(`WebSocket upgrade: ${pathname} -> ${backendHost}:${backendPort}${pathname}`);
+      console.log(`  Head buffer length: ${head.length}`);
 
       // Create raw TCP connection to backend
       const backendSocket = net.connect(backendPort, backendHost, () => {
+        console.log(`  Connected to backend, sending upgrade request`);
         // Build the HTTP upgrade request to send to backend
         // Filter out compression headers to avoid frame issues
         let httpRequest = `${req.method} ${req.url} HTTP/1.1\r\n`;
@@ -112,6 +114,11 @@ app.prepare().then(() => {
         if (head.length > 0) {
           backendSocket.write(head);
         }
+
+        // Debug: log data being sent from client to backend
+        socket.on('data', (chunk) => {
+          console.log(`  Client -> Backend: ${chunk.length} bytes, first: ${chunk.slice(0, 50).toString('utf8').replace(/\r?\n/g, '\\n')}`);
+        });
 
         // Now pipe everything bidirectionally - raw bytes, no parsing
         // The backend's 101 response will flow directly to the client
