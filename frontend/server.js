@@ -67,9 +67,9 @@ const wsProxy = httpProxy.createProxyServer({
   changeOrigin: true,
 });
 
-// Log proxy errors
+// Log proxy errors and events for debugging
 wsProxy.on('error', (err, req, res) => {
-  console.error('WebSocket proxy error:', err.message);
+  console.error('WebSocket proxy error:', err.message, err.stack);
   if (res && res.writeHead) {
     res.writeHead(502);
     res.end('Proxy error');
@@ -78,6 +78,14 @@ wsProxy.on('error', (err, req, res) => {
 
 wsProxy.on('proxyReqWs', (proxyReq, req, socket) => {
   console.log(`WebSocket proxy: ${req.url} -> ${backendUrl}`);
+});
+
+wsProxy.on('open', (proxySocket) => {
+  console.log('WebSocket proxy: connection opened to backend');
+});
+
+wsProxy.on('close', (res, socket, head) => {
+  console.log('WebSocket proxy: connection closed');
 });
 
 // Initialize Next.js app
