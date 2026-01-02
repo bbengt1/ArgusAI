@@ -327,6 +327,7 @@ export function EntityList({
               isSelected={selectedEntityIds.has(entity.id)}
               onSelect={onToggleSelection ? () => onToggleSelection(entity) : undefined}
               selectionDisabled={!selectedEntityIds.has(entity.id) && selectedEntityIds.size >= 2}
+              onEntityUpdated={() => refetch()}
             />
           ))}
         </div>

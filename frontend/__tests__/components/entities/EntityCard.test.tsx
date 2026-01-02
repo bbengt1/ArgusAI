@@ -1,12 +1,31 @@
 /**
  * EntityCard component tests (Story P4-3.6)
+ * Story P16-3.3: Tests for Edit button functionality
  */
 
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EntityCard } from '@/components/entities/EntityCard';
 import type { IEntity } from '@/types/entity';
+
+// Create a wrapper with QueryClientProvider for tests
+const createWrapper = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  const TestWrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+  TestWrapper.displayName = 'TestWrapper';
+  return TestWrapper;
+};
 
 describe('EntityCard', () => {
   const mockEntity: IEntity = {
@@ -29,7 +48,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={mockEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('John Doe')).toBeInTheDocument();
@@ -45,7 +65,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={unnamedEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('Unknown person')).toBeInTheDocument();
@@ -56,7 +77,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={mockEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText(/Seen 15 times/)).toBeInTheDocument();
@@ -72,7 +94,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={singleOccurrence}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText(/Seen 1 time/)).toBeInTheDocument();
@@ -83,7 +106,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={mockEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('person')).toBeInTheDocument();
@@ -99,7 +123,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={vehicleEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('vehicle')).toBeInTheDocument();
@@ -110,7 +135,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={mockEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     // Find the card by its cursor-pointer class
@@ -128,7 +154,8 @@ describe('EntityCard', () => {
         entity={mockEntity}
         thumbnailUrl="/api/v1/thumbnails/test.jpg"
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     const img = container.querySelector('img');
@@ -142,7 +169,8 @@ describe('EntityCard', () => {
         entity={mockEntity}
         thumbnailUrl={null}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     // Should show the person icon placeholder (User icon from lucide)
@@ -160,7 +188,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={unnamedEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     const nameElement = screen.getByText('Unknown person');
@@ -173,7 +202,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={mockEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     const addAlertButton = screen.getByRole('button', { name: /add alert/i });
@@ -186,7 +216,8 @@ describe('EntityCard', () => {
       <EntityCard
         entity={mockEntity}
         onClick={mockOnClick}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     const addAlertButton = screen.getByRole('button', { name: /add alert/i });
@@ -194,5 +225,53 @@ describe('EntityCard', () => {
 
     // Card onClick should NOT have been called
     expect(mockOnClick).not.toHaveBeenCalled();
+  });
+
+  // Story P16-3.3 AC1: Edit button renders on entity card
+  it('renders "Edit" button (Story P16-3.3 AC1)', () => {
+    render(
+      <EntityCard
+        entity={mockEntity}
+        onClick={mockOnClick}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const editButton = screen.getByRole('button', { name: /edit john doe/i });
+    expect(editButton).toBeInTheDocument();
+  });
+
+  // Story P16-3.3 AC3: Edit button click does not trigger card onClick
+  it('"Edit" button click does not trigger card onClick (Story P16-3.3 AC3)', () => {
+    render(
+      <EntityCard
+        entity={mockEntity}
+        onClick={mockOnClick}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const editButton = screen.getByRole('button', { name: /edit john doe/i });
+    fireEvent.click(editButton);
+
+    // Card onClick should NOT have been called (stopPropagation)
+    expect(mockOnClick).not.toHaveBeenCalled();
+  });
+
+  // Story P16-3.3: onEntityUpdated callback is optional
+  it('accepts optional onEntityUpdated callback (Story P16-3.3)', () => {
+    const mockOnEntityUpdated = vi.fn();
+
+    render(
+      <EntityCard
+        entity={mockEntity}
+        onClick={mockOnClick}
+        onEntityUpdated={mockOnEntityUpdated}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    // Component should render without errors
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
   });
 });
