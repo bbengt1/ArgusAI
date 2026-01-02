@@ -102,14 +102,31 @@ server.on('upgrade', (req, socket, head) => {
 
   console.log(`WebSocket upgrade: ${pathname} -> ${backendHost}:${backendPort}`);
 
-  // CRITICAL: Since we can't effectively block socket writes from other handlers,
-  // we'll remove all 'upgrade' listeners except our own after handling this request.
-  // This prevents Next.js's handler from also processing this socket.
-  // We use setImmediate to let all current handlers finish registering first.
-  setImmediate(() => {
-    const listeners = server.listeners('upgrade');
-    console.log(`Upgrade listeners count: ${listeners.length}`);
-  });
+  // CRITICAL: Block socket writes IMMEDIATELY to prevent Next.js from
+  // sending its 101 response before our backend connection completes.
+  // Next.js's upgrade handler runs synchronously after ours returns,
+  // so we MUST block writes before returning from our handler.
+  const originalWrite = socket.write.bind(socket);
+  const originalEnd = socket.end.bind(socket);
+  let writesBlocked = true;
+  const pendingWrites = [];
+
+  socket.write = function(...args) {
+    if (!writesBlocked) {
+      return originalWrite(...args);
+    }
+    // Queue the write for later
+    pendingWrites.push({ method: 'write', args });
+    return true;
+  };
+
+  socket.end = function(...args) {
+    if (!writesBlocked) {
+      return originalEnd(...args);
+    }
+    pendingWrites.push({ method: 'end', args });
+    return true;
+  };
 
   // Create raw TCP connection to backend
   const backendSocket = net.connect(backendPort, backendHost, () => {
@@ -133,6 +150,16 @@ server.on('upgrade', (req, socket, head) => {
     // Also send any buffered data from client
     if (head.length > 0) {
       backendSocket.write(head);
+    }
+
+    // Restore socket methods and discard any pending writes from Next.js
+    writesBlocked = false;
+    socket.write = originalWrite;
+    socket.end = originalEnd;
+
+    // Log if Next.js tried to write (for debugging)
+    if (pendingWrites.length > 0) {
+      console.log(`Discarded ${pendingWrites.length} queued writes from Next.js`);
     }
 
     // Pipe data between sockets bidirectionally
