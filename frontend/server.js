@@ -69,15 +69,28 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const server = createServer(httpsOptions, async (req, res) => {
-    // Skip WebSocket upgrade requests - they're handled by the 'upgrade' event
-    // This prevents Next.js rewrites from also processing WebSocket connections
-    if (req.headers.upgrade && req.headers.upgrade.toLowerCase() === 'websocket') {
-      console.log(`HTTP handler skipping WebSocket request: ${req.url}`);
-      return;  // Will be handled by 'upgrade' event handler
+    const { pathname } = parse(req.url, true);
+
+    // Check if this is a WebSocket upgrade request
+    const isWebSocketUpgrade = req.headers.upgrade &&
+      req.headers.upgrade.toLowerCase() === 'websocket';
+
+    // Check if this path should be handled by our WebSocket proxy
+    const isProxiedWebSocket = isWebSocketUpgrade && (
+      (pathname.startsWith('/api/v1/cameras/') && pathname.endsWith('/stream')) ||
+      pathname === '/ws' || pathname.startsWith('/ws/')
+    );
+
+    // For WebSocket proxy paths, don't let Next.js see the request at all
+    // The 'upgrade' event will handle it
+    if (isProxiedWebSocket) {
+      // Don't respond - let the upgrade event handle it
+      // The socket will be handled by server.on('upgrade', ...)
+      return;
     }
+
     try {
-      const parsedUrl = parse(req.url, true);
-      await handle(req, res, parsedUrl);
+      await handle(req, res, parse(req.url, true));
     } catch (err) {
       console.error('Error occurred handling', req.url, err);
       res.statusCode = 500;

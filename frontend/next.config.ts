@@ -11,18 +11,18 @@ const nextConfig: NextConfig = {
     dangerouslyAllowSVG: true,
   },
   // Proxy API requests to backend to avoid CORS issues
-  // Uses BACKEND_URL (server-side only) for internal proxying
-  // NOTE: WebSocket paths (/ws, /api/v1/cameras/*/stream) are handled by
-  // custom server.js upgrade handler, NOT by Next.js rewrites
+  // NOTE: When using custom server.js (SSL mode), all proxying including
+  // WebSocket upgrades is handled in server.js, NOT here.
+  // This rewrite config is only used for `npm run dev` (non-SSL mode).
   async rewrites() {
     const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // In production with custom server.js, these rewrites are bypassed
+    // because server.js handles requests before Next.js sees them
     return [
       {
         source: '/api/v1/:path*',
         destination: `${backendUrl}/api/v1/:path*`,
       },
-      // NOTE: /ws is intentionally NOT included here - WebSocket upgrades
-      // don't work through Next.js rewrites. They're handled in server.js
     ];
   },
 };
