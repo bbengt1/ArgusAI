@@ -346,6 +346,73 @@ class TestAuthChangePassword:
 
         assert response.status_code == 401
 
+    def test_change_password_invalidates_other_sessions(self, test_user, test_user_token):
+        """Story P16-5.5: Password change invalidates all other sessions"""
+        from app.models.session import Session as SessionModel
+        from datetime import datetime, timezone, timedelta
+
+        db = TestingSessionLocal()
+        try:
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+            # Create multiple sessions for the user
+            session1 = SessionModel(
+                user_id=test_user.id,
+                token_hash=SessionModel.hash_token("old_token_1"),
+                device_info="Chrome on Windows",
+                ip_address="192.168.1.1",
+                expires_at=expires_at,
+            )
+            session2 = SessionModel(
+                user_id=test_user.id,
+                token_hash=SessionModel.hash_token("old_token_2"),
+                device_info="Safari on macOS",
+                ip_address="192.168.1.2",
+                expires_at=expires_at,
+            )
+            # Create current session with the test user token
+            current_session = SessionModel(
+                user_id=test_user.id,
+                token_hash=SessionModel.hash_token(test_user_token),
+                device_info="Test Browser",
+                ip_address="127.0.0.1",
+                expires_at=expires_at,
+            )
+            db.add_all([session1, session2, current_session])
+            db.commit()
+
+            # Verify 3 sessions exist
+            session_count = db.query(SessionModel).filter(
+                SessionModel.user_id == test_user.id
+            ).count()
+            assert session_count == 3
+
+            # Change password
+            response = client.post(
+                "/api/v1/auth/change-password",
+                headers={"Authorization": f"Bearer {test_user_token}"},
+                json={
+                    "current_password": "TestPass123!",
+                    "new_password": "NewPass456!"
+                }
+            )
+
+            assert response.status_code == 200
+            # Should mention sessions were signed out
+            assert "2 other sessions signed out" in response.json()["message"]
+
+            # Verify only current session remains
+            remaining_sessions = db.query(SessionModel).filter(
+                SessionModel.user_id == test_user.id
+            ).all()
+            assert len(remaining_sessions) == 1
+            assert remaining_sessions[0].token_hash == SessionModel.hash_token(test_user_token)
+        finally:
+            # Cleanup sessions
+            db.query(SessionModel).filter(SessionModel.user_id == test_user.id).delete()
+            db.commit()
+            db.close()
+
 
 class TestAuthLoginParametrized:
     """Parametrized tests for login edge cases"""

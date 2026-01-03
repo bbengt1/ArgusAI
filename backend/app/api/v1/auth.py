@@ -381,15 +381,35 @@ async def change_password(
         user_agent=request.headers.get("User-Agent", ""),
     )
 
+    # Story P16-5.5: Invalidate all other sessions on password change
+    # This ensures any compromised sessions are terminated
+    session_service = SessionService(db)
+    token = get_current_token(request)
+    current_session_id = None
+    if token:
+        current_session = session_service.get_session_by_token(token)
+        if current_session:
+            current_session_id = current_session.id
+
+    revoked_count = session_service.revoke_all_sessions(
+        user.id,
+        except_session_id=current_session_id
+    )
+
     logger.info(
         "Password changed successfully",
         extra={
             "event_type": "password_changed",
             "user_id": user.id,
             "was_forced": current_user.must_change_password,
+            "sessions_revoked": revoked_count,
         }
     )
 
+    if revoked_count > 0:
+        return MessageResponse(
+            message=f"Password changed successfully. {revoked_count} other session{'s' if revoked_count != 1 else ''} signed out."
+        )
     return MessageResponse(message="Password changed successfully")
 
 

@@ -1158,12 +1158,15 @@ development_status:
   # Focus: View and manage active login sessions
   # GitHub: #342
   # FRs Covered: FR10-FR15
-  epic-p16-5: backlog
-  p16-5-1-create-session-model-and-tracking: backlog
-  p16-5-2-create-session-api-endpoints: backlog
-  p16-5-3-create-active-sessions-ui: backlog
-  p16-5-4-enforce-maximum-concurrent-sessions: backlog
-  p16-5-5-invalidate-sessions-on-password-change: backlog
+  # Status: COMPLETE 2026-01-02
+  # Notes: P16-5.1 through P16-5.4 were already implemented in Phase 15 (P15-2.2, P15-2.7, P15-2.8)
+  #        P16-5.5 session invalidation on password change added 2026-01-02
+  epic-p16-5: done
+  p16-5-1-create-session-model-and-tracking: done  # Pre-existing: P15-2.2
+  p16-5-2-create-session-api-endpoints: done  # Pre-existing: P15-2.7
+  p16-5-3-create-active-sessions-ui: done  # Pre-existing: P15-2.7
+  p16-5-4-enforce-maximum-concurrent-sessions: done  # Pre-existing: P15-2.8
+  p16-5-5-invalidate-sessions-on-password-change: done  # Added session invalidation on password change
   epic-p16-5-retrospective: optional
 
   # Epic P16-6: Multi-Entity Events
